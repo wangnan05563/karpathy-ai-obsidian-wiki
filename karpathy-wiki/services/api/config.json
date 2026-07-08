@@ -1,0 +1,22 @@
+{
+  "vaultPath": "./vault",
+  "adapter": "harness",
+  "llm": {
+    "provider": "deepseek",
+    "baseUrl": "https://api.deepseek.com",
+    "model": "deepseek-chat",
+    "apiKeyRef": "DEEPSEEK_KEY"
+  },
+  "budget": {
+    "maxSteps": 20,
+    "tokenBudget": 50000
+  },
+  "server": {
+    "host": "localhost",
+    "port": 3000
+  },
+  "localOnly": true,
+  "healthCheck": {
+    "staleDays": 30
+  }
+}
