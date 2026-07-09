@@ -1,0 +1,204 @@
+# Rule Catalog — Element Plus
+
+> 通用规则文件，具体技术栈版本以 `config/review-config.md` 为准。
+
+## 消息提示用 ElMessage，禁止 alert/confirm
+
+IsUrgent: True
+Category: Element Plus
+
+### Description
+
+用户反馈类提示必须使用 `ElMessage`（success/error/warning/info），确认对话必须使用 `ElMessageBox.confirm`。禁止使用浏览器原生 `alert`/`confirm`/`prompt`——它们会阻塞主线程、无法被主题覆盖、破坏视觉一致性。
+
+### Suggested Fix
+
+把原生弹窗替换为 `ElMessage` 或 `ElMessageBox`，并按语义选择 type。
+
+Wrong:
+
+```ts
+if (!form.value.title) {
+  alert('标题不能为空')
+  return
+}
+```
+
+Right:
+
+```ts
+import { ElMessage } from 'element-plus'
+if (!form.value.title) {
+  ElMessage.warning('标题不能为空')
+  return
+}
+```
+
+## 按钮须用 el-button，含 size 和 type 属性
+
+IsUrgent: False
+Category: Element Plus
+
+### Description
+
+交互按钮统一使用 `el-button`，并显式声明 `size`（`large`/`default`/`small`）与 `type`（`primary`/`success`/`warning`/`danger`/`info`/`default`）。缺省 size 会导致不同区域按钮高度不一致；缺省 type 会让主操作与次要操作视觉层级模糊。
+
+### Suggested Fix
+
+为每个 `el-button` 补齐 `size` 与 `type`；主操作用 `type="primary"`，破坏性操作用 `type="danger"`。
+
+Wrong:
+
+```vue
+<el-button @click="handleSubmit">提交</el-button>
+<el-button @click="handleDelete">删除</el-button>
+```
+
+Right:
+
+```vue
+<el-button type="primary" size="default" @click="handleSubmit">提交</el-button>
+<el-button type="danger" size="default" @click="handleDelete">删除</el-button>
+```
+
+## 表单校验用 el-form + rules，提交前 validate
+
+IsUrgent: True
+Category: Element Plus
+
+### Description
+
+表单必须使用 `el-form` 配合 `rules` 定义校验规则，提交前调用 `formRef.value?.validate()` 校验通过后再发起请求。禁止在提交逻辑里手写 if 校验散落各处——规则集中可维护、可在失焦时即时反馈。
+
+### Suggested Fix
+
+把散落的校验条件改写为 `rules` 对象；提交函数前置 `validate` 回调。
+
+Wrong:
+
+```ts
+const handleSubmit = async () => {
+  if (!form.value.email) return
+  if (!form.value.email.includes('@')) return
+  await api.save(form.value)
+}
+```
+
+Right:
+
+```vue
+<script setup lang="ts">
+import type { FormInstance, FormRules } from 'element-plus'
+const formRef = ref<FormInstance>()
+const rules: FormRules = {
+  email: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }
+  ]
+}
+const handleSubmit = async () => {
+  if (!formRef.value) return
+  await formRef.value.validate(async (valid) => {
+    if (!valid) return
+    await api.save(form.value)
+  })
+}
+</script>
+```
+
+## 图标从 @element-plus/icons-vue 导入，按需注册
+
+IsUrgent: False
+Category: Element Plus
+
+### Description
+
+图标组件从 `@element-plus/icons-vue` 导入，按需引入到使用它的组件，禁止全局注册全部图标以减小打包体积。模板中作为子组件使用，搭配 `el-icon` 包裹以获得统一尺寸。
+
+### Suggested Fix
+
+把 `<i class="el-icon-edit">` 之类用法改为图标组件导入。
+
+Wrong:
+
+```vue
+<template>
+  <button><i class="el-icon-edit"></i> 编辑</button>
+</template>
+```
+
+Right:
+
+```vue
+<script setup lang="ts">
+import { Edit } from '@element-plus/icons-vue'
+</script>
+<template>
+  <el-button :icon="Edit">编辑</el-button>
+</template>
+```
+
+## loading 状态用 :loading 或 v-loading
+
+IsUrgent: False
+Category: Element Plus
+
+### Description
+
+异步操作的 loading 视觉须通过 `el-button` 的 `:loading` 属性或 `v-loading` 指令呈现，禁止自定义"加载中..."文本或自建遮罩。统一机制可保证遮罩层级、动画与无障碍语义一致。
+
+### Suggested Fix
+
+用 `v-loading` 包裹等待区域，或给触发按钮绑定 `:loading`。
+
+Wrong:
+
+```vue
+<template>
+  <div>{{ loading ? '加载中...' : data }}</div>
+  <el-button @click="load">刷新</el-button>
+</template>
+```
+
+Right:
+
+```vue
+<template>
+  <div v-loading="loading">{{ data }}</div>
+  <el-button :loading="loading" @click="load">刷新</el-button>
+</template>
+```
+
+## 弹窗用 el-dialog，须有 title 和 v-model 控制
+
+IsUrgent: True
+Category: Element Plus
+
+### Description
+
+模态弹窗统一使用 `el-dialog`，必须通过 `v-model` 控制显隐（而非 `v-if`/`v-show` 自行管理），并显式声明 `title`。自行用 `v-if` 包裹 `div` 实现的弹窗缺少遮罩、焦点陷阱、ESC 关闭等无障碍能力。
+
+### Suggested Fix
+
+把自建模态替换为 `el-dialog`，把控制变量绑到 `v-model`。
+
+Wrong:
+
+```vue
+<template>
+  <div v-if="visible" class="my-modal">
+    <h3>编辑</h3>
+    <!-- ... -->
+  </div>
+</template>
+```
+
+Right:
+
+```vue
+<template>
+  <el-dialog v-model="visible" title="编辑">
+    <!-- ... -->
+  </el-dialog>
+</template>
+```
