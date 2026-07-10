@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-obsidian-auto-testing parameterized test suite.
+wiki-auto-testing parameterized test suite.
 
-Reads all parameters from config.yaml â€” no hardcoded values.
+Reads all parameters from config.yaml ¡ª no hardcoded values.
 Covers: navigation, page elements, interactions, button auto-discovery,
 theme switching, responsive layout, API endpoints, console errors.
 
@@ -10,7 +10,7 @@ Key improvements over previous version:
 1. Working directory auto-detection (finds project root from script location)
 2. Button auto-discovery (traverses all pages, finds all clickable elements)
 3. Destructive button protection (skips buttons matching destructive_button_texts)
-4. Encoding self-check (auto-fixes GBK â†’ UTF-8 if needed)
+4. Encoding self-check (auto-fixes GBK ¡ú UTF-8 if needed)
 5. Force click option (bypasses Vue transition animation timing issues)
 """
 import json
@@ -53,9 +53,9 @@ def load_config(config_path=None):
     if config_path is None:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         candidates = [
-            os.environ.get("OBSIDIAN_TEST_CONFIG"),
+            os.environ.get("WIKI_TEST_CONFIG"),
             os.path.join(script_dir, "..", "config.yaml"),
-            os.path.join(os.getcwd(), ".trae", "skills", "obsidian-auto-testing", "config.yaml"),
+            os.path.join(os.getcwd(), ".trae", "skills", "wiki-auto-testing", "config.yaml"),
             os.path.join(os.getcwd(), "config.yaml"),
         ]
         for c in candidates:
@@ -87,7 +87,7 @@ def load_config(config_path=None):
 
 def ensure_utf8(file_path, fallback_encoding="gbk"):
     """
-    Check and fix file encoding (GBK â†’ UTF-8).
+    Check and fix file encoding (GBK ¡ú UTF-8).
     Called when auto_fix_python_encoding is enabled in config.
     """
     try:
@@ -105,7 +105,7 @@ def ensure_utf8(file_path, fallback_encoding="gbk"):
             content = raw.decode(fallback_encoding)
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
-            print(f"Converted encoding {fallback_encoding} â†’ UTF-8: {file_path}")
+            print(f"Converted encoding {fallback_encoding} ¡ú UTF-8: {file_path}")
             return True
         except Exception:
             return False
@@ -541,7 +541,7 @@ def run(config_path=None):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="obsidian-auto-testing test suite")
+    parser = argparse.ArgumentParser(description="wiki-auto-testing test suite")
     parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
     args = parser.parse_args()
 
