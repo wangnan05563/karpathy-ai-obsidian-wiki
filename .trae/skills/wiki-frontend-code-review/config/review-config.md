@@ -34,6 +34,52 @@
 - **卡片样式**：毛玻璃卡片（`backdrop-filter: blur()` + 半透明白底 + 细边框 + 阴影），用于对话气泡、图谱节点详情面板。
 - **圆角与间距**：遵循 Element Plus 设计令牌，不引入第三方设计体系。
 
+## 主题色系统
+
+### 主题列表
+
+| 主题 key | 标签 | 基调 |
+|----------|------|------|
+| `macaron` | 马卡龙 | 浅粉浅青 · 圆润可爱 |
+| `enterprise` | 现代企业 | 科技蓝灰 · 专业可信赖 |
+| `creative` | 创意品牌 | 霓虹赛博 · 大胆渐变（默认） |
+| `product` | 产品展示 | 暗黑霓虹 · 科技未来 |
+| `ecommerce` | 电商零售 | 明亮扁平 · 橙蓝活力 |
+| `portfolio` | 艺术作品集 | 米色金黑 · 优雅极简 |
+
+### CSS 变量目录
+
+| 文件路径 | 用途 |
+|----------|------|
+| `packages/web/src/style.css` `:root` | creative 默认主题变量 |
+| `packages/web/src/styles/themes/macaron.css` | 马卡龙主题覆盖 |
+| `packages/web/src/styles/themes/enterprise.css` | 现代企业主题覆盖 |
+| `packages/web/src/styles/themes/product.css` | 产品展示主题覆盖 |
+| `packages/web/src/styles/themes/ecommerce.css` | 电商零售主题覆盖 |
+| `packages/web/src/styles/themes/portfolio.css` | 艺术作品集主题覆盖 |
+| `packages/web/src/styles/themes/index.css` | @import 入口 |
+| `packages/web/src/composables/useTheme.ts` | 主题状态管理与持久化 |
+
+### CSS 变量三层架构
+
+| 层级 | 前缀 | 用途 |
+|------|------|------|
+| L1 基础调色板 | `--neon-*` / `--bg-*` / `--text-*` | 主题底色、背景、文字 |
+| L2 子系统 | `--robot-*` / `--graph-*` | IP 形象、图谱节点专属色 |
+| L3 场景 | `--bg-scene` / `--accent-*-aXX` | 容器深度背景、半透明强调色 |
+
+### alpha 变体命名规则
+
+统一格式：`a` + 两位数字（`a03` / `a05` / `a08` / `a10` / `a12` / `a15` / `a18` / `a20` / `a25` / `a30` / `a35` / `a40` / `a45` / `a50` / `a60` / `a70`）。
+
+### 主题色白名单（允许硬编码）
+
+| 色值 | 原因 |
+|------|------|
+| `rgba(255, 255, 255, X)` | 纯白高光，所有主题通用 |
+| `transparent` | 透明值，无主题差异 |
+| `inherit` / `currentColor` | 继承值，自动适配 |
+
 ## 性能阈值
 
 ### vis-network 节点数三级降级

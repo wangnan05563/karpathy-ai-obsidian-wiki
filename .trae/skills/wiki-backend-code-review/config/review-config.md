@@ -78,6 +78,41 @@
 - 文件名必须带唯一前缀（如 `runId + '-' + Date.now()`），避免并发冲突。
 - 临时文件使用完毕后必须 `fs.promises.unlink` 清理（在 finally 中）。
 
+## 配置项管理规范
+
+### 原则：所有可配置参数必须通过 config 注入，禁止硬编码
+
+与前端"所有颜色必须用 CSS 变量"同理，后端的所有可配置参数必须通过配置注入，禁止在代码中硬编码。
+
+### 必须配置化的参数清单
+
+| 参数类别 | 示例 | 注入方式 |
+|----------|------|----------|
+| API Key / 密钥 | `OPENAI_API_KEY` | 环境变量，config 存变量名（`apiKeyRef`） |
+| 端口 / 监听地址 | `port: 3000`, `host: '127.0.0.1'` | config 文件注入 |
+| 超时 / 预算阈值 | token 预算、文件锁超时 | config 文件注入 |
+| 文件路径 | vaultRoot、stateDir、promptsDir | config 文件注入 |
+| 并发控制 | `withCompileLock` 锁 Map | 运行时注入，不硬编码锁 key |
+| SSE 事件类型 | `progress` / `result` / `error` / `done` | 本文件"SSE 事件格式约定"定义 |
+| 白名单 | 允许的命令、可写目录 | config 文件注入 |
+
+### 检测方式
+
+在代码中搜索以下模式，确认是否通过 config 引用而非直接硬编码：
+- `process.env.` — 确认密钥从环境变量读取，而非字面量
+- `app.listen(` — 确认 port/host 从 config 读取
+- `path.join(` — 确认路径从 config 读取，而非硬编码字符串
+- `new Set([` — 确认白名单从 config 读取，而非内联数组
+
+### 与前端主题色规范的对应关系
+
+| 前端 | 后端 |
+|------|------|
+| 硬编码 `rgba(R,G,B,A)` 禁止 | 硬编码 API Key / port / path 禁止 |
+| 用 `var(--css-variable)` 引用 | 用 `config.xxx` / `process.env[config.xxxRef]` 引用 |
+| CSS 变量分层（L1/L2/L3） | 配置分层（env → config → runtime） |
+| 主题文件覆盖全部变量 | 环境配置覆盖全部参数 |
+
 ## 适用 / 不适用场景
 
 ### 适用

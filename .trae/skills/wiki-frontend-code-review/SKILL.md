@@ -25,6 +25,7 @@ The living checklist is split by category across the rule files below. Treat the
 | `defineStore`、store 内部状态/action、SSE action | [references/pinia-store-rule.md](references/pinia-store-rule.md)         |
 | vis-network、resize、v-for、SSE 流式消费         | [references/performance-rule.md](references/performance-rule.md)         |
 | `interface`/`type`、fetch、JSON.parse、ref 泛型  | [references/type-safety-rule.md](references/type-safety-rule.md)        |
+| CSS 变量、`data-theme`、`rgba()`、SVG `fill`/`stroke`、`getComputedStyle` | [references/theming-rule.md](references/theming-rule.md) |
 
 All configurable parameters (directory mapping, tech stack, performance thresholds, SSE event types) live in [config/review-config.md](config/review-config.md). Rule files describe general patterns only and reference the config for concrete values — never hardcode thresholds in rule files.
 
@@ -32,10 +33,10 @@ Flag each rule violation with urgency metadata so future reviewers can prioritiz
 
 ## Review Process
 1. **打开相关组件/模块**：定位待评审的 `.vue` / `.ts` / `.tsx` 文件，按 `config/review-config.md` 的目录映射确认其在 `packages/web/` 范围内；不在范围内则跳过并说明原因。
-2. **读取评审参数**：打开 [config/review-config.md](config/review-config.md) 获取当前的技术栈版本、性能阈值（vis-network 三级降级节点数、窄屏断点）、SSE 事件类型约定、组件设计规范（RobotAvatar / 马卡龙配色 / 毛玻璃卡片）。
+2. **读取评审参数**：打开 [config/review-config.md](config/review-config.md) 获取当前的技术栈版本、性能阈值（vis-network 三级降级节点数、窄屏断点）、SSE 事件类型约定、组件设计规范（RobotAvatar / 马卡龙配色 / 毛玻璃卡片）。获取主题色系统配置（主题列表、CSS 变量目录、alpha 命名规则、主题色白名单）。
 3. **按 Checklist 路由**：根据文件路径与内容特征，匹配上表中的规则文件；一个文件可能命中多个规则文件（如 `.vue` 既命中 Vue Composition 又命中 Element Plus），均需逐条核对。
 4. **记录偏离**：对每条规则，记录代码偏离的具体位置（文件路径 + 行号）与一段代表性代码片段；若规则中给出 Wrong/Right 示例，对照判断。
-5. **组装输出**：按下方 Required output 输出。先按 **Urgent** 分组（urgent 在前），再按类别顺序排序（Vue Composition → Element Plus → Pinia Store → Performance → Type Safety）。无任何偏离时使用 Template B。
+5. **组装输出**：按下方 Required output 输出。先按 **Urgent** 分组（urgent 在前），再按类别顺序排序（Vue Composition → Element Plus → Pinia Store → Performance → Type Safety → Theming）。无任何偏离时使用 Template B。
 
 ## Required output
 When invoked, the response must exactly follow one of the two templates:

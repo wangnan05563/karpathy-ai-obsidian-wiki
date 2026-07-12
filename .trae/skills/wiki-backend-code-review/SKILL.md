@@ -16,8 +16,8 @@ Use this skill whenever the user asks to **review, analyze, or improve** Fastify
 Do NOT use this skill when:
 
 - The request is about frontend code or UI (e.g., `.tsx`, `.jsx`, browser-side `.ts`, `web/`).
-- The request is about prompt text content quality (e.g., `.md` files under `prompts/`) °™ that is another skill's responsibility; this skill only reviews how prompts are *referenced* from code.
-- The request is about the semantic correctness of Obsidian Vault content itself °™ this skill only reviews whether *operations on the Vault* are safe.
+- The request is about prompt text content quality (e.g., `.md` files under `prompts/`) ÔøΩÔøΩ that is another skill's responsibility; this skill only reviews how prompts are *referenced* from code.
+- The request is about the semantic correctness of Obsidian Vault content itself ÔøΩÔøΩ this skill only reviews whether *operations on the Vault* are safe.
 - The request is about build config, CI scripts, or other non-business-backend code (unless it involves security or path validation).
 - The user is not asking for a review/analysis/improvement of backend code.
 
@@ -26,14 +26,14 @@ Do NOT use this skill when:
 Follow these steps when using this skill:
 
 1. **Identify the review mode** (pending-change vs snippet vs file-focused) based on the user's input. Keep the scope tight: review only what the user provided or explicitly referenced.
-2. **Read [config/review-config.md](config/review-config.md)** to obtain review parameters: project directory mapping, SSE event format conventions, concurrency control thresholds, path traversal protection rules, and applicable/non-applicable scenarios. Rule files do not hardcode any values °™ all configurable parameters live in the config.
+2. **Read [config/review-config.md](config/review-config.md)** to obtain review parameters: project directory mapping, SSE event format conventions, concurrency control thresholds, path traversal protection rules, and applicable/non-applicable scenarios. Rule files do not hardcode any values ÔøΩÔøΩ all configurable parameters live in the config.
 3. **Route to rule files via the Checklist** below based on what the review scope contains (SSE streaming, filesystem/vault ops, route design, harness integration, security, error handling). Apply every matching rule file to the review scope.
 4. **Fall back to General Review Rules** when no Checklist rule matches the review scope, performing a best-effort review on security/performance/code-quality/testing.
 5. **Compose the final output strictly following the Required Output Format** (Template A for any findings, Template B for no issues).
 
 Notes when using this skill:
 - Always include actionable fixes or suggestions (including possible code snippets). Examples in rule files are TypeScript, matching the project backend language.
-- Rule `Description` fields are written in Chinese because the project code comments are in Chinese °™ keep review explanations aligned with the codebase convention.
+- Rule `Description` fields are written in Chinese because the project code comments are in Chinese ÔøΩÔøΩ keep review explanations aligned with the codebase convention.
 - Use best-effort `File:Line` references when a file path and line numbers are available; otherwise, use the most specific identifier you can.
 
 ## Checklist
@@ -44,6 +44,7 @@ Notes when using this skill:
 - harness integration: if the review scope involves `EngineAdapter` implementations, `AsyncIterable` event streams, budget control, hook registration (`beforeLoop`/`afterLoop`), `FileStateStore` usage, or prompt file loading under `services/api/src/engine/` or `services/api/src/workflows/`, follow [references/harness-integration-rule.md](references/harness-integration-rule.md) to perform the review.
 - security: if the review scope involves API Key references, path concatenation from user input, `execFile`/`spawn` child process calls, network binding (`app.listen`), or error response construction anywhere under `services/api/`, follow [references/security-rule.md](references/security-rule.md) to perform the review.
 - error handling: if the review scope contains try/catch blocks, error response construction, SSE error events, tool execution failure handling, or state file corruption recovery under `services/api/`, follow [references/error-handling-rule.md](references/error-handling-rule.md) to perform the review.
+- configuration management: if the review scope contains hardcoded port numbers, file paths, timeout values, API key strings, or whitelist arrays that should be config-driven, flag them per the "ÈÖçÁΩÆÈ°πÁÆ°ÁêÜËßÑËåÉ" section in [config/review-config.md](config/review-config.md).
 
 ## General Review Rules
 
