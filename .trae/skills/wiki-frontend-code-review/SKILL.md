@@ -26,6 +26,7 @@ The living checklist is split by category across the rule files below. Treat the
 | vis-network、resize、v-for、SSE 流式消费         | [references/performance-rule.md](references/performance-rule.md)         |
 | `interface`/`type`、fetch、JSON.parse、ref 泛型  | [references/type-safety-rule.md](references/type-safety-rule.md)        |
 | CSS 变量、`data-theme`、`rgba()`、SVG `fill`/`stroke`、`getComputedStyle` | [references/theming-rule.md](references/theming-rule.md) |
+| localStorage、apiKey、预设切换、脱敏值 ****、恢复初始配置 | [references/config-isolation-rule.md](references/config-isolation-rule.md) |
 
 All configurable parameters (directory mapping, tech stack, performance thresholds, SSE event types) live in [config/review-config.md](config/review-config.md). Rule files describe general patterns only and reference the config for concrete values — never hardcode thresholds in rule files.
 

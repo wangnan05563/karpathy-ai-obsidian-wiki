@@ -1,22 +1,46 @@
 {
-    "localOnly": true,
-    "llm": {
-        "baseUrl": "https://api.deepseek.com",
-        "provider": "deepseek",
-        "model": "deepseek-chat",
-        "apiKeyRef": "DEEPSEEK_KEY"
-    },
-    "adapter": "harness",
-    "budget": {
-        "maxSteps": 20,
-        "tokenBudget": 50000
-    },
-    "healthCheck": {
-        "staleDays": 30
-    },
-    "vaultPath": "./vault",
-    "server": {
-        "host": "localhost",
-        "port": 3000
-    }
+  "vaultPath": "../../data/vault",
+  "adapter": "harness",
+  "llm": {
+    "provider": "agnes",
+    "baseUrl": "https://apihub.agnes-ai.com/v1",
+    "model": "agnes-2.0-flash",
+    "apiKeyRef": "DEEPSEEK_KEY",
+    "apiKey": ""
+  },
+  "budget": {
+    "maxSteps": 20,
+    "tokenBudget": 50000
+  },
+  "server": {
+    "host": "localhost",
+    "port": 3000
+  },
+  "localOnly": true,
+  "healthCheck": {
+    "staleDays": 30
+  },
+  "tunnel": {
+    "provider": "cloudflare",
+    "localPort": 0,
+    "cpolarAuthtoken": "",
+    "binaryPath": "",
+    "autoStart": false,
+    "tunnelMode": "quick",
+    "tunnelName": "",
+    "tunnelId": "",
+    "credentialsFile": "",
+    "hostname": "",
+    "certFile": ""
+  },
+  "logging": {
+    "level": "info",
+    "enableRequestLog": true
+  },
+  "webSearch": {
+    "provider": "tavily",
+    "apiKeyRef": "TAVILY_API_KEY",
+    "apiKey": "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",
+    "maxResults": 5
+  }
 }

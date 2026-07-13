@@ -1,6 +1,6 @@
 ---
 name: wiki-backend-code-review
-description: "Review Fastify + TypeScript backend code for the wiki project. Invoke when user asks to review, analyze, or improve backend files (e.g., .ts) under services/api/. Covers SSE streaming, filesystem safety, route design, harness integration, security, and error handling."
+description: "Review Fastify + TypeScript backend code for the wiki project. Invoke when user asks to review, analyze, or improve backend files (e.g., .ts) under services/api/. Covers SSE streaming, filesystem safety, route design, harness integration, security, error handling, and configuration management (reset/restore)."
 ---
 
 # Wiki Backend Code Review
@@ -45,6 +45,7 @@ Notes when using this skill:
 - security: if the review scope involves API Key references, path concatenation from user input, `execFile`/`spawn` child process calls, network binding (`app.listen`), or error response construction anywhere under `services/api/`, follow [references/security-rule.md](references/security-rule.md) to perform the review.
 - error handling: if the review scope contains try/catch blocks, error response construction, SSE error events, tool execution failure handling, or state file corruption recovery under `services/api/`, follow [references/error-handling-rule.md](references/error-handling-rule.md) to perform the review.
 - configuration management: if the review scope contains hardcoded port numbers, file paths, timeout values, API key strings, or whitelist arrays that should be config-driven, flag them per the "配置项管理规范" section in [config/review-config.md](config/review-config.md).
+- configuration management (reset/restore): if the review scope contains `reset-config` / `restore` route handlers, `adapter.updateConfig()` runtime sync calls, preset list definitions, or config route lifecycle (GET/PUT/POST reset/POST test-connection) under `services/api/src/routes/`, follow [references/config-management-rule.md](references/config-management-rule.md) to perform the review.
 
 ## General Review Rules
 

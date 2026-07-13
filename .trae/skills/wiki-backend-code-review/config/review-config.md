@@ -113,6 +113,52 @@
 | CSS 变量分层（L1/L2/L3） | 配置分层（env → config → runtime） |
 | 主题文件覆盖全部变量 | 环境配置覆盖全部参数 |
 
+## 配置管理审查参数
+
+> 配置类路由（reset/restore/保存/测试连接）的审查参数集中在本节。
+> 规则文件 [references/config-management-rule.md](../references/config-management-rule.md) 不硬编码具体路径或实例名，
+> 一切约定从本节读取，便于项目演进时单点维护。
+
+### 配置恢复接口路径模板
+
+| 模块 | 恢复接口路径 | 说明 |
+|------|------------|------|
+| LLM / AI | `POST /api/ai/reset-config` | 重置 LLM provider/baseUrl/model/apiKey 到默认值 |
+| 通用模板 | `POST /api/{module}/reset-config` | 新增可编辑配置模块时按此模板命名 |
+
+- 恢复接口须与该模块的 `GET /api/{module}/config`、`PUT /api/{module}/config` 同处一个路由文件注册。
+- 路径中 `{module}` 为配置模块标识（如 `ai`、`engine`、`vault`），与配置文件中的顶层字段一一对应。
+
+### 配置恢复须同步的运行时实例列表
+
+| 模块 | 须同步的运行时实例 | 同步方法 | 同步字段 |
+|------|------------------|----------|----------|
+| LLM / AI | `adapter`（EngineAdapter 实例） | `adapter.updateConfig()` | `provider` / `baseUrl` / `model` / `apiKey` |
+
+- 评审时确认：reset 接口写完配置文件后，必须调用上表对应的同步方法，否则视为不通过。
+- 新增可编辑配置模块时，若引入新的运行时实例，必须在本表登记其同步方法与字段。
+
+### 配置接口完整生命周期清单
+
+| 动作 | 方法 + 路径模板 | 说明 |
+|------|----------------|------|
+| 读取 | `GET /api/{module}/config` | 返回当前配置 |
+| 保存 | `PUT /api/{module}/config` | 持久化新配置并同步运行时 |
+| 恢复 | `POST /api/{module}/reset-config` | 重置目标模块字段到默认值并同步运行时 |
+| 测试 | `POST /api/{module}/test-connection` | 用当前配置发起一次连通性测试 |
+
+- 评审时确认：可编辑配置模块的路由文件须同时注册以上四类接口，缺失任一即视为生命周期不完整（suggestion 级）。
+- "测试连接"接口允许按模块语义调整（如非网络型模块可改为"校验配置"），但必须有等价的验证动作。
+
+### 预设集中管理位置约定
+
+| 预设类别 | 集中定义位置 | 导出常量名 | 说明 |
+|----------|------------|-----------|------|
+| LLM 预设 | `services/api/src/routes/ai.ts` | `LLM_PRESETS` | provider/model 预设列表，供路由与前端共享 |
+
+- 评审时确认：预设列表必须从单一常量导出，禁止在多个路由文件内联重复定义。
+- 新增预设类别时，必须在本表登记其集中定义位置与常量名，保持单点维护。
+
 ## 适用 / 不适用场景
 
 ### 适用
