@@ -43,10 +43,12 @@ See [references/.rules-index.md](references/.rules-index.md) for the complete li
 ormalize, 	ask_links |
 | Session state | invalidate_cache, cookie, session, health check endpoints |
 | Persistence & cache | import.meta.url, process.cwd(), refreshConfigCache, request.params.id, path.join, localStorage, IndexedDB, data/conversations, .gitignore |
+| Encoding safety | UTF-8, BOM, GB2312, tsc encoding error, Set-Content/Out-File without -Encoding, WriteAllText, 中文注释乱码, Invalid character |
+| Cleanup audit | cleanup, archive, deleteOne, dry_run, days parameter, JSONL audit log, loadStatus, batch delete, errors[] collection |
 
 ## Generic Safety Net
 
-If no rule matches, perform best-effort review on: **Security** (hardcoded keys, path traversal, command injection, improper binding, error info leakage), **Performance** (sync FS APIs, missing locks, unclosed SSE connections, missing budget checks), **Code Quality** (SRP violations, inconsistent signatures, inline prompts, magic strings), **Testing** (missing coverage, implementation-detail tests, flaky patterns, missing edge cases).
+If no rule matches, perform best-effort review on: **Security** (hardcoded keys, path traversal, command injection, improper binding, error info leakage), **Performance** (sync FS APIs, missing locks, unclosed SSE connections, missing budget checks), **Code Quality** (SRP violations, inconsistent signatures, inline prompts, magic strings), **Testing** (missing coverage, implementation-detail tests, flaky patterns, missing edge cases), **Encoding** (non-UTF-8 source files, BOM in .ts/.json, PowerShell default-encoding writes on Chinese-commented files), **Cleanup safety** (batch delete without audit log, missing days lower-bound, dry_run default false, missing per-item try-catch, missing state refresh after delete).
 
 ## Condensed Output Format
 

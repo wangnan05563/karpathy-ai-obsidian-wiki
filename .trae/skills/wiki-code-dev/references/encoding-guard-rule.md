@@ -46,13 +46,22 @@ if (Test-Utf8Strict $path) {
 
 **为什么**：Edit 工具内部默认 UTF-8 输出。对 GB2312 文件执行 Edit 会把原字节按 GB2312 解码再以 UTF-8 编码写回，看似成功但文件编码已变；若中间任一步按错误编码解码，则产生不可逆替换字符。
 
-**正确模板**（参数取自 config 的 `encoding_fallback`）：
+**正确模板**（编码名通过参数传入，调用方从 config 的 `encoding_fallback` 读取实际值）：
 
 ```powershell
-$enc = [System.Text.Encoding]::GetEncoding("gb2312")  # 来自 encoding_fallback
-$content = [System.IO.File]::ReadAllText($path, $enc)
-# 修改 $content
-[System.IO.File]::WriteAllText($path, $content, $enc)
+function Edit-NonUtf8File {
+  param(
+    [string]$Path,
+    [string]$EncodingFallback  # 来自 config.encoding_fallback（默认 gb2312，调用方负责读取并传入）
+  )
+  $enc = [System.Text.Encoding]::GetEncoding($EncodingFallback)
+  $content = [System.IO.File]::ReadAllText($Path, $enc)
+  # 修改 $content
+  [System.IO.File]::WriteAllText($Path, $content, $enc)
+}
+
+# 调用示例：$EncodingFallback 值由调用方从 config 读取后传入
+# Edit-NonUtf8File -Path $path -EncodingFallback <config.encoding_fallback 的值>
 ```
 
 ### EG-3：构建前必须扫描编码
@@ -135,7 +144,8 @@ npm run build
 function Edit-FileWithEncoding {
   param(
     [string]$Path,
-    [scriptblock]$Mutator  # 接收 $content 返回新 $content
+    [scriptblock]$Mutator,  # 接收 $content 返回新 $content
+    [string]$EncodingFallback  # 来自 config.encoding_fallback（调用方负责读取并传入）
   )
   $utf8 = New-Object System.Text.UTF8Encoding($false, $true)
   $bytes = [System.IO.File]::ReadAllBytes($Path)
@@ -147,18 +157,18 @@ function Edit-FileWithEncoding {
     $new = & $Mutator $content
     [System.IO.File]::WriteAllText($Path, $new, $utf8)
   } else {
-    # 非 UTF-8：用 encoding_fallback（默认 gb2312）
-    $fallback = [System.Text.Encoding]::GetEncoding("gb2312")
+    # 非 UTF-8：用 $EncodingFallback（调用方从 config 读取传入，不在模板内硬编码）
+    $fallback = [System.Text.Encoding]::GetEncoding($EncodingFallback)
     $content = [System.IO.File]::ReadAllText($Path, $fallback)
     $new = & $Mutator $content
     [System.IO.File]::WriteAllText($Path, $new, $fallback)
   }
 }
 
-# 用法：在文件首行插入注释
-Edit-FileWithEncoding -Path "src/main.ts" -Mutator {
-  param($c) "// auto header`n" + $c
-}
+# 用法：在文件首行插入注释（$EncodingFallback 值从 config.encoding_fallback 读取后传入）
+# Edit-FileWithEncoding -Path "src/main.ts" -EncodingFallback <config.encoding_fallback 的值> -Mutator {
+#   param($c) "// auto header`n" + $c
+# }
 ```
 
 ### 模板 B：DELIVERY.md 等文档追加章节
@@ -166,6 +176,9 @@ Edit-FileWithEncoding -Path "src/main.ts" -Mutator {
 文档同步常需在末尾追加章节。若文档原编码非 UTF-8，必须保持原编码。
 
 ```powershell
+# $EncodingFallback 值由调用方从 config.encoding_fallback 读取后传入（默认 gb2312）
+param([string]$EncodingFallback)
+
 # 严格 UTF-8 检测
 $utf8Strict = New-Object System.Text.UTF8Encoding($false, $true)
 $bytes = [System.IO.File]::ReadAllBytes("DELIVERY.md")
@@ -175,7 +188,8 @@ try { [void]$utf8Strict.GetString($bytes) } catch { $isUtf8 = $false }
 if ($isUtf8) {
   $enc = $utf8Strict
 } else {
-  $enc = [System.Text.Encoding]::GetEncoding("gb2312")  # encoding_fallback
+  # 编码名从 $EncodingFallback 参数读取，不在模板内硬编码
+  $enc = [System.Text.Encoding]::GetEncoding($EncodingFallback)
 }
 $content = [System.IO.File]::ReadAllText("DELIVERY.md", $enc)
 $append = "`n`n## 新章节`n`n内容..."

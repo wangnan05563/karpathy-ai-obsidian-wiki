@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Phase 4: Interaction tests - theme, forms, tabs, button auto-discovery."""
 import sys
 import os
@@ -103,6 +103,8 @@ def test_button_discovery(page, cfg, results):
     click_wait = bd.get("click_wait_ms", 800)
     force = bd.get("force_click", True)
     continue_on_fail = bd.get("continue_on_failure", True)
+    # 按钮发现的点击超时从 config.timeout.button_discovery_click_timeout_ms 读取
+    click_timeout = cfg.get("timeout", {}).get("button_discovery_click_timeout_ms")
 
     total_found = total_clicked = total_skipped = total_failed = 0
 
@@ -139,7 +141,10 @@ def test_button_discovery(page, cfg, results):
 
                 # Click
                 try:
-                    elem.click(force=force, timeout=3000)
+                    click_kwargs = {"force": force}
+                    if click_timeout is not None:
+                        click_kwargs["timeout"] = click_timeout
+                    elem.click(**click_kwargs)
                     page.wait_for_timeout(click_wait)
                     total_clicked += 1
                     click_nav_tab(page, tab_sel, p["label"], nav_wait)

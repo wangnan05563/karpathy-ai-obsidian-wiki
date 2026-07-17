@@ -275,6 +275,57 @@
 - 评审时确认：跨 origin 列为"是"的数据，后端必须提供 CRUD 路由，前端以后端为权威源、浏览器存储仅作降级缓存。
 - 降级策略：后端不可用时前端降级到本地缓存，但须 `console.warn` 记录降级事件，不得静默失败。
 
+## 编码安全审查参数
+
+> 编码安全规则（见 [references/encoding-safety-rule.md](../references/encoding-safety-rule.md)）所依赖的可配置参数集中在本节。
+> 规则文件只描述通用模式，不硬编码具体编码值、检测方法或扫描范围。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `source_encoding_required` | `utf-8-no-bom` | 源文件要求编码 |
+| `config_encoding_required` | `utf-8-no-bom` | 配置文件要求编码 |
+| `encoding_detection` | `utf8-strict-decode` | 检测方法 |
+| `encoding_scan_scope` | `.ts,.json,.md` | 扫描文件扩展名 |
+| `fffd_indicator` | `U+FFFD` | 乱码指示字符 |
+| `ascii_whitelist` | `true` | 纯 ASCII 文件免检 |
+
+- 评审时确认：被改动文件（`.ts` / `.json` / `.md`）须符合 `source_encoding_required` / `config_encoding_required`，BOM 或非 UTF-8 字节会触发 `tsc` 编译失败或运行时乱码。
+- 检测时机：Edit 后、`tsc` 编译前。PowerShell 编辑含中文注释的文件时必须保持原编码，禁止以默认编码回写。
+
+## 清理操作审计参数
+
+> 清理操作审计规则（见 [references/cleanup-audit-rule.md](../references/cleanup-audit-rule.md)）所依赖的可配置参数集中在本节。
+> 规则文件只描述通用模式，不硬编码具体审计路径、下限值或默认值。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `audit_log_format` | `jsonl` | 审计日志格式 |
+| `audit_log_path` | `.harness/cleanup-audit.log` | 审计日志路径（相对项目根） |
+| `audit_failure_action` | `non-blocking` | 审计失败不阻塞主流程 |
+| `days_min_value` | `1` | days 参数下限 |
+| `days_protection` | `Math.max(min, input)` | days 下限保护公式 |
+| `dry_run_default` | `true` | dry_run 默认值 |
+| `single_item_error_collection` | `errors[]` | 单子项错误收集到数组 |
+| `refresh_after_execute` | `true` | 实际执行后刷新状态 |
+
+- 评审时确认：清理类路由（删除、归档、回收）必须按本表配置实现审计日志、days 下限保护、`dry_run` 默认值与执行后状态刷新。
+- 审计日志写入失败必须按 `audit_failure_action` 降级，不得阻塞主清理流程。
+
+## 批量操作错误处理参数
+
+> 批量操作错误处理规则（见 [references/error-handling-rule.md](../references/error-handling-rule.md) 的"批量操作单子项错误处理"节）所依赖的可配置参数集中在本节。
+> 规则文件只描述通用模式，不硬编码具体字段名或捕获策略。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `single_item_try_catch` | `true` | 单子项独立 try-catch |
+| `error_collection_field` | `errors` | 错误收集字段名 |
+| `main_flow_catch` | `fatal-only` | 主流程只捕获致命错误 |
+| `audit_write_catch` | `independent` | 审计写入独立 try-catch |
+
+- 评审时确认：批量操作（清理、迁移、批处理）中单子项失败不中断整体流程，错误信息收集到 `error_collection_field` 数组返回给客户端。
+- 主流程 try-catch 只捕获致命错误（如配置缺失、权限拒绝），单子项错误用独立 try-catch 包裹。
+
 ## 适用 / 不适用场景
 
 ### 适用

@@ -192,13 +192,20 @@ def click_nav_tab(page, tab_selector, label, wait_ms=1500):
     return True
 
 
-def safe_click(page, selector, wait_ms=500, force=False, timeout=3000):
-    """Safely click an element, return True if clicked successfully."""
+def safe_click(page, selector, wait_ms=500, force=False, timeout=None):
+    """Safely click an element, return True if clicked successfully.
+
+    timeout: 超时毫秒数。None 时使用 Playwright 默认超时。
+             调用方应从 cfg.timeout.click_timeout_ms 读取并传入，避免硬编码。
+    """
     loc = page.locator(selector).first
     if loc.count() == 0:
         return False
     try:
-        loc.click(force=force, timeout=timeout)
+        click_kwargs = {"force": force}
+        if timeout is not None:
+            click_kwargs["timeout"] = timeout
+        loc.click(**click_kwargs)
         page.wait_for_timeout(wait_ms)
         return True
     except Exception:
@@ -367,6 +374,8 @@ def test_button_discovery(page, cfg, results):
     click_wait = bd.get("click_wait_ms", 800)
     force = bd.get("force_click", True)
     continue_on_fail = bd.get("continue_on_failure", True)
+    # 按钮发现的点击超时从 config.timeout.button_discovery_click_timeout_ms 读取
+    click_timeout = cfg.get("timeout", {}).get("button_discovery_click_timeout_ms")
 
     total_found = 0
     total_clicked = 0
@@ -423,7 +432,10 @@ def test_button_discovery(page, cfg, results):
 
                 # Click the button
                 try:
-                    elem.click(force=force, timeout=3000)
+                    click_kwargs = {"force": force}
+                    if click_timeout is not None:
+                        click_kwargs["timeout"] = click_timeout
+                    elem.click(**click_kwargs)
                     page.wait_for_timeout(click_wait)
                     total_clicked += 1
                     results.log(

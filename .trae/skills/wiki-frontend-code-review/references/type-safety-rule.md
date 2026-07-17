@@ -1,4 +1,4 @@
-﻿## API 响应须定义 TypeScript interface，禁止 any
+## API 响应须定义 TypeScript interface，禁止 any
 
 IsUrgent: True
 Category: Type Safety
@@ -87,3 +87,87 @@ Category: Type Safety
 把 `enum X { A = 'a' }` 改为 `type X = 'a' | 'b'`，常量集合可用 `as const` 对象。
 
 > **示例代码**: 参见 [examples/type-safety-rule-examples.md](examples/type-safety-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。
+
+## reactive 对象属性访问必须在类型定义范围内
+
+IsUrgent: True
+Category: Type Safety
+
+### Description
+
+`reactive(obj)` 返回的对象类型由入参 `obj` 推断，访问未在入参中声明的属性会触发 TS 报错（`Property 'xxx' does not exist on type ...`）。复盘 Cleanup.vue 时发现：把卡片元数据字段 `showDays` 误当作 `reactive` 表单对象的属性直接访问（`form.showDays`），TS 编译失败。原因：`showDays` 是卡片元数据（独立来源），不是表单字段，应通过元数据查找获取，而非挂到表单 reactive 上。
+
+更广泛地：把不同来源的字段混入同一 `reactive` 对象会让类型与数据来源模糊，TS 无法推断导致编译失败；运行时虽有值但类型已不可信。
+
+### Suggested Fix
+
+- 严格区分表单字段与卡片元数据：表单字段进 `reactive(form)`，元数据单独存储（如 `const cardMeta = ref<Meta[]>([])`）。
+- 从元数据取属性时用 `find` / `filter` 查找，禁止把元数据字段直接挂到表单 reactive 上。
+- 表单 reactive 接口显式声明 `interface`，避免隐式推断：
+
+```ts
+interface CleanForm {
+  before: string
+  keepDays: number
+}
+const form = reactive<CleanForm>({ before: '', keepDays: 7 })
+// ❌ form.showDays 报错：showDays 不在 CleanForm 上
+// ✅ 从元数据查找
+const meta = cardMeta.value.find(c => c.key === 'expired')
+const showDays = meta?.showDays ?? 7
+```
+
+> **示例代码**: 参见 [examples/type-safety-rule-examples.md](examples/type-safety-rule-examples.md)。
+
+## unused imports 必须删除（strict 模式下报错）
+
+IsUrgent: True
+Category: Type Safety
+
+### Description
+
+`tsconfig` 开启 `"strict": true` + `"noUnusedLocals": true` + `"noUnusedParameters": true` 时，未使用的 import / 局部变量 / 参数都会被 TS 编译器报为错误（`error TS6133: 'X' is declared but its value is never read`），导致 `pnpm build` 直接失败。复盘 Cleanup.vue 时发现：重构后遗留的 `ElMessageBox`、`ElMessage`、`ref` 等未使用 import 让构建中断。
+
+仅删除即可，不要保留"以防后续用得到"的 import——后续需要时 IDE 自动导入更可靠，遗留 import 反而掩盖真实依赖关系。
+
+### Suggested Fix
+
+- 重构完成后立即运行 `pnpm tsc --noEmit` 检查未使用 import。
+- IDE 启用"保存时整理 import"（VSCode `editor.codeActionsOnSave.source.organizeImports`）。
+- 对必须保留但暂时未用的变量用 `_` 前缀（如 `_unused`），TS 会跳过以下划线开头的标识符。
+
+> **示例代码**: 参见 [examples/type-safety-rule-examples.md](examples/type-safety-rule-examples.md)。
+
+## 联合类型窄化失败时用 as 断言或 type guard
+
+IsUrgent: False
+Category: Type Safety
+
+### Description
+
+判别式联合（discriminated union）通常用 `if (x.type === 'a')` 即可窄化。但部分场景 TS 仍无法窄化：
+- 判别字段不是字面量类型，而是 `string` / `number`（被放宽）。
+- 同一表达式在闭包内被多次访问，TS 担心值变化而拒绝窄化。
+- 通过索引访问 `record[key]` 时，TS 合并所有 value 类型，无法按 key 窄化。
+
+此类场景必须用 `as` 断言或自定义 type guard 函数显式窄化；用 `as any` 绕过会丢失类型保护且违反前述"API 响应须定义 TypeScript interface，禁止 any"规则。
+
+### Suggested Fix
+
+```ts
+// 1) as 断言：明确告诉 TS 当前的具体分支
+const item = record[key] as CleanFormItem
+
+// 2) type guard 函数：复杂判断抽出谓词函数
+function isCleanFormItem(x: unknown): x is CleanFormItem {
+  return typeof x === 'object' && x !== null && 'before' in x
+}
+if (isCleanFormItem(record[key])) {
+  // 此处 record[key] 已窄化为 CleanFormItem
+  record[key].before
+}
+```
+
+注意：`as` 断言只是"我担保"，运行时仍可能不符；type guard 更安全，优先选择。
+
+> **示例代码**: 参见 [examples/type-safety-rule-examples.md](examples/type-safety-rule-examples.md)。

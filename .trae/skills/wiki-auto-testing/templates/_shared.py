@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 Shared utilities for wiki-auto-testing.
 Contains config loading, result tracking, and helper functions.
@@ -7,6 +7,8 @@ All parameters from config.yaml - no hardcoded values.
 import json
 import os
 import sys
+import glob
+import subprocess
 import yaml
 from playwright.sync_api import sync_playwright
 
@@ -169,11 +171,18 @@ def click_nav_tab(page, tab_selector, label, wait_ms=1500):
     return False
 
 
-def safe_click(page, selector, wait_ms=500, force=False, timeout=3000):
-    """Safely click an element."""
+def safe_click(page, selector, wait_ms=500, force=False, timeout=None):
+    """Safely click an element.
+
+    timeout: 超时毫秒数。None 时使用 Playwright 默认超时。
+             调用方应从 cfg.timeout.click_timeout_ms 读取并传入，避免硬编码。
+    """
     elem = page.locator(selector)
     if elem.count() > 0:
-        elem.first.click(force=force, timeout=timeout)
+        click_kwargs = {"force": force}
+        if timeout is not None:
+            click_kwargs["timeout"] = timeout
+        elem.first.click(**click_kwargs)
         page.wait_for_timeout(wait_ms)
         return True
     return False
@@ -234,3 +243,200 @@ def teardown_browser(browser, ctx):
     """Clean up browser resources."""
     ctx.close()
     browser.close()
+
+
+# ============================================================
+# 编码检测工具（系统清理模块复盘补充）
+# 通过 Unicode 码点匹配规避终端 GBK 编码对中文字符串的破坏
+# ============================================================
+
+def get_dom_text_codepoints(page, selector):
+    """获取 DOM 元素文本的 Unicode 码点列表。
+
+    用 page.evaluate 在浏览器端取 textContent，再在 Python 端转码点，
+    避免终端 GBK 编码影响字符串比对（has_text 中文匹配失败的根因）。
+
+    参数：
+        page: Playwright Page 对象
+        selector: CSS 选择器（匹配多个元素时返回多组码点）
+
+    返回：
+        list[list[int]]：每个元素的文本码点列表，例如 [[0x4eea, 0x8868, 0x76d8], ...]
+        若 evaluate 失败（如选择器无匹配）返回空列表
+    """
+    # 在浏览器端取 textContent，绕过 Python 字符串编码透传问题
+    js = f'''() => {{
+        const els = document.querySelectorAll({selector!r});
+        return Array.from(els).map(e => e.textContent || '');
+    }}'''
+    try:
+        texts = page.evaluate(js)
+    except Exception:
+        return []
+    # 在 Python 端转 Unicode 码点，便于后续比对（避免 has_text 中文匹配坑）
+    return [[ord(c) for c in t] for t in texts]
+
+
+def check_encoding(page, fffd_codepoint="0xFFFD", scan_selectors=None):
+    """检测页面 DOM 文本是否包含 U+FFFD 替换字符（编码乱码标志）。
+
+    参数：
+        page: Playwright Page 对象
+        fffd_codepoint: 替换字符码点字符串（默认 "0xFFFD"），
+                       用字符串避免 YAML 解析器对 0xFFFD 的歧义
+        scan_selectors: 扫描的 CSS 选择器列表；为 None 时扫 body 全文
+
+    返回：
+        dict：
+          - has_fffd (bool)：是否检测到 U+FFFD
+          - affected_selectors (list[str])：哪些选择器命中了 U+FFFD
+          - sample_codepoints (list[int])：首个命中位置的码点片段（用于排查）
+    """
+    # 字符串码点转 int（如 "0xFFFD" -> 0xFFFD），兼容十六进制和十进制
+    try:
+        target_cp = int(fffd_codepoint, 16) if isinstance(fffd_codepoint, str) else int(fffd_codepoint)
+    except (ValueError, TypeError):
+        target_cp = 0xFFFD
+
+    selectors = scan_selectors if scan_selectors else ["body"]
+    affected = []
+    sample = []
+    for sel in selectors:
+        cps_list = get_dom_text_codepoints(page, sel)
+        for cps in cps_list:
+            if target_cp in cps:
+                affected.append(sel)
+                # 取 U+FFFD 前后各 10 个码点作为现场样本，便于事后排查
+                idx = cps.index(target_cp)
+                start = max(0, idx - 10)
+                end = min(len(cps), idx + 11)
+                sample = cps[start:end]
+                break
+        if affected:
+            break
+
+    return {
+        "has_fffd": bool(affected),
+        "affected_selectors": affected,
+        "sample_codepoints": sample,
+    }
+
+
+# ============================================================
+# 服务生命周期工具（系统清理模块复盘补充）
+# 测试前停止占用端口的旧进程 / 验证端口监听
+# 通过 PowerShell 的 Get-NetTCPConnection 实现，避免硬编码 PID
+# ============================================================
+
+def stop_port_processes(ports, shell_executable="powershell.exe"):
+    """停止占用指定端口的进程。
+
+    用 PowerShell Get-NetTCPConnection 反查占用端口的进程 PID，再 Stop-Process。
+    避免 taskkill 模糊匹配进程名误杀同名进程。
+
+    参数：
+        ports: 端口列表，如 [3000, 5173]
+        shell_executable: PowerShell 可执行文件名
+
+    返回：
+        dict：每个端口的停止结果 {port: {"stopped": bool, "pid": int|None, "error": str|None}}
+    """
+    results = {}
+    for port in ports:
+        # 用 Get-NetTCPConnection 反查 Listen 状态的进程 PID
+        # 注意：PowerShell 不支持 &&，用 ; 分隔顺序执行
+        ps_script = (
+            f"$conn = Get-NetTCPConnection -State Listen -LocalPort {port} -ErrorAction SilentlyContinue; "
+            f"if ($conn) {{ Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue; "
+            f"Write-Output $conn.OwningProcess }} else {{ Write-Output '0' }}"
+        )
+        try:
+            proc = subprocess.run(
+                [shell_executable, "-NoProfile", "-Command", ps_script],
+                capture_output=True, text=True, timeout=10, encoding="utf-8"
+            )
+            output = (proc.stdout or "").strip()
+            if output and output != "0":
+                # 成功停止并输出被停止的 PID
+                results[port] = {"stopped": True, "pid": int(output), "error": None}
+            else:
+                # 端口未被占用或进程已退出
+                results[port] = {"stopped": False, "pid": None, "error": None}
+        except Exception as e:
+            results[port] = {"stopped": False, "pid": None, "error": str(e)[:100]}
+    return results
+
+
+def verify_ports_listening(ports, shell_executable="powershell.exe"):
+    """验证端口是否处于 Listen 状态。
+
+    参数：
+        ports: 端口列表
+        shell_executable: PowerShell 可执行文件名
+
+    返回：
+        dict：{port: bool}，True 表示该端口在监听
+    """
+    results = {}
+    for port in ports:
+        ps_script = (
+            f"$conn = Get-NetTCPConnection -State Listen -LocalPort {port} -ErrorAction SilentlyContinue; "
+            f"if ($conn) {{ Write-Output '1' }} else {{ Write-Output '0' }}"
+        )
+        try:
+            proc = subprocess.run(
+                [shell_executable, "-NoProfile", "-Command", ps_script],
+                capture_output=True, text=True, timeout=5, encoding="utf-8"
+            )
+            output = (proc.stdout or "").strip()
+            results[port] = (output == "1")
+        except Exception:
+            results[port] = False
+    return results
+
+
+# ============================================================
+# 临时文件清理工具（系统清理模块复盘补充）
+# 测试产生的临时 Python 脚本和截图的统一清理
+# ============================================================
+
+def cleanup_temp_files(patterns, cleanup_dirs=None):
+    """按 pattern 清理临时文件。
+
+    约定临时文件命名前缀为 _test_，便于识别和清理，
+    避免误删项目正式文件。
+
+    参数：
+        patterns: glob pattern 列表，如 ["_test_*.py", "_test_*.png"]
+        cleanup_dirs: 清理目录列表，默认 ["."]
+
+    返回：
+        dict：
+          - deleted (list[str])：已删除的文件路径
+          - failed (list[dict])：删除失败的文件和错误信息
+          - total (int)：匹配到的总文件数
+    """
+    dirs = cleanup_dirs if cleanup_dirs else ["."]
+    deleted = []
+    failed = []
+    total = 0
+
+    for d in dirs:
+        if not os.path.exists(d):
+            continue
+        for pattern in patterns:
+            # glob 递归匹配，确保子目录中的临时文件也能清理
+            full_pattern = os.path.join(d, "**", pattern)
+            for fp in glob.glob(full_pattern, recursive=True):
+                total += 1
+                try:
+                    os.remove(fp)
+                    deleted.append(fp)
+                except Exception as e:
+                    failed.append({"file": fp, "error": str(e)[:100]})
+
+    return {
+        "deleted": deleted,
+        "failed": failed,
+        "total": total,
+    }

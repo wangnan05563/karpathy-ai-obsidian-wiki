@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 # wiki-auto-testing 项目配置
 # 所有项目特定参数在此配置，技能通用默认值在 defaults.yaml
 # 本项目配置会自动合并 defaults.yaml 的默认值
@@ -101,3 +101,114 @@ api_tests:
       expected_status: 200
     - path: "/api/tunnel/config"
       expected_status: 200
+
+# ============================================================
+# 以下为系统清理模块前端验证复盘补充配置
+# 所有参数可配置，避免硬编码
+# ============================================================
+
+# --- 编码检测测试配置（项目特定） ---
+# 用于检测页面 DOM 文本是否包含 U+FFFD 替换字符（编码乱码标志）
+encoding_tests:
+  enabled: true
+  # 需要检测的页面 key（对应 navigation.pages 中的 key）
+  check_pages: ["dashboard", "cleanup"]
+  # U+FFFD 替换字符的码点标识（统一用字符串配置，避免 YAML 解析歧义）
+  fffd_codepoint: "0xFFFD"
+  # 检测方法：dom_text_codepoints（dump DOM 文本并检查码点）
+  check_method: "dom_text_codepoints"
+  # 失败时是否截图取证
+  screenshot_on_fail: true
+  # 扫描的 DOM 选择器范围（避免扫描整个 body 导致大量噪音）
+  scan_selectors:
+    - ".el-tabs__item"
+    - ".title"
+    - ".grad-text"
+    - "h1, h2, h3"
+    - "label"
+    - ".el-form-item__label"
+
+# --- 危险操作测试配置（项目特定） ---
+# 验证 dry_run 默认开启 / danger 样式 / 二次确认 / 取消不发请求
+dangerous_action_tests:
+  enabled: true
+  test_pages:
+    - key: "cleanup"
+      forms:
+        - key: "compileCache"
+          # 是否有 days 输入框（days 阈值参数）
+          has_days_input: false
+          # dry_run 默认应开启，避免误删
+          default_dry_run: true
+        - key: "runLogs"
+          has_days_input: true
+          default_dry_run: true
+      # 二次确认弹窗组件选择器（Element Plus MessageBox）
+      confirm_component: ".el-message-box"
+      # 确认弹窗取消按钮文本（用 Unicode 码点匹配可绕过终端编码问题）
+      confirm_cancel_text: "取消"
+      confirm_ok_text: "确认清理"
+      # danger 样式类名（点击触发后按钮应带此类）
+      danger_class: "danger"
+      # dry_run 开关选择器
+      dry_run_switch: ".el-switch"
+      # 表单容器选择器（用于定位每个独立表单）
+      form_container_selector: ".cleanup-form"
+      # loading 状态选择器（验证表单独立 loading）
+      loading_selector: ".el-loading-mask"
+      # result 显示选择器（验证表单独立 result）
+      result_selector: ".cleanup-result"
+
+# --- 服务生命周期配置（项目特定） ---
+# 测试前停止旧进程 / 启动新服务 / 验证端口 / 测试后停止服务
+service_lifecycle:
+  # 是否在测试前停止占用端口的旧进程
+  stop_old_process: true
+  # 停止方法：Get-NetTCPConnection（通过端口反查进程）
+  stop_method: "Get-NetTCPConnection"
+  # 启动后端服务命令
+  start_backend: "npm run dev:api"
+  # 启动前端服务命令
+  start_frontend: "npm run dev:web"
+  # 启动模式：non-blocking（非阻塞，启动后立即返回，避免卡住测试流程）
+  start_mode: "non-blocking"
+  # 端口检查方法：Get-NetTCPConnection
+  port_check_method: "Get-NetTCPConnection"
+  # 端口检查状态：Listen（监听中即视为就绪）
+  port_check_state: "Listen"
+  # 启动超时（毫秒），超时则判定启动失败
+  startup_timeout_ms: 30000
+  # 端口轮询间隔（毫秒）
+  port_poll_interval_ms: 1000
+
+# --- 临时文件清理配置（项目特定） ---
+# 测试过程中产生的临时 Python 脚本和截图的清理策略
+cleanup:
+  # 临时测试脚本文件名 pattern
+  temp_files_pattern: "_test_*.py"
+  # 临时截图文件名 pattern
+  temp_screenshots_pattern: "_test_*.png"
+  # 测试成功时是否清理临时文件
+  cleanup_on_success: true
+  # 测试失败时是否清理临时文件（默认保留以便排查）
+  cleanup_on_failure: false
+  # 清理目录范围（默认当前工作目录）
+  cleanup_dirs:
+    - "."
+    - "test_screenshots"
+
+# --- PowerShell 环境约束（项目特定） ---
+# Windows PowerShell 5.1 的语法限制和约束
+powershell_constraints:
+  # 命令分隔符（PowerShell 不支持 &&，用 ; 分隔顺序执行）
+  command_separator: ";"
+  # 被禁用的命令（容易引发编码或安全问题）
+  blocked_commands: ["cmd /c"]
+  # PowerShell 只读变量（不可重新赋值）
+  readonly_vars: ["$pid", "$PWD", "$HOME"]
+  # 是否使用 RunCommand 的 cwd 参数而非 cd 前缀
+  use_cwd_param: true
+  # 启动 bat 脚本时是否绕过 pause（避免卡住自动化流程）
+  bypass_bat_pause: true
+  # 绕过 pause 的输入内容
+  pause_bypass_input: '""'

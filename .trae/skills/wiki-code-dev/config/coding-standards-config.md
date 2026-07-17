@@ -77,6 +77,22 @@
 | `cwd_param` | `cwd` | RunCommand 工作目录参数名 |
 | `blocked_commands` | `cmd /c` | 被安全策略阻止的命令 |
 
+## 服务端口参数
+
+> 服务生命周期管理模板（见 `powershell-constraints-rule.md`）所依赖的端口参数集中在本节。
+> 规则文件不硬编码端口号，所有端口从本节读取，便于适配不同项目。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `required_ports` | `3000,5173` | 项目所需监听的端口列表（后端 API + 前端 Vite） |
+| `port_check_state` | `Listen` | 端口就绪状态判定（Get-NetTCPConnection 的 State 字段） |
+| `port_check_method` | `Get-NetTCPConnection` | 端口检测方法（PowerShell 原生 cmdlet） |
+| `startup_timeout_ms` | `30000` | 服务启动超时（毫秒），超时判定启动失败 |
+| `port_poll_interval_ms` | `1000` | 端口轮询间隔（毫秒） |
+
+- 适配新项目时，仅需修改 `required_ports` 列表即可，规则文件中的服务生命周期模板会自动引用。
+- 多端口场景：`required_ports` 以逗号分隔，模板用 `foreach` 遍历。
+
 ## bat 脚本约束
 
 | 参数 | 值 | 说明 |

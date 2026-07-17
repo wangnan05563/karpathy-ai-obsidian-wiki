@@ -1,8 +1,8 @@
 # Rule Catalog — 错误处理
 
 ## Scope
-- Covers: 外部调用错误转换、错误对象类型守卫、SSE 流错误推送、工具执行失败处理、状态文件损坏降级。
-- 适用对象：所有 `services/api/` 下的 try/catch 逻辑、错误响应构造、SSE 错误事件、状态文件读写错误处理。
+- Covers: 外部调用错误转换、错误对象类型守卫、SSE 流错误推送、工具执行失败处理、状态文件损坏降级、批量操作单子项错误处理。
+- 适用对象：所有 `services/api/` 下的 try/catch 逻辑、错误响应构造、SSE 错误事件、状态文件读写错误处理、批量删除/迁移/清理循环的错误收集。
 
 ## Rules
 ### 外部错误须 try-catch 并转为用户友好消息
@@ -144,3 +144,57 @@
       }
     }
     ```
+### 批量操作单子项失败须独立 try-catch，错误收集到数组而非抛出
+- Category: reliability
+- Severity: critical
+- Description: 批量操作（清理、迁移、批处理）中单个子项（一条记录、一个文件、一个 API 调用）失败时若直接抛异常中断，会丢失已成功处理的进度，且剩余子项无机会执行，整体可用性下降。每个子项必须用独立 try-catch 包裹（`single_item_try_catch`），错误信息收集到 `error_collection_field`（默认 `errors`）数组返回给客户端，循环继续。主流程 try-catch 只捕获致命错误（`main_flow_catch` 默认 `fatal-only`，如配置缺失、权限拒绝、网络完全不可达）。审计日志写入用独立 try-catch（`audit_write_catch` 默认 `independent`）降级，避免审计失败反阻塞主流程。
+- Suggested fix: 嵌套 try-catch——外层捕获致命错误，内层（循环内）捕获单子项错误并 push 到 errors 数组。所有参数从 [config/review-config.md](../config/review-config.md) 的"批量操作错误处理参数"节读取，规则文件不硬编码字段名或捕获策略。
+- Example:
+  - Bad:
+    ```typescript
+    try {
+      for (const item of items) {
+        // 单子项失败直接中断，剩余子项未执行，已处理进度丢失
+        await processOne(item);
+      }
+      await writeAuditLog(...);
+    } catch (err) {
+      // 主流程 catch 同时处理"单子项失败"和"审计失败"，职责混淆
+      return reply.code(500).send({ error: errMsg(err) });
+    }
+    return reply.send({ ok: true });
+    ```
+  - Good:
+    ```typescript
+    // 字段名从 config 读取（error_collection_field）
+    const errors: { target: string; error: string }[] = [];
+    let processedCount = 0;
+    try {
+      for (const item of items) {
+        try {
+          await processOne(item);
+          processedCount++;
+        } catch (err) {
+          // 单子项错误收集到数组，不中断循环
+          errors.push({ target: item.id, error: errMsg(err) });
+        }
+      }
+    } catch (err) {
+      // 主流程只捕获致命错误（配置缺失、权限拒绝等）
+      request.log.error(err);
+      return reply.code(500).send({ error: errMsg(err) });
+    } finally {
+      // 审计写入独立 try-catch（audit_write_catch: independent），失败降级
+      try {
+        await fs.appendFile(AUDIT_LOG_PATH, JSON.stringify({
+          timestamp: new Date().toISOString(),
+          processed_count: processedCount,
+          errors,
+        }) + '\n', 'utf-8');
+      } catch (auditErr) {
+        console.warn('[降级] 审计日志写入失败:', auditErr);
+      }
+    }
+    return reply.send({ processed_count: processedCount, errors });
+    ```
+- Related rules: 清理类路由的完整审计要求见 [cleanup-audit-rule.md](cleanup-audit-rule.md) 的 CA-1 / CA-6；状态文件降级见上文 EH-5。

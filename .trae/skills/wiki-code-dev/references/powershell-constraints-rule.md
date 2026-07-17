@@ -137,17 +137,18 @@ line1`nline2
 ### 模板 A：停止占用端口的旧进程
 
 ```powershell
-# 停止占用 3000 端口的旧进程
-$port = 3000
-$conns = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+# $Port 值由调用方从 config.required_ports 读取后传入（不在模板内硬编码端口号）
+param([int]$Port)
+
+$conns = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
 if ($conns) {
   $procId = $conns.OwningProcess | Select-Object -First 1
-  Write-Host "端口 $port 被进程 $procId 占用，停止中..."
+  Write-Host "端口 $Port 被进程 $procId 占用，停止中..."
   Stop-Process -Id $procId -Force
   # 等待端口释放
   Start-Sleep -Seconds 1
 } else {
-  Write-Host "端口 $port 空闲"
+  Write-Host "端口 $Port 空闲"
 }
 ```
 
@@ -177,10 +178,11 @@ RunCommand(
 
 ```powershell
 # 等待并验证端口监听
+# $TimeoutSec 默认值来自 config.startup_timeout_ms（换算为秒）
 function Wait-PortListening {
   param(
     [int]$Port,
-    [int]$TimeoutSec = 30
+    [int]$TimeoutSec = 30  # 调用方可从 config.startup_timeout_ms 读取并换算传入
   )
   $deadline = (Get-Date).AddSeconds($TimeoutSec)
   while ((Get-Date) -lt $deadline) {
@@ -195,15 +197,20 @@ function Wait-PortListening {
   return $false
 }
 
-Wait-PortListening -Port 3000   # 后端
-Wait-PortListening -Port 5173   # 前端 Vite
+# $ports 值由调用方从 config.required_ports 读取后传入（不在模板内硬编码端口号）
+# foreach 遍历所有所需端口，统一验证监听状态
+foreach ($p in $ports) {
+  Wait-PortListening -Port $p
+}
 ```
 
 ### 模板 D：完整启动闭环
 
 ```powershell
+# $ports 值由调用方从 config.required_ports 读取后传入（不在模板内硬编码端口号）
+# 示例：$ports = @(3000, 5173)  # 实际值来自 config
+
 # 1. 停止旧进程（模板 A）
-$ports = @(3000, 5173)
 foreach ($p in $ports) {
   $c = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue
   if ($c) { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue }
@@ -213,9 +220,10 @@ foreach ($p in $ports) {
 #    RunCommand npm run dev:api  (cwd=project, blocking=false, command_type=web_server)
 #    RunCommand npm run dev:web  (cwd=project, blocking=false, command_type=web_server)
 
-# 3. 验证端口监听（模板 C）
-Wait-PortListening -Port 3000
-Wait-PortListening -Port 5173
+# 3. 验证端口监听（模板 C，遍历 config.required_ports 所有端口）
+foreach ($p in $ports) {
+  Wait-PortListening -Port $p
+}
 ```
 
 ## 禁用语法速查

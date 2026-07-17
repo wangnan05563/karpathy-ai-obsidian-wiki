@@ -35,7 +35,10 @@ Karpathy-Wiki 项目的通用编码规范与开发准则。规则与具体业务
 | 涉及多源数据同步 | [references/single-source-rule.md](references/single-source-rule.md) |
 | 涉及用户输入作文件名/路径 | [references/input-validation-rule.md](references/input-validation-rule.md) |
 | 涉及错误处理/降级 | [references/fallback-rule.md](references/fallback-rule.md) |
-| 不确定加载哪些 | 全部加载（约 8KB） |
+| 涉及文件编辑/编码/中文/构建门禁 | [references/encoding-guard-rule.md](references/encoding-guard-rule.md) |
+| 涉及 PowerShell/服务管理/端口 | [references/powershell-constraints-rule.md](references/powershell-constraints-rule.md) |
+| 需要参考历史复盘/工作流模板 | [references/development-workflow.md](references/development-workflow.md) |
+| 不确定加载哪些 | 全部加载（约 14KB） |
 
 ### 3. 示例按需
 仅当生成修复代码时加载 `references/examples/<rule>-examples.md`。
@@ -50,6 +53,8 @@ Karpathy-Wiki 项目的通用编码规范与开发准则。规则与具体业务
 6. **降级不阻断**：后端不可用时前端必须能降级到本地缓存，主流程不阻断
 7. **配置化无硬编码**：所有参数（路径、TTL、正则、阈值）必须在 config 文件管理，规则文件仅描述模式
 8. **UTF-8 无 BOM**：所有源文件与 meta 文件 UTF-8 无 BOM（Windows cmd.exe 兼容）
+9. **编码守卫**：Edit/Write 含非 ASCII 字符文件前必须严格 UTF-8 解码检测；非 UTF-8 文件用 `encoding_fallback` 读写；构建前必须执行 `encoding_scan_command` 门禁
+10. **PowerShell 约束**：禁用 `&&`（用 `command_separator`）、禁用只读变量赋值（`readonly_vars`）、禁用 `cmd /c`（`blocked_commands`）；工作目录通过 `cwd_param` 指定而非 `cd`
 
 ## 开发流程
 
@@ -81,6 +86,10 @@ Karpathy-Wiki 项目的通用编码规范与开发准则。规则与具体业务
 □ 后端不可用时前端有降级路径
 □ 所有参数在 config 文件管理，无硬编码
 □ 源文件 UTF-8 无 BOM
+□ Edit 含中文文件前已检测编码，非 UTF-8 用 encoding_fallback 读写
+□ 构建前已执行 encoding_scan_command 门禁
+□ PowerShell 命令未用 &&、未赋值只读变量、未用 cmd /c
+□ 启动服务前已停止占用端口的旧进程
 □ 端到端验证脚本通过（含缓存刷新、降级、路径穿越）
 ```
 

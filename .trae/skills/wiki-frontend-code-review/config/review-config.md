@@ -205,3 +205,40 @@ SSE 流式接口须按下列事件类型分段推送，前端按类型分发到�
 |---------|---------|--------|
 | IndexedDB → 后端会话 | 应用启动时检测到 IndexedDB 有数据但后端为空 | 是（PUT upsert） |
 | localStorage apiKey 清理 | 用户点击"恢复初始配置"或检测到遗留 apiKey:* 键 | 是（删除操作） |
+
+## 编码安全审查参数
+
+> 编码安全规则（见 [references/encoding-safety-rule.md](../references/encoding-safety-rule.md)）所依赖的可配置参数集中在此管理，规则文件只描述通用模式。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `source_encoding_required` | `utf-8-no-bom` | 源文件要求编码 |
+| `meta_encoding_required` | `utf-8-no-bom` | 元配置文件要求编码 |
+| `encoding_detection` | `utf8-strict-decode` | 检测方法（严格 UTF-8 解码） |
+| `encoding_scan_scope` | `.vue,.ts,.tsx,.json,.md` | 扫描文件扩展名 |
+| `fffd_indicator` | `U+FFFD` | 乱码指示字符 |
+| `ascii_whitelist` | `true` | 纯 ASCII 文件免检 |
+
+## 危险操作审查参数
+
+> 危险操作规则（见 [references/dangerous-action-rule.md](../references/dangerous-action-rule.md)）所依赖的可配置参数集中在此管理，规则文件只描述通用模式。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `dry_run_default` | `true` | dry_run 默认值（安全优先） |
+| `danger_class` | `danger` | 关闭 dry_run 时按钮添加的 CSS 类 |
+| `confirm_component` | `ElMessageBox.confirm` | 二次确认组件 |
+| `confirm_type` | `warning` | 确认弹窗类型 |
+| `cancel_no_request` | `true` | 取消确认不发起请求 |
+| `irreversible_hint_required` | `true` | 确认文案必须含不可撤销提示 |
+
+## 多表单状态管理参数
+
+> 多表单状态管理规则（见 [references/config-state-rule.md](../references/config-state-rule.md) 与 [references/dangerous-action-rule.md](../references/dangerous-action-rule.md)）所依赖的可配置参数集中在此管理。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `multi_form_pattern` | `Record<key, FormState>` | 多表单状态模式 |
+| `independent_loading` | `true` | 每个表单独立 loading |
+| `independent_result` | `true` | 每个表单独立 result |
+| `reset_on_submit` | `true` | 提交时重置 result |

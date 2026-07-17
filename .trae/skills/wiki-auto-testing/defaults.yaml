@@ -93,6 +93,8 @@ timeout:
   page_load_ms: 30000
   element_wait_ms: 5000
   networkidle_ms: 30000
+  click_timeout_ms: 3000
+  button_discovery_click_timeout_ms: 3000
 
 # --- 输出配置 ---
 output:
@@ -171,4 +173,97 @@ persistence_tests:
     # 期望行为：no-crash（前端 body 仍可见）| console-warn（前端降级并记录 warn）
     expected_behavior: "no-crash"
     wait_ms: 2000
+
+# ============================================================
+# 以下为系统清理模块前端验证复盘补充默认配置
+# 项目特定值请在 config.yaml 中覆盖
+# ============================================================
+
+# --- 编码检测测试默认配置 ---
+# 检测页面 DOM 文本是否包含 U+FFFD 替换字符（编码乱码标志）
+encoding_tests:
+  enabled: false
+  # 默认检测首页（项目应在 config.yaml 中按实际页面配置）
+  check_pages: []
+  # U+FFFD 码点（统一字符串配置，避免不同 YAML 解析器对 Unicode 字符处理差异）
+  fffd_codepoint: "0xFFFD"
+  # 检测方法：dom_text_codepoints（dump DOM 文本并检查码点）
+  check_method: "dom_text_codepoints"
+  # 失败时是否截图取证（便于事后排查编码乱码现场）
+  screenshot_on_fail: true
+  # 默认扫描 body 全部文本（项目可缩窄到特定选择器以减少噪音）
+  scan_selectors:
+    - "body"
+
+# --- 危险操作测试默认配置 ---
+# 验证 dry_run 默认开启 / danger 样式 / 二次确认 / 取消不发请求
+dangerous_action_tests:
+  enabled: false
+  # 默认无测试页面（项目应在 config.yaml 中按实际表单配置）
+  test_pages: []
+  # 默认确认弹窗组件选择器（Element Plus 风格）
+  confirm_component: ".el-message-box"
+  # 默认确认/取消文本（用 Unicode 码点匹配可绕过终端编码问题）
+  confirm_cancel_text: "取消"
+  confirm_ok_text: "确认"
+  # 默认 danger 样式类名
+  danger_class: "danger"
+  # 默认 dry_run 开关选择器
+  dry_run_switch: ".el-switch"
+  # 默认表单容器选择器
+  form_container_selector: "form"
+  # 默认 loading 状态选择器
+  loading_selector: ".loading"
+  # 默认 result 显示选择器
+  result_selector: ".result"
+  # 操作间等待时间（毫秒）
+  action_wait_ms: 800
+  # 二次确认弹窗出现等待时间（毫秒）
+  confirm_wait_ms: 1500
+
+# --- 服务生命周期默认配置 ---
+service_lifecycle:
+  # 默认不在测试前停止旧进程（避免误杀其他服务）
+  stop_old_process: false
+  # 默认停止方法
+  stop_method: "Get-NetTCPConnection"
+  # 默认启动命令（项目应在 config.yaml 中覆盖）
+  start_backend: "npm run dev:api"
+  start_frontend: "npm run dev:web"
+  # 默认非阻塞启动
+  start_mode: "non-blocking"
+  port_check_method: "Get-NetTCPConnection"
+  port_check_state: "Listen"
+  # 默认启动超时 30 秒
+  startup_timeout_ms: 30000
+  # 默认端口轮询间隔 1 秒
+  port_poll_interval_ms: 1000
+
+# --- 临时文件清理默认配置 ---
+cleanup:
+  # 临时测试脚本文件名 pattern（约定 _test_ 前缀便于识别和清理）
+  temp_files_pattern: "_test_*.py"
+  # 临时截图文件名 pattern
+  temp_screenshots_pattern: "_test_*.png"
+  # 默认测试成功时清理临时文件
+  cleanup_on_success: true
+  # 默认测试失败时保留临时文件以便排查
+  cleanup_on_failure: false
+  # 默认清理目录范围
+  cleanup_dirs:
+    - "."
+
+# --- PowerShell 环境约束默认配置 ---
+powershell_constraints:
+  # PowerShell 5.1 不支持 &&，统一用 ; 分隔
+  command_separator: ";"
+  # 默认禁用 cmd /c（容易引发编码问题）
+  blocked_commands: ["cmd /c"]
+  # PowerShell 只读变量
+  readonly_vars: ["$pid", "$PWD", "$HOME"]
+  # 默认使用 RunCommand 的 cwd 参数
+  use_cwd_param: true
+  # 默认绕过 bat 脚本 pause
+  bypass_bat_pause: true
+  pause_bypass_input: '""'
 

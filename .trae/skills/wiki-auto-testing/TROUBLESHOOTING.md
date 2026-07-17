@@ -92,3 +92,96 @@ open('script.py', 'w', encoding='utf-8').write(content)
 2. 用 `persistence_crud_test` 步骤类型自动验证（PUT 后立即 GET 对比值）
 3. 在 config.yaml 的 `persistence_tests` 中配置 `ai_config` 资源端点进行回归
 4. 缓存 TTL 不替代显式刷新：即使 TTL 很短，写盘后仍必须立即刷新
+
+## 11. 编码乱码（U+FFFD 替换字符）
+
+**症状**：页面 tab 标签或表单 label 全显示为 `?` 或方块，`has_text("仪表盘")` 中文匹配失败；DOM dump 文本中出现 U+FFFD
+**原因**：
+1. Windows 终端默认 GBK 编码，Playwright 通过 stdout 输出中文时被替换为 U+FFFD
+2. 测试脚本本身被以 GBK 保存，含中文的字符串字面量被破坏
+3. Vite/前端构建产物的 HTML charset 与实际编码不匹配
+**解决**：
+1. 启用 `encoding_tests.enabled: true`，让技能自动检测 DOM 文本中的 U+FFFD
+2. 用 Unicode 码点匹配替代中文字符串匹配：调用 `_shared.get_dom_text_codepoints(page, selector)` 获取码点列表，用 `0x4eea` 等码点比对而非 `"仪"`
+3. 在 config.yaml 中配置 `encoding_tests.scan_selectors` 缩窄扫描范围（如只扫 `.el-tabs__item`、`.el-form-item__label`），减少噪音
+4. 测试失败时 `encoding_tests.screenshot_on_fail: true` 自动截图取证
+5. 确认前端 `index.html` 含 `<meta charset="utf-8">`，且 Vite 配置 `build.target: 'es2015'` 以上
+
+## 12. Playwright 中文匹配失败
+
+**症状**：`page.locator('.el-tabs__item:has-text("仪表盘")')` 返回 0 个元素，但页面上明显存在该 tab
+**原因**：
+1. `has_text` 伪类在 Playwright 内部走文本节点比对，对终端编码透传敏感
+2. 测试脚本字符串字面量在 GBK 终端下被解释为非 UTF-8 字节序列
+3. Element Plus 的 tab 文本可能被 `<i>` 图标或空白字符分隔，导致 `has_text` 整词匹配失败
+**解决**：
+1. 改用 Unicode 码点验证：`get_dom_text_codepoints(page, '.el-tabs__item')` 返回 `[[0x4eea, 0x8868, 0x76d8], ...]`，逐个码点比对
+2. 用 `:text-is()` 或 `:text()` 代替 `:has-text()`：`page.locator(".el-tabs__item", has_text=...)` 在 Python 端用 `lambda` 过滤
+3. 用 `nth(i)` 按位置点击，绕开文本匹配：`page.locator('.el-tabs__item').nth(0).click()`
+4. 用 `evaluate` 直接取 `textContent` 并在 Python 端用码点比对：
+   ```python
+   texts = page.evaluate('() => [...document.querySelectorAll(".el-tabs__item")].map(e => e.textContent)')
+   codepoints = [[ord(c) for c in t] for t in texts]
+   ```
+5. 确保 Python 脚本以 UTF-8 保存（首行 `# -*- coding: utf-8 -*-`），且终端 `chcp 65001` 切到 UTF-8
+
+## 13. 端口占用导致新服务启动失败
+
+**症状**：`npm run dev:api` 启动时报 `EADDRINUSE: address already in use`，或前端 `npm run dev:web` 启动后 5173 端口无响应
+**原因**：
+1. 上次测试未正常退出，dev server 进程仍占用端口
+2. VSCode/IDE 集成终端残留 dev server 进程
+3. Node 进程僵尸化，TCP 连接处于 TIME_WAIT 状态
+**解决**：
+1. 启用 `service_lifecycle.stop_old_process: true`，测试前自动清理占用端口的旧进程
+2. 手动排查：`Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -in @(3000, 5173) }`
+3. 强制停止：`Get-NetTCPConnection -State Listen -LocalPort 3000 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }`
+4. 在 config.yaml 的 `service.required_ports` 中列出所有需要的端口，`service_lifecycle` 会逐一清理
+5. 若 TIME_WAIT 占用，等待 60 秒或调整内核参数 `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\TcpTimedWaitDelay`
+
+## 14. bat 脚本 pause 卡住自动化流程
+
+**症状**：执行 `启动服务.bat` 后流程卡住，提示"请按任意键继续..."，AI 终端无响应
+**原因**：bat 脚本末尾的 `pause` 命令等待按键输入，非阻塞模式下无人按键
+**解决**：
+1. 启用 `powershell_constraints.bypass_bat_pause: true`，技能启动 bat 时自动注入空输入
+2. 通过管道输入空字符串绕过：`'' | & "启动服务.bat"` 或 `Get-Content nul | & "启动服务.bat"`
+3. 修改 bat 脚本本身：在 `pause` 前加 `if "%CI%"=="1" goto skip_pause`，并在测试时 `$env:CI=1`
+4. 用 `Start-Process` 异步启动 bat：`Start-Process -FilePath "启动服务.bat" -WindowStyle Hidden -PassThru`，pause 不影响主流程
+5. 改用直接调用 npm 命令（`npm run dev:api`、`npm run dev:web`）而非 bat 脚本，避开 pause
+
+## 15. Playwright 浏览器 GPU 崩溃
+
+**症状**：`browser.new_context()` 后立即崩溃，报 `GPU process isn't usable. Goodbye.` 或 `ContextResultCode::kGpuChannelDestroyed`
+**原因**：
+1. Windows 10 虚拟机或无 GPU 硬件加速的环境下，Chromium 默认启用 GPU 渲染失败
+2. RDP 远程桌面会话不支持 GPU 加速
+3. 显卡驱动与 Chromium 版本不兼容
+**解决**：
+1. 确认 config.yaml 中 `browser.launch_args` 含 `--disable-gpu`（默认已包含）
+2. 追加 `--disable-software-rasterizer`、`--disable-extensions` 进一步隔离
+3. 设置 `browser.headless: true`（headless 模式不依赖 GPU）
+4. 设置环境变量：`$env:CHROMIUM_FLAGS="--disable-gpu"`；或在 Python 端 `os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "..."`
+5. 若仍崩溃，尝试 `--use-gl=swiftshader` 软件渲染（性能下降但稳定）
+
+## 16. Python 文件编码声明缺失导致 SyntaxError
+
+**症状**：执行 `.py` 脚本报 `SyntaxError: Non-UTF-8 code starting in ...` 或 `UnicodeDecodeError: 'gbk' codec can't decode`
+**原因**：
+1. Windows 默认 Python 解释器以 GBK 读取源文件，但文件以 UTF-8 保存且含中文
+2. 缺少 PEP 263 编码声明，Python 无法判断源文件编码
+3. Edit/Write 工具默认以 UTF-8 写入，但 PowerShell 终端 stdout 是 GBK
+**解决**：
+1. 所有 `.py` 文件首行加编码声明：`# -*- coding: utf-8 -*-`
+2. 启用 `encoding_safety.auto_fix_python_encoding: true`，技能启动时自动检测并转换
+3. 在 PowerShell 中执行前设置 PYTHONUTF8：`$env:PYTHONUTF8=1; python script.py`
+4. 检测文件编码并转换：
+   ```powershell
+   $bytes = [System.IO.File]::ReadAllBytes("script.py")
+   if ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+       Write-Host "BOM detected, UTF-8 with BOM"
+   } elseif (-not ($bytes -contains 0)) {
+       # 无 BOM 且无 null 字节，可能是 UTF-8 或 ASCII
+   }
+   ```
+5. 用 `ensure_utf8(file_path)` 工具函数自动 GBK→UTF-8 转换（在 `_shared.py` 中提供）
