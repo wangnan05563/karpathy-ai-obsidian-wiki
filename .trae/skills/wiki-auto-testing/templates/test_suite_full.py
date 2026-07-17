@@ -2,16 +2,15 @@
 """
 wiki-auto-testing parameterized test suite.
 
-Reads all parameters from config.yaml ¡ª no hardcoded values.
+Reads all parameters from config.yaml + defaults.yaml - no hardcoded values.
+Two-layer config merging: defaults.yaml (skill-wide) + config.yaml (project-specific).
 Covers: navigation, page elements, interactions, button auto-discovery,
 theme switching, responsive layout, API endpoints, console errors.
 
-Key improvements over previous version:
-1. Working directory auto-detection (finds project root from script location)
-2. Button auto-discovery (traverses all pages, finds all clickable elements)
-3. Destructive button protection (skips buttons matching destructive_button_texts)
-4. Encoding self-check (auto-fixes GBK ¡ú UTF-8 if needed)
-5. Force click option (bypasses Vue transition animation timing issues)
+Usage:
+    python test_suite.py                  # Full test run
+    python test_suite.py --quiet          # Suppress per-test logs  
+    python test_suite.py --phase basic    # Run only basic tests
 """
 import json
 import os
@@ -45,16 +44,46 @@ def find_project_root(script_path, marker=".git"):
     return os.path.dirname(os.path.dirname(os.path.dirname(script_path)))
 
 
+
+
+def deep_merge(base, override):
+    """Recursively merge override dict into base dict."""
+    result = dict(base)
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
 def load_config(config_path=None):
     """
-    Load config.yaml with working directory auto-detection.
-    Priority: explicit path > env var > script-relative > CWD-relative.
+    Load config with two-layer merging:
+    1. Load defaults.yaml (skill-wide defaults)
+    2. Load config.yaml (project-specific overrides)
+    3. Merge: project config overrides defaults
     """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    skill_dir = os.path.dirname(script_dir)
+    skill_root = os.path.dirname(skill_dir)
+
+    # Load defaults
+    defaults_cfg = {}
+    defaults_candidates = [
+        os.path.join(skill_root, "defaults.yaml"),
+        os.path.join(os.getcwd(), ".trae", "skills", "wiki-auto-testing", "defaults.yaml"),
+    ]
+    for dc in defaults_candidates:
+        if os.path.exists(dc):
+            with open(dc, "r", encoding="utf-8") as f:
+                defaults_cfg = yaml.safe_load(f) or {}
+            break
+
+    # Load project config
     if config_path is None:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
         candidates = [
             os.environ.get("WIKI_TEST_CONFIG"),
-            os.path.join(script_dir, "..", "config.yaml"),
+            os.path.join(skill_root, "config.yaml"),
             os.path.join(os.getcwd(), ".trae", "skills", "wiki-auto-testing", "config.yaml"),
             os.path.join(os.getcwd(), "config.yaml"),
         ]
@@ -68,7 +97,10 @@ def load_config(config_path=None):
         sys.exit(1)
 
     with open(config_path, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
+        project_cfg = yaml.safe_load(f) or {}
+
+    # Merge: defaults first, then project overrides
+    cfg = deep_merge(defaults_cfg, project_cfg)
 
     # Auto-detect project root and chdir if configured
     wd_cfg = cfg.get("working_directory", {})
@@ -76,7 +108,6 @@ def load_config(config_path=None):
         marker = wd_cfg.get("project_root_marker", ".git") or ".git"
         project_root = find_project_root(config_path, marker)
         os.chdir(project_root)
-        print(f"Working directory set to: {project_root}")
 
     return cfg
 
@@ -87,7 +118,7 @@ def load_config(config_path=None):
 
 def ensure_utf8(file_path, fallback_encoding="gbk"):
     """
-    Check and fix file encoding (GBK ¡ú UTF-8).
+    Check and fix file encoding (GBK â†’ UTF-8).
     Called when auto_fix_python_encoding is enabled in config.
     """
     try:
@@ -105,7 +136,7 @@ def ensure_utf8(file_path, fallback_encoding="gbk"):
             content = raw.decode(fallback_encoding)
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
-            print(f"Converted encoding {fallback_encoding} ¡ú UTF-8: {file_path}")
+            print(f"Converted encoding {fallback_encoding} â†’ UTF-8: {file_path}")
             return True
         except Exception:
             return False
@@ -116,13 +147,15 @@ def ensure_utf8(file_path, fallback_encoding="gbk"):
 # ============================================================
 
 class TestResults:
-    def __init__(self):
+    def __init__(self, quiet=False):
         self.items = []
+        self.quiet = quiet
 
     def log(self, name, passed, details=""):
         status = "PASS" if passed else "FAIL"
         self.items.append({"test": name, "status": status, "details": details})
-        print(f"[{status}] {name}: {details}")
+        if not self.quiet:
+            print(f"[{status}] {name}: {details}")
 
     @property
     def passed(self):
@@ -474,9 +507,9 @@ def test_console_errors(console_errors, cfg, results):
 # Main Test Runner
 # ============================================================
 
-def run(config_path=None):
+def run(config_path=None, quiet=False):
     cfg = load_config(config_path)
-    results = TestResults()
+    results = TestResults(quiet=quiet)
 
     frontend_url = cfg["service"]["frontend_url"]
     launch_args = cfg["browser"].get("launch_args", [])
@@ -499,7 +532,7 @@ def run(config_path=None):
         page.on("pageerror", lambda e: console_errors.append(f"PAGE ERROR: {e}"))
 
         # Phase 3: Basic tests
-        print("\n=== Phase 3: Basic Tests ===")
+        if not quiet: print("\n=== Phase 3: Basic Tests ===")
         test_homepage(page, cfg, results)
         test_api_health(ctx, cfg, results)
         test_navigation(page, cfg, results)
@@ -507,17 +540,17 @@ def run(config_path=None):
         page.screenshot(path=os.path.join(shot_dir, "homepage.png"))
 
         # Phase 4: Interaction tests
-        print("\n=== Phase 4: Interaction Tests ===")
+        if not quiet: print("\n=== Phase 4: Interaction Tests ===")
         test_theme_switcher(page, cfg, results)
         test_form_interaction(page, cfg, results)
         test_tab_switching(page, cfg, results)
 
         # Phase 4 (NEW): Button auto-discovery
-        print("\n=== Phase 4: Button Auto-Discovery ===")
+        if not quiet: print("\n=== Phase 4: Button Auto-Discovery ===")
         test_button_discovery(page, cfg, results)
 
         # Phase 5: Supplementary tests
-        print("\n=== Phase 5: Supplementary Tests ===")
+        if not quiet: print("\n=== Phase 5: Supplementary Tests ===")
         test_responsive(page, cfg, results)
         test_api_endpoints(ctx, cfg, results)
         test_console_errors(console_errors, cfg, results)
@@ -525,12 +558,8 @@ def run(config_path=None):
         ctx.close()
         browser.close()
 
-    # Summary
-    print("\n" + "=" * 60)
-    print("TEST SUMMARY")
-    print("=" * 60)
+    # Summary (always printed)
     print(results.summary())
-    print("=" * 60)
 
     # Save results
     result_file = cfg["output"]["result_file"]
@@ -543,7 +572,32 @@ def run(config_path=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="wiki-auto-testing test suite")
     parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
+    parser.add_argument("--quiet", action="store_true", help="Suppress per-test log output")
+    parser.add_argument("--phase", type=str, nargs="+", choices=["basic", "interactions", "supplementary"],
+                        help="Run only specified phase(s)")
     args = parser.parse_args()
 
-    success = run(args.config)
-    sys.exit(0 if success else 1)
+    # Override test_plan if --phase specified
+    if args.phase:
+        import tempfile
+        cfg_path = args.config
+        temp_cfg_path = None
+        
+        if cfg_path:
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                actual_cfg = yaml.safe_load(f) or {}
+            actual_cfg["test_plan"] = {"enabled_phases": args.phase}
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+                yaml.dump(actual_cfg, f)
+                temp_cfg_path = f.name
+            cfg_path = temp_cfg_path
+
+        success = run(cfg_path, quiet=args.quiet)
+        
+        if temp_cfg_path:
+            os.unlink(temp_cfg_path)
+        
+        sys.exit(0 if success else 1)
+    else:
+        success = run(args.config, quiet=args.quiet)
+        sys.exit(0 if success else 1)

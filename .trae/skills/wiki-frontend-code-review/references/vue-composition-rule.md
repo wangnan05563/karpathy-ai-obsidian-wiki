@@ -1,8 +1,4 @@
-# Rule Catalog — Vue 3 Composition API
-
-> 通用规则文件，具体路径、阈值、技术栈版本以 `config/review-config.md` 为准。
-
-## 强制使用 script setup + TypeScript
+﻿## 强制使用 script setup + TypeScript
 
 IsUrgent: True
 Category: Vue Composition
@@ -15,32 +11,7 @@ Category: Vue Composition
 
 将 Options API 改写为 `setup` 写法，并把 `data`/`methods`/`computed` 迁移为 `ref`/`reactive`/`computed`/普通函数。
 
-Wrong:
-
-```vue
-<script>
-export default {
-  data() {
-    return { count: 0 }
-  },
-  methods: {
-    increment() {
-      this.count++
-    }
-  }
-}
-</script>
-```
-
-Right:
-
-```vue
-<script setup lang="ts">
-import { ref } from 'vue'
-const count = ref(0)
-const increment = () => count.value++
-</script>
-```
+> **示例代码**: 参见 [examples/vue-composition-rule-examples.md](examples/vue-composition-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。
 
 ## 响应式数据用 ref/reactive，computed 用于派生状态
 
@@ -55,20 +26,7 @@ Category: Vue Composition
 
 把"读取依赖 → 返回结果"的逻辑改为 `computed`；避免对 `reactive` 对象做整体赋值。
 
-Wrong:
-
-```ts
-const list = reactive([])
-// 直接替换 reactive 引用会丢失响应性
-list = fetchResult
-```
-
-Right:
-
-```ts
-const list = ref<RepoItem[]>([])
-list.value = fetchResult
-```
+> **示例代码**: 参见 [examples/vue-composition-rule-examples.md](examples/vue-composition-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。
 
 ## 生命周期成对使用：onMounted 初始化 / onBeforeUnmount 清理
 
@@ -83,25 +41,7 @@ Category: Vue Composition
 
 逐项检查 `onMounted` 中创建的资源，为每项在 `onBeforeUnmount` 中编写对应的释放逻辑。
 
-Wrong:
-
-```ts
-onMounted(() => {
-  window.addEventListener('resize', handleResize)
-  // 缺少移除逻辑
-})
-```
-
-Right:
-
-```ts
-onMounted(() => {
-  window.addEventListener('resize', handleResize)
-})
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', handleResize)
-})
-```
+> **示例代码**: 参见 [examples/vue-composition-rule-examples.md](examples/vue-composition-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。
 
 ## watch 须避免无限递归，深层 watch 显式声明
 
@@ -116,27 +56,7 @@ Category: Vue Composition
 
 检查回调内是否会写回被监听的对象；需要监听嵌套结构时补上 `{ deep: true }`。
 
-Wrong:
-
-```ts
-watch(count, (v) => {
-  // 回调内写回被监听源，递归触发
-  count.value = clamp(v, 0, 100)
-})
-```
-
-Right:
-
-```ts
-watch(count, (v) => {
-  if (v < 0) count.value = 0
-  else if (v > 100) count.value = 100
-})
-
-watch(config, (newVal) => {
-  // 显式声明深层监听
-}, { deep: true })
-```
+> **示例代码**: 参见 [examples/vue-composition-rule-examples.md](examples/vue-composition-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。
 
 ## 事件处理函数命名用 handle*
 
@@ -151,23 +71,7 @@ Category: Vue Composition
 
 把 `submit`/`onClick`/`resizeFn` 等不一致命名统一改为 `handle*`。
 
-Wrong:
-
-```vue
-<el-button @click="submit">提交</el-button>
-<script setup lang="ts">
-const submit = () => { /* ... */ }
-</script>
-```
-
-Right:
-
-```vue
-<el-button @click="handleSubmit">提交</el-button>
-<script setup lang="ts">
-const handleSubmit = () => { /* ... */ }
-</script>
-```
+> **示例代码**: 参见 [examples/vue-composition-rule-examples.md](examples/vue-composition-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。
 
 ## ref 模板引用须在 DOM 渲染后使用
 
@@ -182,30 +86,4 @@ Category: Vue Composition
 
 把依赖 ref 的逻辑移入 `onMounted` 或 `nextTick`；对可能为空的 ref 使用 `v-show` 保活，并在使用前判空。
 
-Wrong:
-
-```vue
-<template>
-  <div ref="containerRef" v-if="visible"></div>
-</template>
-<script setup lang="ts">
-const containerRef = ref<HTMLDivElement | null>(null)
-// setup 顶层访问，此时 v-if=false 时 ref 为 null
-const network = new Network(containerRef.value!, …)
-</script>
-```
-
-Right:
-
-```vue
-<template>
-  <div ref="containerRef" v-show="visible"></div>
-</template>
-<script setup lang="ts">
-const containerRef = ref<HTMLDivElement | null>(null)
-onMounted(() => {
-  if (!containerRef.value) return
-  const network = new Network(containerRef.value, …)
-})
-</script>
-```
+> **示例代码**: 参见 [examples/vue-composition-rule-examples.md](examples/vue-composition-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。

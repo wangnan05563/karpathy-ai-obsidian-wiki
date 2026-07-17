@@ -167,3 +167,41 @@ SSE 流式接口须按下列事件类型分段推送，前端按类型分发到�
 - 纯配置文件（`vite.config.ts`、`tsconfig.json`）的评审，除非涉及上述规则的具体违反。
 - 构建脚本、CI 配置、文档文件。
 - 第三方依赖升级的兼容性评估（属于迁移任务，非评审任务）。
+
+## 持久化与存储边界审查参数
+
+> 持久化与存储边界规则（见 [references/persistence-boundary-rule.md](../references/persistence-boundary-rule.md)）所依赖的可配置参数集中在此管理。
+
+### 存储类型与权威源
+
+| 数据类型 | 浏览器存储（缓存层） | 后端权威源 | 跨 origin 共享 |
+|---------|---------------------|-----------|---------------|
+| AI 配置（apiKey） | localStorage（仅脱敏值） | `/api/ai/config` + config.json | 是 |
+| 历史会话 | IndexedDB（降级缓存） | `/api/conversations` + data/conversations/ | 是 |
+| LLM 预设 UI 状态 | localStorage（baseUrl/model） | 无（前端独立） | 否 |
+| 主题偏好 | localStorage | 无（前端独立） | 否 |
+
+判断逻辑：跨 origin 列为"是"的数据必须以后端为权威源，浏览器存储仅作降级缓存。
+
+### 敏感数据禁止 localStorage 明文清单
+
+| 字段 | 禁止明文存储原因 | 替代方案 |
+|------|----------------|---------|
+| `apiKey`（LLM/webSearch） | XSS 风险 + 双轨不一致 | 后端 config.json 唯一权威源，前端仅展示脱敏值 |
+| `cpolarAuthtoken` | 凭证泄露风险 | 后端 config.json |
+| `certFile` 内容 | 凭证泄露风险 | 后端文件系统 |
+
+### 降级策略参数
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `backend_unavailable_fallback` | `indexed-db-cache` | 后端不可用时降级到 IndexedDB |
+| `cache_write_failure_action` | `non-blocking` | 缓存写入失败不阻断主流程 |
+| `fallback_log_level` | `warn` | 降级日志级别（console.warn） |
+
+### 一次性迁移触发条件
+
+| 迁移类型 | 触发条件 | 幂等性 |
+|---------|---------|--------|
+| IndexedDB → 后端会话 | 应用启动时检测到 IndexedDB 有数据但后端为空 | 是（PUT upsert） |
+| localStorage apiKey 清理 | 用户点击"恢复初始配置"或检测到遗留 apiKey:* 键 | 是（删除操作） |

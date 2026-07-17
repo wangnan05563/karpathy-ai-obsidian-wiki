@@ -1,0 +1,174 @@
+# ============================================================
+# wiki-auto-testing 默认配置（技能通用参数）
+# 项目特定配置请放在 config.yaml 中，会自动合并覆盖默认值
+# ============================================================
+
+# --- 工作目录配置 ---
+working_directory:
+  project_root_marker: ".git"
+  auto_chdir: true
+
+# --- 构建配置 ---
+build:
+  enabled: false
+  timeout_sec: 120
+
+# --- 启动配置 ---
+startup:
+  enabled: false
+  stop_after_test: false
+
+# --- 服务配置 ---
+service:
+  startup_timeout_sec: 60
+  port_check_interval_sec: 2
+
+# --- 浏览器配置 ---
+browser:
+  headless: true
+  launch_args:
+    - "--disable-gpu"
+    - "--no-sandbox"
+    - "--disable-dev-shm-usage"
+    - "--disable-setuid-sandbox"
+  viewports:
+    desktop:
+      width: 1440
+      height: 900
+    mobile:
+      width: 375
+      height: 812
+
+# --- 页面导航配置 ---
+navigation:
+  tab_selector: ".tab-btn"
+  page_render_wait_ms: 1500
+
+# --- 按钮自动发现配置 ---
+button_discovery:
+  enabled: true
+  button_selectors:
+    - "button:not([disabled])"
+    - ".el-button:not(.is-disabled)"
+    - "[role='button']:not([disabled])"
+    - ".shortcut-item"
+    - ".suggestion-chip"
+    - ".el-tabs__item"
+    - ".el-tree-node__content"
+    - ".clickable, [cursor='pointer']"
+  exclude_selectors:
+    - ".is-disabled"
+    - "[aria-disabled='true']"
+  destructive_button_texts:
+    - "删除"
+    - "清除"
+    - "重置"
+    - "修复"
+    - "初始化"
+  click_wait_ms: 800
+  continue_on_failure: true
+  force_click: true
+
+# --- 交互测试配置 ---
+interactions:
+  theme_switcher:
+    transition_wait_ms: 1000
+    use_js_click: true
+
+# --- API 测试配置 ---
+api_tests:
+  use_playwright_request: true
+
+# --- 控制台错误过滤 ---
+console_error_filter:
+  - "favicon"
+  - "extension"
+  - "devtools"
+  - "cors"
+  - "err_failed"
+  - "access-control"
+
+# --- 超时配置（毫秒）---
+timeout:
+  page_load_ms: 30000
+  element_wait_ms: 5000
+  networkidle_ms: 30000
+
+# --- 输出配置 ---
+output:
+  screenshot_dir: "test_screenshots"
+  result_file: "test_result.json"
+  button_result_file: "test_buttons_result.json"
+  encoding: "utf-8"
+  open_screenshot_dir: false
+
+# --- 编码安全配置 ---
+encoding_safety:
+  add_bom: false
+  check_source_encoding: true
+  allowed_encodings:
+    - "utf-8"
+    - "utf-8-sig"
+  auto_fix_python_encoding: true
+  windows_default_encoding: "gbk"
+
+# --- bat 脚本处理 ---
+bat_script:
+  bypass_pause: true
+  pause_bypass_input: '""'
+
+# --- 终端配置 ---
+terminal:
+  split_long_commands: true
+  max_command_length: 200
+  use_fresh_terminal: true
+
+# --- 测试计划编排（可选）---
+# 指定要执行的阶段子集，默认执行全部
+test_plan:
+  enabled_phases:
+    - "build"
+    - "startup"
+    - "basic"
+    - "interactions"
+    - "supplementary"
+    - "summary"
+
+# --- 持久化层测试配置（复盘提炼）---
+# 所有端点模板、攻击向量、payload 模板均在此配置，不在代码中硬编码。
+# 新增持久化资源测试时，只需在 endpoints/test_payloads 下追加条目。
+persistence_tests:
+  # 默认测试的资源名（与 endpoints 字典的 key 对应）
+  default_resource: "conversations"
+
+  # 资源端点模板：{resource} 和 {id} 为占位符，handler 运行时替换
+  # 新增资源时在此追加端点模板即可，无需改代码
+  endpoints:
+    conversations: "/api/conversations/{id}"
+    # ai_config: "/api/ai/config"  # 示例：无 {id} 的单例配置端点
+
+  # 路径穿越攻击向量：所有向量必须被后端正则拦截并返回 4xx
+  # 新增攻击模式时在此追加，无需改代码
+  malicious_ids:
+    - "../../../etc/passwd"
+    - "..%2F..%2Fetc%2Fpasswd"
+    - "'; DROP TABLE--"
+    - "....//....//etc/passwd"
+    - "null\x00byte"
+
+  # 测试 payload 模板：{id} 占位符运行时替换为自动生成的 UUID
+  # 新增资源时在此追加最小可用 payload
+  test_payloads:
+    conversations:
+      id: "{id}"
+      title: "auto-test-conversation"
+      messages: []
+
+  # 降级测试参数：拦截指定 API 模式返回 503，验证前端不崩溃
+  fallback:
+    api_patterns:
+      - "/api/conversations"
+    # 期望行为：no-crash（前端 body 仍可见）| console-warn（前端降级并记录 warn）
+    expected_behavior: "no-crash"
+    wait_ms: 2000
+

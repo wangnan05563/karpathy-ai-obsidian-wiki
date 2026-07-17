@@ -1,205 +1,91 @@
-# ============================================================
-# wiki-auto-testing ÅäÖÃÎÄ¼ş
-# ËùÓĞ²âÊÔ²ÎÊı¼¯ÖĞ¹ÜÀí£¬¼¼ÄÜ±¾Éí²»º¬ÈÎºÎÓ²±àÂëÖµ
-# ĞŞ¸Ä´ËÎÄ¼ş¼´¿ÉÊÊÅä²»Í¬ÏîÄ¿£¬ÎŞĞè¸Ä¶¯ SKILL.md »ò½Å±¾Ä£°å
+ï»¿# ============================================================
+# wiki-auto-testing é¡¹ç›®é…ç½®
+# æ‰€æœ‰é¡¹ç›®ç‰¹å®šå‚æ•°åœ¨æ­¤é…ç½®ï¼ŒæŠ€èƒ½é€šç”¨é»˜è®¤å€¼åœ¨ defaults.yaml
+# æœ¬é¡¹ç›®é…ç½®ä¼šè‡ªåŠ¨åˆå¹¶ defaults.yaml çš„é»˜è®¤å€¼
 # ============================================================
 
-# --- ¹¤×÷Ä¿Â¼ÅäÖÃ ---
-# ½Å±¾Í¨¹ı´ËÅäÖÃ¶¨Î»ÏîÄ¿¸ùÄ¿Â¼£¬±ÜÃâ CWD ²»Ò»ÖÂµ¼ÖÂ FileNotFoundError
-working_directory:
-  # ÏîÄ¿¸ùÄ¿Â¼µÄ±ê¼ÇÎÄ¼ş£¨ÏòÉÏ²éÕÒ´ËÎÄ¼şÀ´È·¶¨ÏîÄ¿¸ù£©
-  # Áô¿ÕÔòÊ¹ÓÃ config.yaml ËùÔÚÎ»ÖÃÏòÉÏ²éÕÒ .git / package.json
-  project_root_marker: ".git"
-  # ÊÇ·ñÔÚ½Å±¾Æô¶¯Ê±×Ô¶¯ÇĞ»»µ½ÏîÄ¿¸ùÄ¿Â¼
-  auto_chdir: true
-
-# --- ¹¹½¨ÅäÖÃ ---
+# --- æ„å»ºé…ç½®ï¼ˆé¡¹ç›®ç‰¹å®šï¼‰ ---
 build:
-  # ÊÇ·ñĞèÒª¹¹½¨£¨dev server Ä£Ê½¿ÉÉèÎª false Ìø¹ı¹¹½¨£©
-  enabled: false
-  # ¹¹½¨½Å±¾Â·¾¶£¨Ïà¶ÔÓÚÏîÄ¿¸ùÄ¿Â¼£©
-  script_path: "karpathy-wiki/scripts/Ç°¶Ë¹¹½¨.bat"
-  # ¹¹½¨²úÎïÂ·¾¶£¨Ïà¶ÔÓÚÏîÄ¿¸ùÄ¿Â¼£¬ÓÃÓÚÑéÖ¤¹¹½¨³É¹¦£©
+  script_path: "karpathy-wiki/scripts/å‰ç«¯æ„å»º.bat"
   artifact_path: "karpathy-wiki/packages/web/dist/index.html"
-  # ¹¹½¨³¬Ê±ÃëÊı
-  timeout_sec: 120
 
-# --- Æô¶¯ÅäÖÃ ---
+# --- å¯åŠ¨é…ç½®ï¼ˆé¡¹ç›®ç‰¹å®šï¼‰ ---
 startup:
-  # ÊÇ·ñĞèÒªÆô¶¯·şÎñ£¨·şÎñÒÑÔËĞĞÊ±¿ÉÉèÎª false Ìø¹ı£©
-  enabled: false
-  # Æô¶¯½Å±¾Â·¾¶£¨Ïà¶ÔÓÚÏîÄ¿¸ùÄ¿Â¼£©
-  script_path: "karpathy-wiki/scripts/Æô¶¯·şÎñ.bat"
-  # Í£Ö¹½Å±¾Â·¾¶£¨¿ÉÑ¡£¬²âÊÔ½áÊøºóÇåÀíÓÃ£©
-  stop_script_path: "karpathy-wiki/scripts/Í£Ö¹·şÎñ.bat"
-  # ÊÇ·ñÔÚ²âÊÔ½áÊøºóÍ£Ö¹·şÎñ
-  stop_after_test: false
+  script_path: "karpathy-wiki/scripts/å¯åŠ¨æœåŠ¡.bat"
+  stop_script_path: "karpathy-wiki/scripts/åœæ­¢æœåŠ¡.bat"
 
-# --- ·şÎñÅäÖÃ ---
+# --- æœåŠ¡é…ç½®ï¼ˆé¡¹ç›®ç‰¹å®šï¼‰ ---
 service:
-  # Ç°¶Ë·ÃÎÊµØÖ·£¨Vite dev server »ò¹¹½¨²úÎï·şÎñµØÖ·£©
   frontend_url: "http://localhost:5173"
-  # ºó¶Ë API »ùµØÖ·
   api_url: "http://localhost:3000"
-  # ½¡¿µ¼ì²é¶Ëµã£¨Ïà¶ÔÓÚ api_url£©
   health_endpoint: "/health"
-  # ·şÎñÆô¶¯×î´óµÈ´ıÃëÊı
-  startup_timeout_sec: 60
-  # ¶Ë¿ÚÂÖÑ¯¼ä¸ôÃëÊı
-  port_check_interval_sec: 2
-  # ĞèÒª¼àÌıµÄ¶Ë¿ÚÁĞ±í£¨ÓÃÓÚ·şÎñ¾ÍĞ÷ÅĞ¶Ï£©
   required_ports:
     - 3000
     - 5173
 
-# --- ä¯ÀÀÆ÷ÅäÖÃ ---
-browser:
-  # ÊÇ·ñÊ¹ÓÃÎŞÍ·Ä£Ê½£¨CI »·¾³ÍÆ¼ö true£¬µ÷ÊÔÊ±¿ÉÑ¡ false£©
-  headless: true
-  # Chromium Æô¶¯²ÎÊı£¨½â¾ö headless ÏÂ Canvas/WebGL ±ÀÀ£µÈÎÊÌâ£©
-  launch_args:
-    - "--disable-gpu"
-    - "--no-sandbox"
-    - "--disable-dev-shm-usage"
-    - "--disable-setuid-sandbox"
-  # ¶àÊÓ¿Ú²âÊÔ£¨ÏìÓ¦Ê½²¼¾ÖÑéÖ¤£©
-  viewports:
-    desktop:
-      width: 1440
-      height: 900
-    mobile:
-      width: 375
-      height: 812
-
-# --- Ò³Ãæµ¼º½ÅäÖÃ ---
-# ÃèÊö SPA ÖĞ¸÷Ò³ÃæµÄµ¼º½·½Ê½ºÍÔ¤ÆÚÔªËØ
+# --- é¡µé¢å¯¼èˆªé…ç½®ï¼ˆé¡¹ç›®ç‰¹å®šï¼‰ ---
 navigation:
-  # µ¼º½°´Å¥µÄ CSS Ñ¡ÔñÆ÷£¨ËùÓĞ tab °´Å¥µÄ¹«¹² class£©
-  tab_selector: ".tab-btn"
-  # µã»÷ºóµÈ´ıÒ³ÃæäÖÈ¾µÄºÁÃëÊı
-  page_render_wait_ms: 1500
-  # Ò³Ãæ¶¨ÒåÁĞ±í£¨Ë³Ğò¼´²âÊÔË³Ğò£©
   pages:
     - key: "dashboard"
-      label: "ÒÇ±íÅÌ"
-      # ¸ÃÒ³ÃæÓ¦´æÔÚµÄ¹Ø¼üÔªËØ£¨ÓÃÓÚÑéÖ¤Ò³ÃæÕıÈ·äÖÈ¾£©
+      label: "ä»ªè¡¨ç›˜"
       expected_elements:
-        - { selector: ".robot-avatar, [class*='avatar']", name: "»úÆ÷ÈËÍ·Ïñ" }
-        - { selector: ".title, .grad-text", name: "µ¼º½±êÌâ" }
-        - { selector: ".glass-card, .card, [class*='card']", name: "ĞÅÏ¢¿¨Æ¬" }
+        - { selector: ".robot-avatar, [class*='avatar']", name: "æœºå™¨äººå¤´åƒ" }
+        - { selector: ".title, .grad-text", name: "å¯¼èˆªæ ‡é¢˜" }
+        - { selector: ".glass-card, .card, [class*='card']", name: "ä¿¡æ¯å¡ç‰‡" }
     - key: "ingest"
-      label: "Í¶µİ×ÊÁÏ"
+      label: "æŠ•é€’èµ„æ–™"
       expected_elements:
-        - { selector: ".el-tabs__item", name: "Element Plus ±êÇ©Ò³" }
+        - { selector: ".el-tabs__item", name: "Element Plus æ ‡ç­¾é¡µ" }
     - key: "browse"
-      label: "ÖªÊ¶ä¯ÀÀ"
+      label: "çŸ¥è¯†æµè§ˆ"
       expected_elements:
-        - { selector: "[class*='browse'], [class*='tree']", name: "ä¯ÀÀÊ÷" }
+        - { selector: "[class*='browse'], [class*='tree']", name: "æµè§ˆæ ‘" }
     - key: "query"
-      label: "ÖªÊ¶ÎÊ´ğ"
+      label: "çŸ¥è¯†é—®ç­”"
       expected_elements:
-        - { selector: "input[type='text'], textarea", name: "ÎÊ´ğÊäÈë¿ò" }
+        - { selector: "input[type='text'], textarea", name: "é—®ç­”è¾“å…¥æ¡†" }
     - key: "graph"
-      label: "Í¼Æ×"
+      label: "å›¾è°±"
       expected_elements:
-        - { selector: "canvas, svg, [class*='graph']", name: "Í¼Æ×»­²¼" }
+        - { selector: "canvas, svg, [class*='graph']", name: "å›¾è°±ç”»å¸ƒ" }
     - key: "health"
-      label: "Ìå¼ì"
+      label: "ä½“æ£€"
       expected_elements:
-        - { selector: "[class*='health'], [class*='status']", name: "Ìå¼ì×´Ì¬" }
+        - { selector: "[class*='health'], [class*='status']", name: "ä½“æ£€çŠ¶æ€" }
     - key: "config"
-      label: "ÅäÖÃ"
+      label: "é…ç½®"
       expected_elements:
-        - { selector: ".el-tabs__item, [role='tab']", name: "ÅäÖÃ±êÇ©Ò³" }
+        - { selector: ".el-tabs__item, [role='tab']", name: "é…ç½®æ ‡ç­¾é¡µ" }
     - key: "tunnel"
-      label: "ÄÚÍø´©Í¸"
+      label: "å†…ç½‘ç©¿é€"
       expected_elements:
-        - { selector: ".glass-card", name: "ËíµÀ×´Ì¬¿¨Æ¬" }
-        - { selector: ".el-tag", name: "×´Ì¬±êÇ©" }
-        - { selector: ".el-button", name: "²Ù×÷°´Å¥" }
-        - { selector: ".el-select", name: "Provider Ñ¡ÔñÆ÷" }
+        - { selector: ".glass-card", name: "éš§é“çŠ¶æ€å¡ç‰‡" }
+        - { selector: ".el-tag", name: "çŠ¶æ€æ ‡ç­¾" }
+        - { selector: ".el-button", name: "æ“ä½œæŒ‰é’®" }
+        - { selector: ".el-select", name: "Provider é€‰æ‹©å™¨" }
 
-# --- °´Å¥×Ô¶¯·¢ÏÖÅäÖÃ ---
-# ×Ô¶¯±éÀúËùÓĞÒ³Ãæ£¬·¢ÏÖ²¢²âÊÔËùÓĞ¿É½»»¥°´Å¥
-button_discovery:
-  # ÊÇ·ñÆôÓÃ°´Å¥×Ô¶¯·¢ÏÖ£¨²¹³äÔ¤¶¨Òå½»»¥²âÊÔµÄ¸²¸ÇÃ¤Çø£©
-  enabled: true
-  # °´Å¥ÔªËØµÄ CSS Ñ¡ÔñÆ÷ÁĞ±í£¨°´ÓÅÏÈ¼¶ÅÅĞò£¬Æ¥Åäµ½µÄ¶¼»á±»²âÊÔ£©
-  button_selectors:
-    - "button:not([disabled])"
-    - ".el-button:not(.is-disabled)"
-    - "[role='button']:not([disabled])"
-    - ".shortcut-item"
-    - ".suggestion-chip"
-    - ".el-tabs__item"
-    - ".el-tree-node__content"
-    - ".clickable, [cursor='pointer']"
-  # ÅÅ³ıÑ¡ÔñÆ÷£¨Æ¥ÅäÕâĞ©Ñ¡ÔñÆ÷µÄÔªËØ²»»á±»µã»÷£©
-  exclude_selectors:
-    - ".is-disabled"
-    - "[aria-disabled='true']"
-  # ÆÆ»µĞÔ°´Å¥ÎÄ±¾ÁĞ±í£¨Æ¥ÅäÔò½öÑéÖ¤´æÔÚ£¬²»Ö´ĞĞµã»÷£©
-  # ÕâĞ©°´Å¥»áĞŞ¸ÄÊı¾İ/ÎÄ¼şÏµÍ³£¬µã»÷¿ÉÄÜÔì³É²»¿ÉÄæ±ä¸ü
-  destructive_button_texts:
-    - "É¾³ı"
-    - "Çå³ı"
-    - "ÖØÖÃ"
-    - "ĞŞ¸´"
-    - "³õÊ¼»¯"
-    - "Æô¶¯ËíµÀ"
-    - "Í£Ö¹ËíµÀ"
-    - "±£´æÅäÖÃ"
-  # Ã¿¸ö°´Å¥µã»÷ºóµÄµÈ´ıºÁÃëÊı
-  click_wait_ms: 800
-  # µã»÷Ê§°ÜºóÊÇ·ñ¼ÌĞø²âÊÔÏÂÒ»¸ö°´Å¥
-  continue_on_failure: true
-  # ÊÇ·ñÊ¹ÓÃ force=True Ìø¹ıÔªËØÎÈ¶¨ĞÔ¼ì²é£¨½â¾ö transition ¶¯»­ÎÊÌâ£©
-  force_click: true
-
-# --- ½»»¥²âÊÔÅäÖÃ ---
-# ¶¨Òå¸÷Ò³ÃæµÄ¾ßÌå½»»¥ĞĞÎª£¨Óë button_discovery »¥²¹£©
+# --- äº¤äº’æµ‹è¯•é…ç½®ï¼ˆé¡¹ç›®ç‰¹å®šï¼‰ ---
 interactions:
-  # Ö÷ÌâÇĞ»»Æ÷ÅäÖÃ
   theme_switcher:
     trigger_selector: ".theme-switcher .trigger"
     panel_selector: ".theme-switcher .panel"
     item_selector: ".theme-switcher .theme-item"
-    # ÇĞ»»ºóÃæ°å¹Ø±ÕµÄ¹ı¶É¶¯»­µÈ´ıºÁÃëÊı
-    transition_wait_ms: 1000
-    # ÊÇ·ñÊ¹ÓÃ JS dispatchEvent ÈÆ¹ı transition Ê±ĞòÎÊÌâ
-    use_js_click: true
-
-  # Í¶µİ×ÊÁÏÒ³Ãæ½»»¥
   ingest:
-    # Element Plus ±êÇ©Ò³Ñ¡ÔñÆ÷
     tab_item_selector: ".el-tabs__item"
-    # ĞèÒªµã»÷µÄ±êÇ©Ò³ÎÄ±¾
-    target_tab_label: "ÎÄ±¾Õ³Ìù"
-    # ÎÄ±¾ÊäÈë¿òÑ¡ÔñÆ÷£¨ÇĞ»»±êÇ©Ò³ºó¿É¼ûµÄ£©
+    target_tab_label: "æ–‡æœ¬ç²˜è´´"
     textarea_selector: "textarea:visible"
-    # ²âÊÔÊäÈëÄÚÈİ
     test_text: "This is a test document for knowledge base ingestion."
-    # Ìá½»°´Å¥ÎÄ±¾
-    submit_button_text: "¿ªÊ¼±àÒë"
-
-  # ÅäÖÃÒ³Ãæ½»»¥
+    submit_button_text: "å¼€å§‹ç¼–è¯‘"
   config:
-    # ½øÈë±à¼­Ä£Ê½µÄ°´Å¥ÎÄ±¾
-    edit_button_text: "±à¼­"
-    # ±£´æ°´Å¥ÎÄ±¾£¨±à¼­Ä£Ê½ÏÂ¿É¼û£©
-    save_button_text: "±£´æ"
-
-  # ÖªÊ¶ÎÊ´ğÒ³Ãæ½»»¥
+    edit_button_text: "ç¼–è¾‘"
+    save_button_text: "ä¿å­˜"
   query:
     input_selector: "input[type='text'], textarea"
     test_question: "What is machine learning?"
-    # Ìá½»·½Ê½£ºbutton »ò enter
     submit_method: "enter"
 
-# --- API ¶Ëµã²âÊÔÅäÖÃ ---
+# --- API ç«¯ç‚¹æµ‹è¯•é…ç½®ï¼ˆé¡¹ç›®ç‰¹å®šï¼‰ ---
 api_tests:
-  # Ê¹ÓÃ Playwright request API£¨±ÜÃâä¯ÀÀÆ÷ CORS ÏŞÖÆ£©
-  use_playwright_request: true
   endpoints:
     - path: "/health"
       expected_status: 200
@@ -215,67 +101,3 @@ api_tests:
       expected_status: 200
     - path: "/api/tunnel/config"
       expected_status: 200
-
-# --- ¿ØÖÆÌ¨´íÎó¹ıÂË ---
-# Æ¥ÅäÕâĞ©¹Ø¼ü´ÊµÄ´íÎó½«±»ºöÂÔ£¨·ÇÓ¦ÓÃ±¾ÉíµÄ´íÎó£©
-console_error_filter:
-  - "favicon"
-  - "extension"
-  - "devtools"
-  - "cors"
-  - "err_failed"
-  - "access-control"
-
-# --- ³¬Ê±ÅäÖÃ£¨ºÁÃë£©---
-timeout:
-  # Ò³Ãæ¼ÓÔØ³¬Ê±
-  page_load_ms: 30000
-  # ÔªËØµÈ´ı³¬Ê±
-  element_wait_ms: 5000
-  # networkidle µÈ´ı³¬Ê±
-  networkidle_ms: 30000
-
-# --- Êä³öÅäÖÃ ---
-output:
-  # ½ØÍ¼±£´æÄ¿Â¼£¨Ïà¶ÔÓÚÏîÄ¿¸ùÄ¿Â¼£©
-  screenshot_dir: "test_screenshots"
-  # »ùÏß²âÊÔ½á¹û JSON ÎÄ¼şÂ·¾¶
-  result_file: "test_result.json"
-  # °´Å¥²âÊÔ½á¹û JSON ÎÄ¼şÂ·¾¶£¨×Ô¶¯·¢ÏÖ²âÊÔ×¨ÓÃ£©
-  button_result_file: "test_buttons_result.json"
-  # ÎÄ¼ş±àÂë
-  encoding: "utf-8"
-  # ÊÇ·ñÔÚ²âÊÔ½áÊøºó×Ô¶¯´ò¿ª½ØÍ¼Ä¿Â¼
-  open_screenshot_dir: false
-
-# --- ±àÂë°²È«ÅäÖÃ ---
-encoding_safety:
-  # Python ½Å±¾Ğ´ÈëÊ±ÊÇ·ñÌí¼Ó BOM£¨ÍÆ¼ö false£©
-  add_bom: false
-  # Ô´ÎÄ¼ş±àÂë¼ì²é£¨¹¹½¨Ç°¼ì²â£©
-  check_source_encoding: true
-  # ÔÊĞíµÄÔ´ÎÄ¼ş±àÂëÁĞ±í
-  allowed_encodings:
-    - "utf-8"
-    - "utf-8-sig"
-  # ÊÇ·ñ×Ô¶¯ĞŞ¸´ Python ½Å±¾±àÂë£¨GBK ¡ú UTF-8£©
-  auto_fix_python_encoding: true
-  # Windows ÏÂ Write ¹¤¾ßÄ¬ÈÏ±àÂë£¨ÓÃÓÚ¼ì²âºÍ×ª»»£©
-  windows_default_encoding: "gbk"
-
-# --- bat ½Å±¾´¦Àí ---
-bat_script:
-  # ÊÇ·ñÍ¨¹ı¹ÜµÀÊäÈëÈÆ¹ı pause ÃüÁî
-  bypass_pause: true
-  # ÈÆ¹ı pause µÄ¹ÜµÀÊäÈëÄÚÈİ
-  pause_bypass_input: '""'
-
-# --- ÖÕ¶ËÅäÖÃ ---
-# PowerShell »·¾³µÄÌØÊâ´¦Àí
-terminal:
-  # ÊÇ·ñ²ğ·Ö³¤ÃüÁîÎª¶ÌÃüÁî£¨±ÜÃâ PSReadLine »º³åÇø±ÀÀ££©
-  split_long_commands: true
-  # µ¥ÌõÃüÁî×î´ó³¤¶È£¨³¬¹ıÔò²ğ·Ö£©
-  max_command_length: 200
-  # ÊÇ·ñÊ¹ÓÃĞÂÖÕ¶ËÖ´ĞĞÃüÁî£¨±ÜÃâ PSReadLine ×´Ì¬ÎÛÈ¾£©
-  use_fresh_terminal: true

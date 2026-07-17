@@ -5,7 +5,6 @@
 - 适用对象：所有 `services/api/` 下的 try/catch 逻辑、错误响应构造、SSE 错误事件、状态文件读写错误处理。
 
 ## Rules
-
 ### 外部错误须 try-catch 并转为用户友好消息
 - Category: reliability
 - Severity: critical
@@ -34,7 +33,6 @@
       }
     });
     ```
-
 ### err 须用 instanceof Error 守卫，禁止直接 String(err)
 - Category: correctness
 - Severity: critical
@@ -61,7 +59,6 @@
       return reply.code(500).send({ error: errMsg(err) });
     }
     ```
-
 ### SSE 流中错误须通过 error 事件推送，不能抛异常
 - Category: reliability
 - Severity: critical
@@ -94,7 +91,6 @@
       }
     });
     ```
-
 ### 工具执行失败须 catch 并返回错误描述给 LLM，不中断循环
 - Category: reliability
 - Severity: critical
@@ -121,7 +117,6 @@
       }
     }
     ```
-
 ### 状态文件损坏须优雅降级，不能崩溃服务
 - Category: reliability
 - Severity: critical

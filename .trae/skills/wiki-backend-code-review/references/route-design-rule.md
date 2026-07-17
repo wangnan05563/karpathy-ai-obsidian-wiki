@@ -5,7 +5,6 @@
 - 适用对象：`routes/` 目录下的路由注册函数、handler 实现、请求参数解析逻辑。
 
 ## Rules
-
 ### 路由参数须校验类型/必填/格式，无效返回 400
 - Category: correctness
 - Severity: critical
@@ -33,7 +32,6 @@
       return reply.send(result);
     });
     ```
-
 ### Content-Type 须显式分发（multipart vs json）
 - Category: correctness
 - Severity: critical
@@ -67,7 +65,6 @@
       return reply.send({ ok: true });
     });
     ```
-
 ### 路由注册函数签名须统一为 (app, adapter) => void
 - Category: maintainability
 - Severity: critical
@@ -101,7 +98,6 @@
       });
     }
     ```
-
 ### GET 路由返回 JSON，POST 长任务返回 SSE
 - Category: best-practices
 - Severity: suggestion
@@ -136,7 +132,6 @@
       }
     });
     ```
-
 ### 路由层不写业务逻辑，只做参数解析 + 调用 + 格式化
 - Category: maintainability
 - Severity: critical

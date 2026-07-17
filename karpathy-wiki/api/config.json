@@ -6,7 +6,7 @@
     "baseUrl": "https://api.deepseek.com",
     "model": "deepseek-chat",
     "apiKeyRef": "DEEPSEEK_KEY",
-    "apiKey": ""
+    "apiKey": "sk-7c761b8645aa4721a3a9d1160816296b"
   },
   "budget": {
     "maxSteps": 20,
@@ -40,7 +40,7 @@
   "webSearch": {
     "provider": "tavily",
     "apiKeyRef": "TAVILY_API_KEY",
-    "apiKey": "",
+    "apiKey": "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",
     "maxResults": 5
   }
 }

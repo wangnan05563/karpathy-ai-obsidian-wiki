@@ -159,6 +159,122 @@
 - 评审时确认：预设列表必须从单一常量导出，禁止在多个路由文件内联重复定义。
 - 新增预设类别时，必须在本表登记其集中定义位置与常量名，保持单点维护。
 
+### 预设 ID 列表
+
+预设 ID 必须与后端 `AI_PRESET_BASE_URLS` 字典的键名保持一致。新增预设时，此处必须同步更新。
+
+- openai
+- deepseek
+- zhipu
+- moonshot
+- qwen
+- ernie
+- doubao
+- agnes
+- ollama
+
+### 密钥存储命名规范
+
+- 全局密钥: `openai_api_key` (LLM), `embedding_api_key` (Embedding)
+- 预设独立密钥: `openai_api_key_preset_{preset_id}`
+- 脱敏值前缀: `****`（4 个星号）
+
+### 热更新安全要求
+
+- 配置更新必须原子化：先读旧值，再写新值，失败时回滚。
+- 更新后必须验证新配置可加载（不崩溃、不报错）。
+- 更新日志必须记录 before/after 快照。
+
+## Session State & Cache Management
+
+### 跨进程状态传播
+
+- 子进程写入共享文件后，父进程必须调用 `invalidate_cache()` 再读取。
+- 子进程写入后必须通知父进程更新运行中的服务状态。
+
+### 缓存失效策略
+
+- JSON 文件读取前必须调用 `invalidate_cache()`。
+- 健康检查端点（`/health`、`/cookies/layers`、`/me`）必须清缓存。
+- 缓存 TTL 由配置项管理，默认 30 秒。
+
+### Cookie 层状态同步
+
+- `export_cookies()` 成功后必须调用 `sync_cookie_layers_from_json()`。
+- 运行时 Cookie 变更必须推送到 worker 浏览器上下文。
+- 身份 Cookie 变更时必须强制刷新 token。
+
+### 会话状态检查三要素
+
+- 缺失检查：必需 Cookie 名称是否存在。
+- 过期检查：Cookie expires 是否已过期。
+- 陈旧检查：Cookie 值是否与持久化存储中的最新值一致。
+
+## 持久化与缓存刷新审查参数
+
+> 持久化与缓存刷新规则（见 [references/persistence-cache-rule.md](../references/persistence-cache-rule.md)）所依赖的可配置参数集中在本节。
+> 规则文件只描述通用模式，不硬编码具体路径、变量名或正则。
+
+### 配置文件路径解析锚点
+
+| 场景 | 解析方式 | 说明 |
+|------|---------|------|
+| 开发模式（ESM 源码运行） | `path.dirname(fileURLToPath(import.meta.url))` | 与当前源文件位置绑定，不受 CWD 影响 |
+| 打包模式（如 pkg） | `path.resolve(process.cwd(), CONFIG_FILENAME)` | 打包后无源文件路径，退回 CWD |
+| 通用兜底 | 候选路径数组 + `fsSync.accessSync` 探测 | 按优先级返回首个存在路径，全部缺失时返回开发模式锚点 |
+
+- 禁止模式：使用 `process.cwd()` 作为唯一路径锚点（CWD 受启动方式影响，开发/打包/工具链切换会漂移）。
+- 评审时确认：`getConfigPath()` / `getStateDir()` 等路径解析函数必须实现"优先 `import.meta.url` + 打包兜底 + CWD 探测"三级策略。
+
+### 缓存刷新要求
+
+| 写盘函数 | 必须调用的刷新方法 | 刷新内容 |
+|---------|------------------|---------|
+| `saveAiConfig()` | `refreshConfigCache(data)` | 同步更新 `configCache.data` / `.path` / `.loadedAt` |
+| `resetAiConfig()` | `refreshConfigCache(data)` | 同上 |
+| `saveWebSearchConfig()` | `refreshConfigCache(data)` | 同上 |
+| 通用模板（新增可编辑模块） | `refresh<Module>Cache(data)` | 写盘后立即同步内存缓存 |
+
+- 评审时确认：所有写盘函数必须在 `await fs.writeFile(...)` 成功后、`return reply` 之前调用对应的缓存刷新方法。
+- 缓存 TTL 不替代显式刷新：即使 TTL 很短（如 30s），写盘后仍必须立即刷新，避免窗口期内 GET 返回旧值。
+- 失败处理：`fs.writeFile` 抛错时不得刷新缓存（保持旧值供降级读取），并须向客户端返回 5xx。
+
+### UUID 白名单正则
+
+| 用途 | 正则 | 说明 |
+|------|------|------|
+| 资源 ID 参数校验（会话/任务/runId） | `/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i` | 标准 UUID v4 格式，大小写不敏感 |
+| 文件名段校验 | `/^[A-Za-z0-9._-]+$/` | 仅字母/数字/下划线/短横线/点 |
+| 通用路径段校验 | `/^[A-Za-z0-9_][A-Za-z0-9._-]*$/` | 禁止以 `.` 开头，防 `.`/`..` 穿越 |
+
+- 评审时确认：所有来自 HTTP 请求参数（`request.params.id`、`request.body.filename` 等）用作文件名/路径段时，必须先用上表正则校验。
+- 正则本身视为配置项：项目可扩展上表，但禁止在代码内联硬编码正则字面量。
+
+### 落盘目录约定
+
+| 数据类型 | 落盘目录（相对项目根） | 文件命名 | 格式 |
+|---------|--------------------|---------|------|
+| AI 配置 | `api/config.json` | 固定文件名 | JSON |
+| 历史会话 | `data/conversations/` | `{uuid}.json` | JSON（单文件单会话） |
+| 运行状态 | `services/api/src/state/` | `runId` 索引 | 由 `FileStateStore` 定义 |
+| 临时文件 | `os.tmpdir()` | `{runId}-{timestamp}` | 任意 |
+
+- 落盘目录必须通过配置项或 `import.meta.url` 解析，禁止硬编码绝对路径。
+- `.gitignore` 必须排除运行期写入目录（`data/conversations/`、`test_screenshots/` 等），防止敏感数据误提交。
+- 评审时确认：新建落盘目录时，须同步在 `.gitignore` 登记排除规则，并在本表登记目录约定。
+
+### 跨 origin 持久化边界
+
+| 数据类型 | 浏览器存储（缓存层） | 后端权威源 | 跨 origin 共享 |
+|---------|---------------------|-----------|---------------|
+| AI 配置（apiKey） | localStorage（仅脱敏值） | `/api/ai/config` + `api/config.json` | 是 |
+| 历史会话 | IndexedDB（降级缓存） | `/api/conversations/:id` + `data/conversations/` | 是 |
+| LLM 预设 UI 状态 | localStorage（baseUrl/model） | 无（前端独立） | 否 |
+| 主题偏好 | localStorage | 无（前端独立） | 否 |
+
+- 评审时确认：跨 origin 列为"是"的数据，后端必须提供 CRUD 路由，前端以后端为权威源、浏览器存储仅作降级缓存。
+- 降级策略：后端不可用时前端降级到本地缓存，但须 `console.warn` 记录降级事件，不得静默失败。
+
 ## 适用 / 不适用场景
 
 ### 适用
@@ -166,6 +282,7 @@
 - 评审 `services/api/` 下的 Fastify 路由、workflow、engine adapter、vault 操作、state store。
 - 评审 SSE 流式输出、文件系统并发追加、引擎预算控制等后端逻辑。
 - 评审 TypeScript 后端代码的安全、错误处理、可维护性。
+- 评审配置持久化、缓存刷新、跨 origin 存储边界、UUID 防路径穿越等持久化层逻辑。
 
 ### 不适用
 

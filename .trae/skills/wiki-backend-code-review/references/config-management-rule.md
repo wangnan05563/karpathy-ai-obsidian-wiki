@@ -5,7 +5,6 @@
 - 适用对象：`routes/` 目录下的配置类路由（如 `/api/ai/config`、`/api/ai/reset-config`）、配置持久化逻辑、adapter 运行时实例同步逻辑、预设常量定义。
 
 ## Rules
-
 ### 可编辑配置必须提供恢复默认值接口
 - Category: maintainability
 - Severity: critical
@@ -37,7 +36,6 @@
       return reply.send({ ok: true, config: defaults });
     });
     ```
-
 ### 配置恢复须同步运行时实例
 - Category: correctness
 - Severity: critical
@@ -68,7 +66,6 @@
       return reply.send({ ok: true, config: defaults });
     });
     ```
-
 ### 配置恢复须仅重置目标字段
 - Category: correctness
 - Severity: critical
@@ -95,7 +92,6 @@
       return reply.send({ ok: true, config: next });
     });
     ```
-
 ### 预设列表须集中管理
 - Category: maintainability
 - Severity: suggestion
@@ -125,7 +121,6 @@
 
     app.get('/api/ai/presets', async () => LLM_PRESETS);
     ```
-
 ### 配置接口须有完整生命周期
 - Category: best-practices
 - Severity: suggestion

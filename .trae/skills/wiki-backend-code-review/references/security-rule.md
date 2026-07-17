@@ -5,7 +5,6 @@
 - 适用对象：所有 `services/api/` 下的代码，重点是涉及外部服务调用、文件路径拼接、子进程执行、网络监听的实现。
 
 ## Rules
-
 ### API Key 仅通过环境变量引用（apiKeyRef 存变量名），不落盘
 - Category: security
 - Severity: critical
@@ -25,7 +24,6 @@
     if (!apiKey) throw new Error(`环境变量 ${config.apiKeyRef} 未设置`);
     const adapter = new EngineAdapter({ apiKey });
     ```
-
 ### 用户输入的文件名/路径须正则校验，禁止 .. 和绝对路径
 - Category: security
 - Severity: critical
@@ -58,7 +56,6 @@
     const file = path.join(vaultRoot, name);
     await fs.readFile(file);
     ```
-
 ### 子进程调用须校验命令白名单，禁止 shell: true
 - Category: security
 - Severity: critical
@@ -85,7 +82,6 @@
     }
     await safeExec('git', ['commit', '-m', message]);
     ```
-
 ### localOnly 须默认 true，绑定 localhost
 - Category: security
 - Severity: critical
@@ -104,7 +100,6 @@
     const host = localOnly ? '127.0.0.1' : '0.0.0.0';
     await app.listen({ port: config.port, host });
     ```
-
 ### 错误信息不泄露内部路径/堆栈
 - Category: security
 - Severity: critical

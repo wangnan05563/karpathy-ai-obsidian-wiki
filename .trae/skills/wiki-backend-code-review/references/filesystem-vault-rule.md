@@ -5,7 +5,6 @@
 - 适用对象：`vault/` 目录下的实现、`fs/promises` 调用、`index.md` / `log.md` 追加逻辑、`FileStateStore`、临时文件处理。
 
 ## Rules
-
 ### 写入路径必须在白名单内，禁止修改 SCHEMA.md
 - Category: security
 - Severity: critical
@@ -40,7 +39,6 @@
       await fs.writeFile(abs, content, 'utf-8');
     }
     ```
-
 ### 用户输入路径须正则白名单校验，防路径遍历
 - Category: security
 - Severity: critical
@@ -74,7 +72,6 @@
       return fs.readFile(abs, 'utf-8');
     }
     ```
-
 ### 并发文件追加须串行化（withCompileLock）
 - Category: correctness
 - Severity: critical
@@ -110,7 +107,6 @@
       fs.appendFile(indexPath, `- [[${entry}]]\n`, 'utf-8')
     );
     ```
-
 ### 部分失败不回滚，标记 draft 保留半成品
 - Category: reliability
 - Severity: critical
@@ -139,7 +135,6 @@
       // 不 rethrow，让上层决定是否继续
     }
     ```
-
 ### 文件操作须使用 fs/promises 异步 API，禁止同步阻塞
 - Category: performance
 - Severity: critical
@@ -158,7 +153,6 @@
     // 异步读取，不阻塞事件循环
     const content = await fs.readFile(schemaPath, 'utf-8');
     ```
-
 ### 临时文件须用 os.tmpdir() + 唯一前缀
 - Category: reliability
 - Severity: suggestion

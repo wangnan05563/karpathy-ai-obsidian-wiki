@@ -1,8 +1,4 @@
-# Rule Catalog — Element Plus
-
-> 通用规则文件，具体技术栈版本以 `config/review-config.md` 为准。
-
-## 消息提示用 ElMessage，禁止 alert/confirm
+﻿## 消息提示用 ElMessage，禁止 alert/confirm
 
 IsUrgent: True
 Category: Element Plus
@@ -15,24 +11,7 @@ Category: Element Plus
 
 把原生弹窗替换为 `ElMessage` 或 `ElMessageBox`，并按语义选择 type。
 
-Wrong:
-
-```ts
-if (!form.value.title) {
-  alert('标题不能为空')
-  return
-}
-```
-
-Right:
-
-```ts
-import { ElMessage } from 'element-plus'
-if (!form.value.title) {
-  ElMessage.warning('标题不能为空')
-  return
-}
-```
+> **示例代码**: 参见 [examples/element-plus-rule-examples.md](examples/element-plus-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。
 
 ## 按钮须用 el-button，含 size 和 type 属性
 
@@ -47,19 +26,7 @@ Category: Element Plus
 
 为每个 `el-button` 补齐 `size` 与 `type`；主操作用 `type="primary"`，破坏性操作用 `type="danger"`。
 
-Wrong:
-
-```vue
-<el-button @click="handleSubmit">提交</el-button>
-<el-button @click="handleDelete">删除</el-button>
-```
-
-Right:
-
-```vue
-<el-button type="primary" size="default" @click="handleSubmit">提交</el-button>
-<el-button type="danger" size="default" @click="handleDelete">删除</el-button>
-```
+> **示例代码**: 参见 [examples/element-plus-rule-examples.md](examples/element-plus-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。
 
 ## 表单校验用 el-form + rules，提交前 validate
 
@@ -74,37 +41,7 @@ Category: Element Plus
 
 把散落的校验条件改写为 `rules` 对象；提交函数前置 `validate` 回调。
 
-Wrong:
-
-```ts
-const handleSubmit = async () => {
-  if (!form.value.email) return
-  if (!form.value.email.includes('@')) return
-  await api.save(form.value)
-}
-```
-
-Right:
-
-```vue
-<script setup lang="ts">
-import type { FormInstance, FormRules } from 'element-plus'
-const formRef = ref<FormInstance>()
-const rules: FormRules = {
-  email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }
-  ]
-}
-const handleSubmit = async () => {
-  if (!formRef.value) return
-  await formRef.value.validate(async (valid) => {
-    if (!valid) return
-    await api.save(form.value)
-  })
-}
-</script>
-```
+> **示例代码**: 参见 [examples/element-plus-rule-examples.md](examples/element-plus-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。
 
 ## 图标从 @element-plus/icons-vue 导入，按需注册
 
@@ -119,24 +56,7 @@ Category: Element Plus
 
 把 `<i class="el-icon-edit">` 之类用法改为图标组件导入。
 
-Wrong:
-
-```vue
-<template>
-  <button><i class="el-icon-edit"></i> 编辑</button>
-</template>
-```
-
-Right:
-
-```vue
-<script setup lang="ts">
-import { Edit } from '@element-plus/icons-vue'
-</script>
-<template>
-  <el-button :icon="Edit">编辑</el-button>
-</template>
-```
+> **示例代码**: 参见 [examples/element-plus-rule-examples.md](examples/element-plus-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。
 
 ## loading 状态用 :loading 或 v-loading
 
@@ -151,23 +71,7 @@ Category: Element Plus
 
 用 `v-loading` 包裹等待区域，或给触发按钮绑定 `:loading`。
 
-Wrong:
-
-```vue
-<template>
-  <div>{{ loading ? '加载中...' : data }}</div>
-  <el-button @click="load">刷新</el-button>
-</template>
-```
-
-Right:
-
-```vue
-<template>
-  <div v-loading="loading">{{ data }}</div>
-  <el-button :loading="loading" @click="load">刷新</el-button>
-</template>
-```
+> **示例代码**: 参见 [examples/element-plus-rule-examples.md](examples/element-plus-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。
 
 ## 弹窗用 el-dialog，须有 title 和 v-model 控制
 
@@ -182,23 +86,4 @@ Category: Element Plus
 
 把自建模态替换为 `el-dialog`，把控制变量绑到 `v-model`。
 
-Wrong:
-
-```vue
-<template>
-  <div v-if="visible" class="my-modal">
-    <h3>编辑</h3>
-    <!-- ... -->
-  </div>
-</template>
-```
-
-Right:
-
-```vue
-<template>
-  <el-dialog v-model="visible" title="编辑">
-    <!-- ... -->
-  </el-dialog>
-</template>
-```
+> **示例代码**: 参见 [examples/element-plus-rule-examples.md](examples/element-plus-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。
