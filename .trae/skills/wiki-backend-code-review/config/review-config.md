@@ -326,6 +326,118 @@
 - 评审时确认：批量操作（清理、迁移、批处理）中单子项失败不中断整体流程，错误信息收集到 `error_collection_field` 数组返回给客户端。
 - 主流程 try-catch 只捕获致命错误（如配置缺失、权限拒绝），单子项错误用独立 try-catch 包裹。
 
+## 后端路由注册守卫参数
+
+> 后端路由注册守卫规则（见 [references/route-registration-backend-rule.md](../references/route-registration-backend-rule.md)）所依赖的可配置参数集中在本节。
+> 规则文件只描述通用模式，不硬编码具体路径、入口文件名或注册函数名。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `route_directory` | `services/api/src/routes/` | 路由文件目录（相对项目根） |
+| `entry_file` | `services/api/src/index.ts` | 入口文件路径（相对项目根），路由须在此导入与注册 |
+| `register_function_pattern` | `register` | 注册函数名匹配模式（正则字面量），用于在入口文件中检索已注册路由 |
+| `exempt_files` | `["_types.ts", "_shared.ts", "index.ts"]` | 豁免文件列表（不需注册的辅助文件，如类型定义、共享工具） |
+
+- 评审时确认：`route_directory` 下所有非豁免路由文件均须在 `entry_file` 中被 `import` 并调用注册函数（匹配 `register_function_pattern`）。
+- 新增路由文件时，须同步在 `entry_file` 添加导入与注册调用，否则视为不通过。
+- 豁免文件须以 `_` 开头或显式登记在 `exempt_files` 中，便于评审时识别"辅助文件 vs 遗漏注册"。
+
+## 空值守卫参数
+
+> 空值守卫规则（见 [references/null-guard-rule.md](../references/null-guard-rule.md)）所依赖的可配置参数集中在本节。
+> 规则文件只描述通用模式，不硬编码具体字段名或异步赋值关键词。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `nullable_field_patterns` | `this\.provider\|this\.child\|this\.connection\|this\.client\|this\.handle` | 可空字段名匹配模式（正则），匹配的字段须在使用前空值守卫 |
+| `async_assignment_keywords` | `spawn\|exec\|connect\|listen\|createClient\|open` | 异步赋值关键词（正则），同文件出现时认定字段为"外部异步赋值" |
+
+- 评审时确认：匹配 `nullable_field_patterns` 的字段若同文件内出现 `async_assignment_keywords` 的赋值语句，使用前必须有 `if (!x)` 守卫。
+- 守卫分支必须包含可观察的恢复动作（重建资源 / 抛友好错误 / 日志降级），不能仅 `return` 静默吞错。
+- 字段类型必须显式标注为 `T | null`，让 TS 编译器协助检查（TS2531 / TS18047）。
+
+## 优雅停止参数
+
+> 优雅停止规则（见 [references/graceful-shutdown-rule.md](../references/graceful-shutdown-rule.md)）所依赖的可配置参数集中在本节。
+> 规则文件只描述通用模式，不硬编码具体资源类型、信号名或清理顺序。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `resource_keywords` | `spawn\|setInterval\|connect\|listen\|createClient\|open` | 资源创建关键词（正则），文件内出现时认定需注册清理钩子 |
+| `shutdown_signals` | `["SIGINT", "SIGTERM"]` | 触发清理的信号列表，进程收到这些信号时按 `cleanup_order` 释放资源 |
+| `cleanup_order` | `["child_process", "timer", "connection"]` | 清理顺序：子进程优先（避免孤儿），再清定时器（避免退出前触发），最后关连接 |
+
+- 评审时确认：创建子进程 / 定时器 / 长连接的模块均须在 `shutdown_signals` 上注册清理钩子。
+- 清理函数须按 `cleanup_order` 顺序释放资源，单个资源清理失败不阻塞其他资源释放。
+- 清理函数末尾须调用 `process.exit(0)`，避免进程因未关闭句柄挂起。
+
+## 敏感字段脱敏参数
+
+> 敏感字段脱敏规则（见 [references/sensitive-field-masking-rule.md](../references/sensitive-field-masking-rule.md)）所依赖的可配置参数集中在本节。
+> 规则文件只描述通用模式，不硬编码具体字段名、脱敏算法或空串语义。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `sensitive_field_patterns` | `key\|token\|secret\|password\|authtoken\|apiKey\|apiSecret` | 敏感字段名匹配模式（正则），命中的字段在 GET 返回时必须脱敏 |
+| `mask_strategy` | `last4_padstart` | 脱敏策略：保留末 4 位，前缀用 `****` 填充 |
+| `empty_string_semantics` | `no_change` | POST/PUT 接收空串的语义：不修改原值（避免覆盖原密钥） |
+
+- 评审时确认：GET handler 返回对象中匹配 `sensitive_field_patterns` 的字段必须经过 `mask()` 处理，并附带 `<field>_configured: boolean` 标志。
+- POST/PUT handler 中敏感字段为空串时按 `empty_string_semantics` 跳过更新，不覆盖原值。
+- 即使 `configured: false`，GET 返回也不应暴露原始值，统一返回空串或 `null` + 标志。
+
+## 类型同步守卫参数
+
+> 类型同步守卫规则（见 [references/type-sync-backend-rule.md](../references/type-sync-backend-rule.md)）所依赖的可配置参数集中在本节。
+> 规则文件只描述通用模式，不硬编码具体文件路径或需同步的接口名列表。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `backend_types_path` | `services/api/src/types.ts` | 后端 types 文件路径（相对项目根） |
+| `frontend_types_path` | `packages/web/src/types.ts` | 前端 types 文件路径（相对项目根） |
+| `sync_interfaces` | `[]` | 需同步的接口名列表（留空则校验全部 `export interface`） |
+
+- 评审时确认：`backend_types_path` 的 `export interface`（或 `sync_interfaces` 列表中的接口）须在 `frontend_types_path` 中存在，且字段名、类型签名、可选性一致。
+- 若 monorepo 前端直接 `import type` 引用后端类型（单源定义），可豁免本规则——评审时确认引用路径正确。
+- 后端新增字段时，前端在 PR 中同步修改，无遗漏。
+
+## 配置合并保留参数
+
+> 配置合并保留规则（见 [references/config-merge-preservation-rule.md](../references/config-merge-preservation-rule.md)）所依赖的可配置参数集中在本节。
+> 规则文件只描述通用模式，不硬编码具体配置文件路径、合并策略或保留段名列表。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `config_file_path` | `services/api/config.json` | 分段配置文件路径（相对项目根） |
+| `merge_strategy` | `shallow` | 合并策略：`shallow` 用对象展开覆盖目标段，`deep` 用递归合并 |
+| `preserve_sections` | `[]` | 须保留的段名列表（留空则全部保留，仅目标段被覆盖） |
+| `exempt_paths` | `["*.tmp.json", "*.cache.json"]` | 豁免文件路径模式（临时/缓存文件不校验合并保留） |
+
+- 评审时确认：写盘函数（`fs.writeFile` / `fs.promises.writeFile`）针对 `config_file_path` 时，必须先读原文件再按 `merge_strategy` 合并，仅覆盖目标段。
+- `preserve_sections` 列表中的段在写入对象中必须存在且值与原文件一致。
+- 多模块共享同一配置文件时，统一调用 `mergeConfigSection(target, section)` 工具，避免各模块各自实现合并逻辑。
+
+## 检查更新后端审查参数
+
+> 检查更新后端规则（见 [references/update-check-backend-rule.md](../references/update-check-backend-rule.md)）所依赖的可配置参数集中在本节。
+> 规则文件只描述通用模式，不硬编码具体缓存 TTL、超时值或 GitHub API URL。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `check_update.cache_ttl_ms` | `300000` | 后端内存缓存 TTL（毫秒），默认 5 分钟；TTL 内的请求直接返回缓存值，不发起外部 API 调用 |
+| `check_update.offline_mode` | `true` | 离线模式开关；`true` 时固定返回 `has_update: false, source: 'local'`，禁止发起外部 API 调用 |
+| `check_update.update_endpoint` | `/api/about/check-update` | 后端检查更新接口路径 |
+| `check_update.external_api_timeout_ms` | `10000` | 外部 GitHub API 调用超时（毫秒），默认 10 秒；超时后降级返回 `source: 'local'` |
+| `check_update.github_api_url_template` | `https://api.github.com/repos/{owner}/{repo}/releases/latest` | GitHub Releases API URL 模板，`{owner}` / `{repo}` 占位符运行时替换 |
+| `check_update.required_response_fields` | `has_update, current_version, latest_version, release_url, source, checked_at` | 必需响应字段列表（逗号分隔）；任一缺失会导致前端状态机无法正确切换 |
+| `check_update.fallback_source` | `local` | 降级时 `source` 字段值（区分真实检查 vs 降级结果） |
+| `check_update.cache_invalidation_on_error` | `false` | 外部 API 失败时是否刷新缓存；`false` 保持旧值供下次降级读取 |
+
+- 评审时确认：`/api/about/check-update` 接口实现模块级内存缓存，TTL 命中时直接返回缓存值，不发起外部请求。
+- 离线模式 `offline_mode: true` 时接口固定返回 `{ has_update: false, source: 'local' }`，禁止任何 `fetch` / `axios` 调用。
+- 外部 API 调用必须用 `AbortController` 实现超时控制，超时或失败时降级返回 `source: 'local'`，不抛 5xx。
+- `current_version` 必须从 `package.json` 的 `version` 字段读取，禁止硬编码版本号字面量。
+
 ## 适用 / 不适用场景
 
 ### 适用
@@ -334,6 +446,7 @@
 - 评审 SSE 流式输出、文件系统并发追加、引擎预算控制等后端逻辑。
 - 评审 TypeScript 后端代码的安全、错误处理、可维护性。
 - 评审配置持久化、缓存刷新、跨 origin 存储边界、UUID 防路径穿越等持久化层逻辑。
+- 评审"检查更新"接口的缓存、离线模式、外部 API 超时与降级。
 
 ### 不适用
 

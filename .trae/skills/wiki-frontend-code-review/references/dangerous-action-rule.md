@@ -196,6 +196,94 @@ const handleSubmit = async (key: CleanKey) => {
 
 > **示例代码**: 参见 [examples/dangerous-action-rule-examples.md](examples/dangerous-action-rule-examples.md)。
 
+### DA-8: 破坏性按钮必须有 loading / disabled / confirm 至少其一的防护
+
+IsUrgent: True
+Category: Dangerous Action
+
+### Description
+
+启动、停止、保存、删除、清除、重置等破坏性按钮（文案匹配配置 `destructive_button_patterns`）在点击后会触发实际的后端操作或不可逆状态变更，必须有显式防护机制，避免被自动测试脚本、误点、回车误触触发。
+
+复盘 Tunnel.vue 等控制类页面时发现：启动/停止按钮未设置 `loading` 状态、未禁用、也无二次确认，自动化测试脚本在表单填写后顺次点击页面所有按钮，触发了真实的隧道启停操作；保存按钮未禁用，测试脚本点击后把测试数据写入后端 config.json。
+
+满足以下任一防护即视为合规（对应配置 `required_guards`，至少满足其一）：
+
+1. **loading**：按钮 `:loading="submitting"` 绑定请求状态，请求期间按钮自动禁用，防止重复点击与测试脚本连续点击。
+2. **disabled**：按钮 `:disabled="!formValid"` 绑定前置条件，前置条件不满足时按钮不可点击（如必填字段为空、未选择目标、未勾选确认复选框）。
+3. **confirm**：按钮 `@click` 处理函数内先调用 `ElMessageBox.confirm` 二次确认，用户取消后不发起请求（与 DA-3 一致）。
+
+无任何防护的破坏性按钮在自动化测试、E2E 回归、键盘导航场景下极易被误触发，造成真实业务影响（如生产环境启停服务、覆盖配置、删除数据）。
+
+### Judgment Logic
+
+1. 扫描 `.vue` 文件的 `<template>` 段，提取所有 `<el-button>` 或原生 `<button>` 的文本内容。
+2. 对每个按钮，若文本匹配 `destructive_button_patterns` 中的任一模式（如 `启动|停止|保存|删除|清除|重置`），标记为破坏性按钮。
+3. 对每个破坏性按钮，检查是否满足 `required_guards` 中的至少一项：
+   - `loading`：按钮元素是否绑定 `:loading="..."` 属性。
+   - `disabled`：按钮元素是否绑定 `:disabled="..."` 属性。
+   - `confirm`：按钮的 `@click` 处理函数中是否调用 `ElMessageBox.confirm`（或同义确认组件）。
+4. 任一防护都未满足即告警，列出按钮文案、文件位置、缺失的防护类型。
+
+### Applicable Scenarios
+
+- 配置类页面（保存、恢复默认、重置）。
+- 控制类页面（启动、停止、重启服务/任务）。
+- 数据操作类页面（删除、清除、批量操作）。
+- 任何会被自动化测试（Playwright / Cypress / Selenium）或 E2E 回归触碰到的页面。
+
+### Non-Applicable Scenarios
+
+- 纯导航/查询类按钮（如"刷新"、"查询"、"切换 Tab"），不触发实际状态变更。
+- 已通过 DA-1 ~ DA-5 完整防护的破坏性操作（loading + confirm + danger 样式齐备，自然满足本规则）。
+- 内部工具页面且明确不接入自动化测试的按钮（应在配置豁免清单中显式列出）。
+
+### Configuration Parameters
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `destructive_button_patterns` | `启动\|停止\|保存\|删除\|清除\|重置` | 破坏性按钮文案匹配模式（正则 alternation） |
+| `required_guards` | `['loading', 'disabled', 'confirm']` | 破坏性按钮必须满足的防护类型（至少其一） |
+| `guard_min_match` | `1` | 至少需满足的防护数量 |
+| `destructive_button_whitelist` | `[]` | 豁免按钮文案清单（如纯前端状态切换按钮） |
+
+### Suggested Fix
+
+```vue
+<!-- ❌ 无防护的破坏性按钮 -->
+<el-button @click="startService">启动</el-button>
+<el-button @click="stopService">停止</el-button>
+<el-button @click="saveConfig">保存</el-button>
+
+<!-- ✅ loading + disabled 双重防护 -->
+<el-button
+  :loading="starting"
+  :disabled="!configValid"
+  @click="startService"
+>启动</el-button>
+
+<!-- ✅ confirm 二次确认防护 -->
+<el-button @click="handleStop">停止</el-button>
+
+<script setup lang="ts">
+const starting = ref(false)
+async function handleStop() {
+  try {
+    await ElMessageBox.confirm('本次操作将停止服务，且可能中断进行中的任务。', '停止确认', {
+      type: 'warning',
+      confirmButtonText: '确认停止',
+      cancelButtonText: '取消'
+    })
+    await stopService()
+  } catch {
+    // 用户取消，不发请求
+  }
+}
+</script>
+```
+
+> **示例代码**: 参见 [examples/dangerous-action-rule-examples.md](examples/dangerous-action-rule-examples.md)。
+
 ## Checklist
 - [ ] 破坏性操作提供 `dry_run` 预览模式，默认 `true`
 - [ ] 关闭 `dry_run` 时按钮切换为 danger 样式
@@ -204,3 +292,4 @@ const handleSubmit = async (key: CleanKey) => {
 - [ ] 确认文案包含"不可撤销"提示
 - [ ] 实际执行后记录审计日志
 - [ ] 多表单场景按 key 独立管理 loading 与 result，提交时重置对应 result
+- [ ] 破坏性按钮（启动/停止/保存/删除/清除/重置）满足 loading / disabled / confirm 至少其一的防护

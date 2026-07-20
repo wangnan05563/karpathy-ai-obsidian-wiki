@@ -185,3 +185,148 @@ open('script.py', 'w', encoding='utf-8').write(content)
    }
    ```
 5. 用 `ensure_utf8(file_path)` 工具函数自动 GBK→UTF-8 转换（在 `_shared.py` 中提供）
+
+## 17. API 测试返回 404（路由未注册）
+
+**症状**：前端调用 `/api/xxx` 返回 404，但路由文件已存在于 `routes/` 目录
+
+**原因**：新增 `routes/*.ts` 文件但未在 `index.ts` 中导入与注册
+
+**解决方案**：
+1. 检查 `routes/` 目录下所有 `.ts` 文件
+2. 在 `index.ts` 中添加 `import` 语句
+3. 在路由注册区添加 `registerXxxRoute(app, ...)` 调用
+4. 重启服务验证
+
+**预防**：启用 `route_registration_check.enabled: true` 配置项，测试时自动检测后端路由目录下所有 `.ts` 文件是否在入口文件中注册，未注册即提前失败并输出缺失列表
+
+---
+
+## 18. 前后端类型不匹配
+
+**症状**：前端 TypeScript 类型检查失败，或运行时字段 `undefined`
+
+**原因**：后端 `types.ts` 新增 `interface` 但前端 `types.ts` 未同步
+
+**解决方案**：
+1. 对比后端 `types.ts` 的 `export interface`
+2. 在前端 `types.ts` 同步新增对应类型
+3. 运行 `vue-tsc --noEmit` 验证
+
+**预防**：启用 `type_sync_check.enabled: true` 配置项，测试时自动检测前后端 `types.ts` 接口字段对齐情况；通过 `ignore_interfaces` 排除仅后端使用的内部接口（如 `EngineAdapter` / `VaultService`）
+
+---
+
+## 19. Chromium headless 模式崩溃
+
+**症状**：浏览器启动后立即崩溃，Canvas/WebGL 相关错误，报 `GPU process isn't usable` 或 `ContextResultCode::kGpuChannelDestroyed`
+
+**原因**：headless 模式下 GPU 加速不稳定（虚拟机/RDP/无 GPU 环境尤为常见）
+
+**解决方案**：
+1. 添加 `--disable-gpu` 启动参数
+2. 添加 `--no-sandbox` `--disable-dev-shm-usage` `--disable-setuid-sandbox`
+3. 检查 `browser.launch_args` 配置
+4. 仍崩溃时追加 `--use-gl=swiftshader` 软件渲染
+
+**预防**：启用 `headless_crash_guard.enabled: true` 配置项，自动验证 `browser.launch_args` 包含 `headless_crash_guard.required_launch_args` 中所有必需参数；启动崩溃时按 `max_retries` 自动重试，间隔 `retry_interval_ms`
+
+---
+
+## 20. Python 测试脚本编码错误
+
+**症状**：运行 Python 脚本报 `SyntaxError` 或 `UnicodeDecodeError`
+
+**原因**：脚本含中文但以 GBK 编码写入，与声明的 utf-8 不符
+
+**解决方案**：
+1. 检查文件首字节是否为 BOM（`0xEF 0xBB 0xBF`）
+2. 用 UTF-8 无 BOM 重新保存
+3. 验证文件无 U+FFFD 替换字符
+
+**预防**：启用 `encoding_safety_enhanced.verify_after_write: true` 配置项，写入后自动验证编码；`encoding_safety_enhanced.check_replacement_char: true` 检测 U+FFFD 替换字符（编码损坏标志），`replacement_char_threshold: 0` 即不允许任何 U+FFFD 出现
+
+---
+
+## 21. PowerShell 命令拼接失败
+
+**症状**：执行命令报 `Empty pipe element` 或 `The token '&&' is not a valid statement separator`
+
+**原因**：PowerShell 5.1 不支持 `&&` 和 `||` 语法（这是 bash/cmd 的语法）
+
+**解决方案**：
+1. 将 `&&` 替换为 `;`
+2. 将 `||` 替换为 `;`（需手动判断错误处理逻辑）
+3. 拆分长命令为多条短命令（每条 < 200 字符）
+
+**预防**：启用 `powershell_compatibility.enabled: true` 配置项，自动扫描测试脚本与配置文件中是否出现 `forbidden_syntaxes`（默认 `&&` / `||`）；命中即判定失败，并提示用 `syntax_replacements` 中的替代语法；`split_long_commands: true` 自动拆分超过 `max_command_length` 的长命令
+
+## 22. 章节卡片仅显示标题（双重滚动裁切）
+
+**症状**：帮助文档页面的章节卡片只显示图标+标题一行（约 50px 高度），下方 intro/blocks/表格内容全部不可见，标题文字"快速开始使用文档"被截断为"快速开始"
+
+**原因**：容器链路上 `overflow-y: auto` 嵌套层数超过 1，形成双重滚动：
+- 外层 `.content` 已设 `overflow-y: auto` 接管页面滚动
+- 内层 `.help-content-area` 又设 `overflow-y: auto`，与外层形成双重滚动
+- 全局 `.glass-card` 类的 `overflow: hidden` 进一步裁切内容
+- flex 子项默认 `flex: 0 1 auto`，在双重滚动嵌套中被等比压缩到 `min-content` 高度
+
+**解决方案**：
+1. 移除内层容器的 `overflow-y: auto`，让外层 `.content` 统一接管滚动
+2. 给自然高度的 flex 子项加 `flex-shrink: 0`，防止被压缩
+
+**预防**：启用 `scroll_container_tests.enabled: true` 配置项，自动遍历 `test_pages` 中每个页面：
+- 检查 `inner_overflow_selectors` 选择器的 `overflow-y` computed style
+- 统计容器链路上 `overflow-y: auto` 嵌套层数（超过 `max_overflow_layers` 即告警）
+- 获取 `card_selectors` 的 `boundingRect().height`，低于 `min_card_height_px`（默认 200px）即判定为被压缩
+- `require_content_visible: true` 时验证卡片内除标题外至少有一个内容块可见
+
+## 23. 跨组件跳转失效（About → Help 无响应）
+
+**症状**：点击 About 页面的"查看帮助文档"按钮后，视图未切换到 Help，控制台无错误
+
+**原因**：跨组件视图跳转未通过 `CustomEvent` 派发，或入口组件未在 `onMounted` / `onBeforeUnmount` 配对管理监听器：
+- 直接操作入口组件的 ref（违反组件隔离原则）
+- 通过 localStorage 间接传递跳转意图（异步且不可靠）
+- 监听器用匿名箭头函数，`removeEventListener` 无法引用同一函数
+- 监听器只在 `onMounted` 中 `addEventListener`，未在 `onBeforeUnmount` 中 `removeEventListener`（内存泄漏）
+
+**解决方案**：
+1. 派发方使用 `globalThis.dispatchEvent(new CustomEvent('karpathy:navigate', { detail: 'help' }))`
+2. 入口组件用具名函数（非匿名箭头函数）作为监听器
+3. `onMounted` 中 `addEventListener`，`onBeforeUnmount` 中 `removeEventListener` 配对管理
+4. 监听器内校验 `detail` 字段在白名单内后才切换视图
+
+**预防**：启用 `spa_navigation_tests.enabled: true` 配置项，自动遍历 `test_routes` 中每条跳转链路：
+- 导航到 `from` 页面，点击 `trigger_selector` 触发跳转
+- 等待 `switch_wait_ms` 后验证 `to` 视图已渲染
+- 读取 `app_entry` 文件，搜索 `addEventListener` 与 `removeEventListener` 调用
+- 验证事件名匹配 `event_name_pattern`（`{project}:navigate` → `karpathy:navigate`）
+- `require_lifecycle_pair: true` 时验证 add 在 `onMounted` 中、remove 在 `onBeforeUnmount` 中
+- `validate_detail_whitelist: true` 时验证派发的 `detail` 字段在 `allowed_views` 白名单内
+
+## 24. 检查更新卡在 loading 不恢复
+
+**症状**：点击"检查更新"按钮后，按钮一直显示 loading 状态，无法恢复到 idle 或其他状态；组件卸载后定时器仍在执行，控制台出现"组件已卸载仍更新状态"警告
+
+**原因**：检查更新状态机不完整或定时器未清理：
+- 状态机缺少 `error` 状态，请求失败时无法恢复
+- 状态机缺少 `idle` 初始态，首次进入页面时按钮状态不确定
+- `setInterval` 未在 `onBeforeUnmount` 中 `clearInterval`，组件卸载后定时器仍执行
+- 轮询间隔 < 后端缓存 TTL，每次轮询都命中缓存，相当于无意义的额外请求
+- 离线模式下仍发起真实 GitHub API 调用，增加延迟
+
+**解决方案**：
+1. 状态机覆盖 5 态：`idle` / `loading` / `latest` / `newer` / `error`
+2. `latest` 状态 3 秒后自动回 `idle`
+3. `setInterval` 在 `onMounted` 启动，`clearInterval` 在 `onBeforeUnmount` 配对清理
+4. 轮询间隔 ≥ 后端缓存 TTL（推荐均设为 5 分钟）
+5. 离线模式 `offline_mode: true` 时后端固定返回 `{ has_update: false, source: 'local' }`
+
+**预防**：启用 `update_check_tests.enabled: true` 配置项，自动遍历 `test_pages` 中每个页面：
+- 验证状态机覆盖 `required_states` 全部状态（默认 5 态）
+- 检查 UI 中每个状态有对应的 `v-if` / `v-else-if` 分支
+- 调用 `update_endpoint` 接口，`offline_mode: true` 时验证响应固定为 `{ has_update: false, source: 'local' }`
+- `validate_no_external_call_in_offline: true` 时验证后端未发起外部 GitHub API 调用
+- `validate_poll_ge_ttl: true` 时读取前端代码中的 `setInterval` 间隔，验证 ≥ `cache_ttl_ms`
+- `require_timer_cleanup: true` 时读取 `app_entry` 文件，验证 `setInterval` 与 `clearInterval` 在 `onMounted` / `onBeforeUnmount` 配对

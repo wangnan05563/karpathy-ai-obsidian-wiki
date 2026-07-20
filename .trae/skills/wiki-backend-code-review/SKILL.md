@@ -1,6 +1,6 @@
 ---
 name: wiki-backend-code-review
-description: "Review Fastify + TypeScript backend code. Covers SSE streaming, filesystem safety, route design, harness integration, security, error handling, config management, data consistency, and session state. All configurable parameters are loaded from config/review-config.md -- no hardcoding in rule files."
+description: "Review Fastify + TypeScript backend code. Covers SSE streaming, filesystem safety, route design, harness integration, security, error handling, config management, data consistency, session state, route registration guards, null safety, graceful shutdown, sensitive field masking, type sync, and config merge preservation. All configurable parameters are loaded from config/review-config.md -- no hardcoding in rule files."
 ---
 
 # Wiki Backend Code Review
@@ -45,10 +45,17 @@ ormalize, 	ask_links |
 | Persistence & cache | import.meta.url, process.cwd(), refreshConfigCache, request.params.id, path.join, localStorage, IndexedDB, data/conversations, .gitignore |
 | Encoding safety | UTF-8, BOM, GB2312, tsc encoding error, Set-Content/Out-File without -Encoding, WriteAllText, 中文注释乱码, Invalid character |
 | Cleanup audit | cleanup, archive, deleteOne, dry_run, days parameter, JSONL audit log, loadStatus, batch delete, errors[] collection |
+| Route registration | routes/*.ts, index.ts, register(), app.post/app.get, Fastify route, 404 |
+| Null guard | this.provider, this.child, this.connection, spawn/exec/connect/listen, TS2531, possibly null |
+| Graceful shutdown | spawn, setInterval, connect, listen, SIGINT, SIGTERM, process.on, process.exit, child.kill, clearInterval |
+| Sensitive field masking | apiKey, authtoken, password, secret, token, GET /config, mask, configured flag, empty string |
+| Type sync | types.ts, export interface, frontend, backend, sync, monorepo, import type |
+| Config merge preservation | config.json, writeFile, readFile, merge, shallow, preserve_sections, tunnel/llm/server section |
+| Update check backend | check-update, has_update, offline_mode, cache_ttl, GitHub API, releases/latest, AbortController, current_version |
 
 ## Generic Safety Net
 
-If no rule matches, perform best-effort review on: **Security** (hardcoded keys, path traversal, command injection, improper binding, error info leakage), **Performance** (sync FS APIs, missing locks, unclosed SSE connections, missing budget checks), **Code Quality** (SRP violations, inconsistent signatures, inline prompts, magic strings), **Testing** (missing coverage, implementation-detail tests, flaky patterns, missing edge cases), **Encoding** (non-UTF-8 source files, BOM in .ts/.json, PowerShell default-encoding writes on Chinese-commented files), **Cleanup safety** (batch delete without audit log, missing days lower-bound, dry_run default false, missing per-item try-catch, missing state refresh after delete).
+If no rule matches, perform best-effort review on: **Security** (hardcoded keys, path traversal, command injection, improper binding, error info leakage), **Performance** (sync FS APIs, missing locks, unclosed SSE connections, missing budget checks), **Code Quality** (SRP violations, inconsistent signatures, inline prompts, magic strings), **Testing** (missing coverage, implementation-detail tests, flaky patterns, missing edge cases), **Encoding** (non-UTF-8 source files, BOM in .ts/.json, PowerShell default-encoding writes on Chinese-commented files), **Cleanup safety** (batch delete without audit log, missing days lower-bound, dry_run default false, missing per-item try-catch, missing state refresh after delete), **Route registration** (new routes/*.ts not imported or register() not called in entry file), **Null safety** (external-async-assigned fields used without `if (!x)` guard, TS2531), **Graceful shutdown** (spawn/setInterval/connect without SIGINT/SIGTERM cleanup hooks), **Type sync** (backend types.ts new interface missing in frontend types.ts), **Config merge** (writeFile on multi-section config without reading original first, preserve_sections lost), **Update check** (check-update route without module-level cache, offline_mode true but still calling GitHub API, missing AbortController timeout, hardcoded current_version instead of reading package.json).
 
 ## Condensed Output Format
 
@@ -103,4 +110,4 @@ No issues found.
 - Rule Description fields are in Chinese to align with codebase conventions -- keep review explanations consistent.
 - Use best-effort File:Line references; fall back to the most specific identifier available.
 - When actual file paths differ from config directory mappings, review anyway and note the discrepancy.
-- The rules index ([references/.rules-index.md](references/.rules-index.md)) provides trigger keywords and core checks for all 10 rule files. Load full rule files only for matched categories.
+- The rules index ([references/.rules-index.md](references/.rules-index.md)) provides trigger keywords and core checks for all 18 rule files. Load full rule files only for matched categories.

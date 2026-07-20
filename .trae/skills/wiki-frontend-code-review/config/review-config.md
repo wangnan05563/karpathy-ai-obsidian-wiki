@@ -218,6 +218,9 @@ SSE 流式接口须按下列事件类型分段推送，前端按类型分发到�
 | `encoding_scan_scope` | `.vue,.ts,.tsx,.json,.md` | 扫描文件扩展名 |
 | `fffd_indicator` | `U+FFFD` | 乱码指示字符 |
 | `ascii_whitelist` | `true` | 纯 ASCII 文件免检 |
+| `check_replacement_char` | `true` | 在严格 UTF-8 解码后额外扫描 `U+FFFD` 替换字符，识别"解码合法但内容已损坏"的文件 |
+| `replacement_char_threshold` | `0` | 允许出现的 `U+FFFD` 数量上限；`0` 表示完全禁止 |
+| `replacement_char_action` | `block` | 命中时的动作：`block` 阻断提交 / `warn` 仅告警 |
 
 ## 危险操作审查参数
 
@@ -231,6 +234,10 @@ SSE 流式接口须按下列事件类型分段推送，前端按类型分发到�
 | `confirm_type` | `warning` | 确认弹窗类型 |
 | `cancel_no_request` | `true` | 取消确认不发起请求 |
 | `irreversible_hint_required` | `true` | 确认文案必须含不可撤销提示 |
+| `destructive_button_patterns` | `启动\|停止\|保存\|删除\|清除\|重置` | 破坏性按钮文案匹配模式（正则 alternation） |
+| `required_guards` | `['loading', 'disabled', 'confirm']` | 破坏性按钮必须满足的防护类型（至少其一） |
+| `guard_min_match` | `1` | 至少需满足的防护数量 |
+| `destructive_button_whitelist` | `[]` | 豁免按钮文案清单（如纯前端状态切换按钮） |
 
 ## 多表单状态管理参数
 
@@ -242,3 +249,87 @@ SSE 流式接口须按下列事件类型分段推送，前端按类型分发到�
 | `independent_loading` | `true` | 每个表单独立 loading |
 | `independent_result` | `true` | 每个表单独立 result |
 | `reset_on_submit` | `true` | 提交时重置 result |
+
+## 前端视图注册审查参数
+
+> 前端视图注册规则（见 [references/route-registration-frontend-rule.md](../references/route-registration-frontend-rule.md)）所依赖的可配置参数集中在此管理，规则文件只描述通用模式。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `views_directory` | `packages/web/src/views/` | 视图文件所在目录（相对项目根） |
+| `app_entry` | `packages/web/src/App.vue` | 应用入口文件路径 |
+| `view_type_name` | `ViewName` | 视图 key 的字面量联合类型名称 |
+| `required_hooks` | `['import', 'type', 'v-for', 'v-else-if']` | 视图注册必须完成的钩子列表 |
+
+> 适用场景：SPA 手动路由项目（入口文件通过 `v-if` / `v-else-if` 链路切换视图）。若项目已采用 vue-router / react-router 等自动路由方案，本段配置不生效，规则文件不参与审查。
+
+## 前后端类型同步审查参数
+
+> 前后端类型同步规则（见 [references/type-sync-frontend-rule.md](../references/type-sync-frontend-rule.md)）所依赖的可配置参数集中在此管理，规则文件只描述通用模式。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `backend_types_path` | `packages/server/src/types.ts` | 后端 types 文件路径（相对项目根） |
+| `frontend_types_path` | `packages/web/src/types.ts` | 前端 types 文件路径 |
+| `sync_interfaces` | `[]` | 需同步的接口名清单；留空表示全部 `export interface` 都需同步 |
+| `ignore_optional_marker` | `true` | 是否忽略 `?` 可选标记差异（后端必填前端可选视为兼容） |
+
+> 适用场景：全栈 TypeScript 项目，前后端通过手动维护的 `types.ts` 文件约定共享类型。若项目使用 GraphQL / tRPC / OpenAPI Generator 自动生成前端类型，本段配置不生效。
+
+## 敏感字段展示审查参数
+
+> 敏感字段展示规则（见 [references/sensitive-field-display-rule.md](../references/sensitive-field-display-rule.md)）所依赖的可配置参数集中在此管理，规则文件只描述通用模式。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `sensitive_field_patterns` | `key\|token\|secret\|password\|authtoken` | 敏感字段名匹配模式（正则 alternation，大小写不敏感） |
+| `display_strategy` | `masked_placeholder` | 敏感字段展示策略：`masked`（脱敏值回显）/ `masked_placeholder`（空输入框 + 提示） |
+| `masked_prefix` | `****` | `masked` 策略下脱敏值前缀（用于识别"已是脱敏值"避免二次处理） |
+| `placeholder_hint` | `留空不修改` | `masked_placeholder` 策略下输入框 placeholder 必须包含的提示关键词 |
+| `sensitive_field_whitelist` | `[]` | 豁免字段名清单（如内部测试用字段） |
+
+> 适用场景：从后端拉取后回显到表单输入框的凭证类字段（API Key、authtoken、password、secret、token）。登录/注册/修改密码流程的"新密码输入框"（用户主动输入，非后端回显）不适用本规则。
+
+## 滚动容器审查参数
+
+> 滚动容器规则（见 [references/scroll-container-rule.md](../references/scroll-container-rule.md)）所依赖的可配置参数集中在此管理，规则文件只描述通用模式。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `scroll_container.max_overflow_layers` | `1` | 容器链路上 `overflow-y: auto` 最大嵌套层数；超过即告警 |
+| `scroll_container.flex_shrink_required_in_flex_column` | `true` | `flex-direction: column + flex: 1` 容器内的自然高度子项必须 `flex-shrink: 0` |
+| `scroll_container.glass_card_selectors` | `.glass-card` | 全局可能产生 `overflow: hidden` 副作用的卡片类选择器清单（逗号分隔） |
+| `scroll_container.outer_scroll_selectors` | `.content, .app-shell` | 已设 `overflow-y: auto` 接管滚动的外层容器选择器清单（逗号分隔） |
+
+> 适用场景：Vue 3 + flex 布局的多卡片长内容页面（帮助文档、设置面板、仪表盘卡片堆叠），且外层已设 `overflow-y: auto` 接管页面滚动。CSS Grid 布局、原生块级元素堆叠不适用。
+
+## SPA 内部跳转审查参数
+
+> SPA 内部跳转规则（见 [references/spa-navigation-rule.md](../references/spa-navigation-rule.md)）所依赖的可配置参数集中在此管理，规则文件只描述通用模式。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `spa_navigation.event_name_pattern` | `{project}:navigate` | 事件名模式，`{project}` 占位符运行时替换为 `project_name` |
+| `spa_navigation.project_name` | `karpathy` | 项目名，替换事件名中的 `{project}` 占位符 |
+| `spa_navigation.app_entry` | `packages/web/src/App.vue` | 监听事件的入口组件路径（相对项目根） |
+| `spa_navigation.allowed_views` | `[]` | 允许跳转的视图名白名单；留空表示不校验 |
+| `spa_navigation.require_lifecycle_pair` | `true` | 监听器必须在 `onMounted` / `onBeforeUnmount` 配对管理 |
+
+> 适用场景：Vue 3 + `<script setup>` SPA 手动路由项目，入口组件通过 `currentView` ref + `v-if` / `v-else-if` 链路切换视图。vue-router / react-router / Next.js / Nuxt.js 等基于配置或文件约定的自动路由项目不适用。
+
+## 检查更新审查参数
+
+> 检查更新状态机规则（见 [references/update-check-rule.md](../references/update-check-rule.md)）所依赖的可配置参数集中在此管理，规则文件只描述通用模式。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `check_update.cache_ttl_ms` | `300000` | 后端缓存 TTL（毫秒），默认 5 分钟 |
+| `check_update.poll_interval_ms` | `300000` | 前端轮询间隔（毫秒），必须 ≥ `cache_ttl_ms` |
+| `check_update.first_check_delay_ms` | `5000` | 首次检查延迟（毫秒），避免与首屏渲染竞争 |
+| `check_update.latest_to_idle_ms` | `3000` | `latest` 状态自动回 `idle` 的延迟（毫秒） |
+| `check_update.offline_mode` | `true` | 离线模式开关；`true` 时后端固定返回 `has_update: false` |
+| `check_update.required_states` | `idle, loading, latest, newer, error` | 必需状态列表（逗号分隔） |
+| `check_update.update_endpoint` | `/api/about/check-update` | 后端检查更新接口路径 |
+| `check_update.cleanup_hook` | `onBeforeUnmount` | 定时器清理生命周期钩子名 |
+
+> 适用场景：Vue 3 + `<script setup>` 的"关于"页面或"设置"面板的检查更新功能，含轮询定时的异步状态机。PWA Service Worker 更新、Electron autoUpdater、一次性检查（无轮询）不适用。

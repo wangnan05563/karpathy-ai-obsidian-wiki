@@ -7,7 +7,7 @@
 # --- 构建配置（项目特定） ---
 build:
   script_path: "karpathy-wiki/scripts/前端构建.bat"
-  artifact_path: "karpathy-wiki/packages/web/dist/index.html"
+  artifact_path: "karpathy-wiki/api/public/index.html"
 
 # --- 启动配置（项目特定） ---
 startup:
@@ -44,6 +44,12 @@ navigation:
       label: "知识问答"
       expected_elements:
         - { selector: "input[type='text'], textarea", name: "问答输入框" }
+        # F-3.4 输入工具栏 7 chip
+        - { selector: ".input-toolbar, [class*='input-toolbar']", name: "输入工具栏" }
+        # F-3.5 多模态图片上传按钮
+        - { selector: ".upload-btn, .attachment-uploader, [class*='attachment']", name: "图片上传按钮" }
+        # F-3.9 模型切换选择器
+        - { selector: ".model-selector, [class*='model-selector']", name: "模型切换器" }
     - key: "graph"
       label: "图谱"
       expected_elements:
@@ -100,6 +106,14 @@ api_tests:
     - path: "/api/tunnel/status"
       expected_status: 200
     - path: "/api/tunnel/config"
+      expected_status: 200
+    # F-3.9 模型切换：预设列表 + 当前配置
+    - path: "/api/ai/presets"
+      expected_status: 200
+    - path: "/api/ai/config"
+      expected_status: 200
+    # F-3.10 联网搜索状态
+    - path: "/api/cleanup/status"
       expected_status: 200
 
 # ============================================================
@@ -212,3 +226,227 @@ powershell_constraints:
   bypass_bat_pause: true
   # 绕过 pause 的输入内容
   pause_bypass_input: '""'
+
+# ============================================================
+# 以下为历史问题复盘补充配置（第二批次）
+# 覆盖路由注册、类型同步、CORS 绕过、Headless 崩溃、PowerShell 兼容、编码增强
+# 所有参数可配置，避免硬编码
+# ============================================================
+
+# --- 路由注册验证配置 ---
+# 自动检测后端路由文件是否在入口文件中注册
+route_registration_check:
+  # 是否启用路由注册验证
+  enabled: true
+  # 后端路由目录（相对于项目根目录）
+  backend_route_directory: "karpathy-wiki/api/src/routes"
+  # 后端入口文件（相对于项目根目录）
+  backend_entry_file: "karpathy-wiki/api/src/index.ts"
+  # 注册函数命名模式（用于 Grep 匹配）
+  register_function_pattern: "register"
+  # 豁免文件列表（不需注册的路由文件名）
+  exempt_files: []
+  # 前端视图目录（相对于项目根目录，留空则跳过前端检查）
+  frontend_views_directory: "karpathy-wiki/frontend/src/views"
+  # 前端入口文件（相对于项目根目录）
+  frontend_entry_file: "karpathy-wiki/frontend/src/App.vue"
+  # 前端视图类型名（如 ViewName）
+  frontend_view_type_name: "ViewName"
+  # 前端视图必须注册的钩子列表
+  frontend_required_hooks:
+    - "import"
+    - "type"
+    - "v-for"
+    - "v-else-if"
+
+# --- 类型同步验证配置 ---
+# 自动检测前后端 types.ts 接口字段是否对齐
+type_sync_check:
+  # 是否启用类型同步验证
+  enabled: true
+  # 后端 types.ts 路径（相对于项目根目录）
+  backend_types_path: "karpathy-wiki/api/src/types.ts"
+  # 前端 types.ts 路径（相对于项目根目录）
+  frontend_types_path: "karpathy-wiki/frontend/src/types.ts"
+  # 需同步的接口名列表（留空则检测全部 export interface）
+  sync_interfaces: []
+  # 忽略的接口名列表（如仅后端使用的内部接口）
+  ignore_interfaces:
+    - "EngineAdapter"
+    - "VaultService"
+
+# --- CORS 绕过策略配置 ---
+# API 测试使用 Playwright context.request 绕过浏览器 CORS 限制
+cors_bypass:
+  # 是否启用 CORS 绕过（API 测试默认使用 context.request）
+  enabled: true
+  # 绕过策略：context_request | backend_proxy | disabled
+  strategy: "context_request"
+  # 需绕过的 API 路径前缀列表
+  api_path_prefixes:
+    - "/api"
+    - "/health"
+
+# --- Headless 崩溃防护配置 ---
+# Chromium headless 模式崩溃防护
+headless_crash_guard:
+  # 是否启用崩溃防护
+  enabled: true
+  # 必须的启动参数列表（headless 模式下）
+  required_launch_args:
+    - "--disable-gpu"
+    - "--no-sandbox"
+    - "--disable-dev-shm-usage"
+    - "--disable-setuid-sandbox"
+  # 崩溃重试次数
+  max_retries: 2
+  # 崩溃重试间隔（毫秒）
+  retry_interval_ms: 2000
+
+# --- PowerShell 兼容性配置 ---
+# Windows PowerShell 环境的命令兼容性处理
+powershell_compatibility:
+  # 是否启用 PowerShell 兼容性检查
+  enabled: true
+  # 禁止使用的语法列表（PowerShell 不支持）
+  forbidden_syntaxes:
+    - "&&"
+    - "||"
+  # 替代语法映射
+  syntax_replacements:
+    "&&": ";"
+    "||": "; "
+  # 是否拆分长命令
+  split_long_commands: true
+  # 单条命令最大长度
+  max_command_length: 200
+  # 是否使用新终端执行命令
+  use_fresh_terminal: true
+
+# --- 编码安全增强配置 ---
+# 在现有 encoding_safety 段基础上增强
+encoding_safety_enhanced:
+  # 写入文件后是否验证编码
+  verify_after_write: true
+  # 检测 U+FFFD 替换字符（编码损坏标志）
+  check_replacement_char: true
+  # U+FFFD 允许出现的最大次数（0 = 不允许）
+  replacement_char_threshold: 0
+  # 检测的文件扩展名列表
+  check_extensions:
+    - ".ts"
+    - ".vue"
+    - ".py"
+    - ".md"
+    - ".json"
+    - ".yaml"
+
+# ============================================================
+# 以下为帮助文档与关于模块测试复盘补充配置（第三批次）
+# 覆盖滚动容器、SPA 内部跳转、检查更新状态机
+# 所有参数可配置，避免硬编码
+# ============================================================
+
+# --- 滚动容器测试配置（项目特定） ---
+# 验证 flex 布局的多卡片长内容页面是否存在双重滚动裁切问题
+# 帮助文档页面曾因 .help-content-area 设 overflow-y: auto 与外层 .content 形成双重滚动
+# 导致章节卡片被压缩到 ~50px，仅显示标题，内容被裁切
+scroll_container_tests:
+  enabled: true
+  # 需要检测的页面 key（对应 navigation.pages 中的 key）
+  test_pages: ["help", "about"]
+  # 外层滚动容器选择器（已设 overflow-y: auto 接管页面滚动）
+  outer_scroll_selectors:
+    - ".content"
+  # 内层可能重复设 overflow-y: auto 的容器选择器
+  inner_overflow_selectors:
+    - ".help-content-area"
+    - ".about-content-area"
+  # 卡片类选择器（可能产生 overflow: hidden 副作用）
+  card_selectors:
+    - ".glass-card"
+    - ".intro-card"
+    - ".section-card"
+  # 卡片最小高度阈值（px），低于此值视为被压缩
+  min_card_height_px: 200
+  # 是否验证卡片内容可见性（标题 + 至少一个内容块）
+  require_content_visible: true
+  # 失败时是否截图取证
+  screenshot_on_fail: true
+
+# --- SPA 内部跳转测试配置（项目特定） ---
+# 验证跨组件视图切换（如 About → Help）的 CustomEvent 派发与监听
+# 项目使用 SPA 手动路由（currentView ref + v-if/v-else-if），无 vue-router
+# About.vue 的"查看帮助文档"按钮通过 dispatchEvent 跳转到 Help.vue
+spa_navigation_tests:
+  enabled: true
+  # 测试跳转链路列表
+  test_routes:
+    - from: "about"
+      to: "help"
+      trigger_selector: ".help-link, [class*='help-link']"
+      trigger_text: "查看帮助文档"
+    - from: "help"
+      to: "about"
+      trigger_selector: ".about-link, [class*='about-link']"
+      trigger_text: "返回关于"
+  # 事件名模式（与 wiki-frontend-code-review 的 spa_navigation.event_name_pattern 对齐）
+  event_name_pattern: "{project}:navigate"
+  # 项目名（替换事件名中的 {project} 占位符）
+  project_name: "karpathy"
+  # 入口组件路径（监听事件的组件）
+  app_entry: "karpathy-wiki/frontend/src/App.vue"
+  # 是否验证监听器在 onBeforeUnmount 中清理
+  require_lifecycle_pair: true
+  # 是否验证 detail 字段在白名单内
+  validate_detail_whitelist: true
+  # 允许跳转的视图名白名单
+  allowed_views:
+    - "dashboard"
+    - "ingest"
+    - "browse"
+    - "query"
+    - "graph"
+    - "health"
+    - "config"
+    - "tunnel"
+    - "about"
+    - "help"
+  # 跳转后等待视图切换的最大时间（毫秒）
+  switch_wait_ms: 1000
+
+# --- 检查更新状态机测试配置（项目特定） ---
+# 验证检查更新功能的状态机完整性、定时器清理、轮询节奏
+# About.vue 的检查更新按钮需覆盖 5 态：idle/loading/latest/newer/error
+# 项目无 GitHub Release 通道，离线模式固定返回 has_update: false
+update_check_tests:
+  enabled: true
+  # 需要检测的页面 key
+  test_pages: ["about"]
+  # 检查更新接口路径
+  update_endpoint: "/api/about/check-update"
+  # 必需状态列表
+  required_states:
+    - "idle"
+    - "loading"
+    - "latest"
+    - "newer"
+    - "error"
+  # 后端缓存 TTL（毫秒）
+  cache_ttl_ms: 300000
+  # 轮询间隔（毫秒），必须 >= cache_ttl_ms
+  poll_interval_ms: 300000
+  # 首次检查延迟（毫秒）
+  first_check_delay_ms: 5000
+  # latest 状态自动回 idle 的延迟（毫秒）
+  latest_to_idle_ms: 3000
+  # 离线模式（true 时后端固定返回 has_update: false）
+  offline_mode: true
+  # 是否验证定时器在 onBeforeUnmount 中清理
+  require_timer_cleanup: true
+  # 是否验证轮询间隔 >= 缓存 TTL
+  validate_poll_ge_ttl: true
+  # 模拟离线模式时是否验证后端不发起外部请求
+  validate_no_external_call_in_offline: true
+  # 失败时是否截图取证
+  screenshot_on_fail: true

@@ -267,3 +267,185 @@ powershell_constraints:
   bypass_bat_pause: true
   pause_bypass_input: '""'
 
+# ============================================================
+# 以下为历史问题复盘补充默认配置（第二批次）
+# 项目特定值请在 config.yaml 中覆盖
+# ============================================================
+
+# --- 路由注册验证默认配置 ---
+# 默认关闭，项目在 config.yaml 中按实际目录开启
+route_registration_check:
+  enabled: false
+  # 默认后端路由目录（项目应覆盖）
+  backend_route_directory: "services/api/src/routes"
+  backend_entry_file: "services/api/src/index.ts"
+  # 默认注册函数命名模式（用于 Grep 匹配）
+  register_function_pattern: "register"
+  exempt_files: []
+  # 默认前端视图目录（留空则跳过前端检查）
+  frontend_views_directory: ""
+  frontend_entry_file: ""
+  frontend_view_type_name: "ViewName"
+  frontend_required_hooks:
+    - "import"
+    - "type"
+    - "v-for"
+    - "v-else-if"
+
+# --- 类型同步验证默认配置 ---
+# 默认关闭，项目在 config.yaml 中按实际路径开启
+type_sync_check:
+  enabled: false
+  backend_types_path: "services/api/src/types.ts"
+  frontend_types_path: "packages/web/src/types.ts"
+  # 留空则检测全部 export interface
+  sync_interfaces: []
+  # 默认忽略的内部接口（仅后端使用）
+  ignore_interfaces: []
+
+# --- CORS 绕过策略默认配置 ---
+# 默认启用 context_request 策略，避免浏览器 fetch 被跨域拦截
+cors_bypass:
+  enabled: true
+  strategy: "context_request"
+  api_path_prefixes:
+    - "/api"
+    - "/health"
+
+# --- Headless 崩溃防护默认配置 ---
+# 默认启用，确保 Chromium 启动参数包含 --disable-gpu
+headless_crash_guard:
+  enabled: true
+  required_launch_args:
+    - "--disable-gpu"
+    - "--no-sandbox"
+    - "--disable-dev-shm-usage"
+    - "--disable-setuid-sandbox"
+  # 默认崩溃重试次数
+  max_retries: 2
+  # 默认重试间隔（毫秒）
+  retry_interval_ms: 2000
+
+# --- PowerShell 兼容性默认配置 ---
+# 默认启用，自动检测禁止语法（&& / ||）
+powershell_compatibility:
+  enabled: true
+  forbidden_syntaxes:
+    - "&&"
+    - "||"
+  syntax_replacements:
+    "&&": ";"
+    "||": "; "
+  # 默认与 terminal 配置保持一致
+  split_long_commands: true
+  max_command_length: 200
+  use_fresh_terminal: true
+
+# --- 编码安全增强默认配置 ---
+# 在 encoding_safety 基础上增强：写入后验证 + U+FFFD 检测
+encoding_safety_enhanced:
+  # 默认写入后验证编码（防止 Edit/Write 工具意外破坏中文）
+  verify_after_write: true
+  # 默认检测 U+FFFD 替换字符
+  check_replacement_char: true
+  # 默认不允许任何 U+FFFD 出现
+  replacement_char_threshold: 0
+  # 默认检测的文件扩展名
+  check_extensions:
+    - ".ts"
+    - ".vue"
+    - ".py"
+    - ".md"
+    - ".json"
+    - ".yaml"
+
+# ============================================================
+# 以下为帮助文档与关于模块测试复盘补充默认配置（第三批次）
+# 覆盖滚动容器、SPA 内部跳转、检查更新状态机
+# 所有参数可配置，避免硬编码
+# ============================================================
+
+# --- 滚动容器测试默认配置 ---
+# 验证 flex 布局的多卡片长内容页面是否存在双重滚动裁切问题
+# 触发场景：章节卡片仅显示标题（~50px），intro/blocks/表格内容不可见
+scroll_container_tests:
+  enabled: false
+  # 默认无测试页面（项目应在 config.yaml 中按实际页面配置）
+  test_pages: []
+  # 默认外层滚动容器选择器（已设 overflow-y: auto 接管页面滚动）
+  outer_scroll_selectors:
+    - ".content"
+    - ".app-shell"
+  # 默认内层可能重复设 overflow-y: auto 的容器选择器
+  inner_overflow_selectors:
+    - ".help-content-area"
+    - ".content-area"
+    - ".list-area"
+  # 默认卡片类选择器（可能产生 overflow: hidden 副作用）
+  card_selectors:
+    - ".glass-card"
+    - ".card"
+  # 默认卡片最小高度阈值（px），低于此值视为被压缩
+  min_card_height_px: 100
+  # 默认卡片内容可见性检查（标题 + 至少一个内容块）
+  require_content_visible: true
+  # 失败时是否截图取证
+  screenshot_on_fail: true
+
+# --- SPA 内部跳转测试默认配置 ---
+# 验证跨组件视图切换（如 About → Help）的 CustomEvent 派发与监听
+# 触发场景：跳转按钮点击后视图未切换，或监听器未在 onBeforeUnmount 清理
+spa_navigation_tests:
+  enabled: false
+  # 默认无测试跳转链路（项目应在 config.yaml 中按实际跳转配置）
+  test_routes: []
+  # 默认事件名模式（与 wiki-frontend-code-review 的 spa_navigation.event_name_pattern 对齐）
+  event_name_pattern: "{project}:navigate"
+  # 默认项目名（替换事件名中的 {project} 占位符）
+  project_name: "karpathy"
+  # 默认入口组件路径（监听事件的组件）
+  app_entry: "src/App.vue"
+  # 是否验证监听器在 onBeforeUnmount 中清理
+  require_lifecycle_pair: true
+  # 是否验证 detail 字段在白名单内
+  validate_detail_whitelist: false
+  # 默认允许跳转的视图名白名单（留空表示不校验）
+  allowed_views: []
+  # 跳转后等待视图切换的最大时间（毫秒）
+  switch_wait_ms: 1000
+
+# --- 检查更新状态机测试默认配置 ---
+# 验证检查更新功能的状态机完整性、定时器清理、轮询节奏
+# 触发场景：状态卡在 loading 不恢复，或组件卸载后定时器仍执行
+update_check_tests:
+  enabled: false
+  # 默认无测试页面（项目应在 config.yaml 中按实际页面配置）
+  test_pages: []
+  # 默认检查更新接口路径
+  update_endpoint: "/api/about/check-update"
+  # 必需状态列表（逗号分隔），与 wiki-frontend-code-review 的 check_update.required_states 对齐
+  required_states:
+    - "idle"
+    - "loading"
+    - "latest"
+    - "newer"
+    - "error"
+  # 默认后端缓存 TTL（毫秒）
+  cache_ttl_ms: 300000
+  # 默认轮询间隔（毫秒），必须 >= cache_ttl_ms
+  poll_interval_ms: 300000
+  # 默认首次检查延迟（毫秒）
+  first_check_delay_ms: 5000
+  # 默认 latest 状态自动回 idle 的延迟（毫秒）
+  latest_to_idle_ms: 3000
+  # 默认离线模式（true 时后端固定返回 has_update: false）
+  offline_mode: true
+  # 是否验证定时器在 onBeforeUnmount 中清理
+  require_timer_cleanup: true
+  # 是否验证轮询间隔 >= 缓存 TTL
+  validate_poll_ge_ttl: true
+  # 模拟离线模式时是否验证后端不发起外部请求
+  validate_no_external_call_in_offline: true
+  # 失败时是否截图取证
+  screenshot_on_fail: true
+

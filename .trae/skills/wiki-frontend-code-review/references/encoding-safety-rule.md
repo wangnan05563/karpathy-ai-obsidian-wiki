@@ -134,9 +134,88 @@ function isAsciiOnly(bytes: Uint8Array): boolean {
 if (config.ascii_whitelist && isAsciiOnly(bytes)) return true
 ```
 
+### ES-6: 文件内容若出现 U+FFFD 替换字符即判定为编码损坏
+
+IsUrgent: True
+Category: Encoding Safety
+
+### Description
+
+即使文件通过了严格 UTF-8 解码（ES-3），仍可能因为历史编辑过程中曾被以错误编码保存再转回 UTF-8，导致原始中文/非 ASCII 字符已永久丢失为 `U+FFFD` 替换字符（对应配置 `fffd_indicator`）。此类文件在解码层面是合法 UTF-8，但内容已损坏——前端渲染时 tab 标签、菜单文案、注释会显示为 `�` 乱码，功能不可读。
+
+复盘 App.vue 中文标签乱码时发现：文件因编辑器/脚本编码错误导致中文字符全部变为 `U+FFFD`，常规 UTF-8 检测无法识别（因为 `U+FFFD` 本身是合法的 Unicode 字符），需要额外对文件内容进行替换字符扫描。
+
+启用配置 `check_replacement_char`（默认 `true`）时，检测器须额外扫描文件内容是否包含 `U+FFFD`；当出现次数超过 `replacement_char_threshold`（默认 `0`，即不允许出现任何替换字符）时，判定为编码损坏文件，必须阻断提交并建议以历史正确版本或备份恢复。
+
+### Judgment Logic
+
+1. 读取文件内容为字符串（在 ES-3 严格解码通过后执行）。
+2. 统计字符串中 `U+FFFD`（`\uFFFD`）字符的出现次数 `count`。
+3. 若 `count > replacement_char_threshold`，判定为编码损坏：
+   - 输出告警，列出文件路径与 `U+FFFD` 出现次数。
+   - 建议操作：从版本控制历史恢复（`git checkout HEAD -- <file>`）、从备份恢复、或人工重写损坏区域。
+   - 禁止仅以"重新保存为 UTF-8 无 BOM"作为修复——此时原始字符已丢失，重写编码无法恢复。
+4. 若 `count <= replacement_char_threshold`，继续后续检查。
+
+### Applicable Scenarios
+
+- 含中文或其他非 ASCII 字符的源文件（`.vue` / `.ts` / `.tsx` / `.md` 等）。
+- 曾在多平台/多编辑器间协作或迁移的文件（编码转换历史复杂）。
+- 自动化脚本（特别是 PowerShell 默认编码非 UTF-8 的 Windows 环境）批量修改过的文件。
+
+### Non-Applicable Scenarios
+
+- 纯 ASCII 文件（ES-5 白名单已短路放行）。
+- 二进制文件（图片、字体、压缩包等不在 `encoding_scan_scope` 范围内）。
+- 已知合法包含 `U+FFFD` 的测试 fixture 文件（应在配置中显式加入豁免清单）。
+
+### Configuration Parameters
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `check_replacement_char` | `true` | 是否在严格 UTF-8 解码后额外扫描 `U+FFFD` 替换字符 |
+| `replacement_char_threshold` | `0` | 允许出现的 `U+FFFD` 数量上限；`0` 表示完全禁止 |
+| `replacement_char_action` | `block` | 命中时的动作：`block` 阻断提交 / `warn` 仅告警 |
+
+### Suggested Fix
+
+检测脚本模板（PowerShell）：
+
+```powershell
+# U+FFFD 替换字符扫描：识别"解码合法但内容已损坏"的文件
+function Test-ReplacementChar {
+  param([string]$Path, [int]$Threshold = 0)
+  $content = Get-Content -Path $Path -Raw -Encoding UTF8
+  # 统计 U+FFFD 出现次数
+  $count = ($content.ToCharArray() | Where-Object { $_ -eq [char]0xFFFD }).Count
+  if ($count -gt $Threshold) {
+    Write-Warning "$Path 包含 $count 个 U+FFFD 替换字符，编码已损坏，请从版本控制历史恢复"
+    return $false
+  }
+  return $true
+}
+```
+
+Node 端等价实现：
+
+```ts
+// 扫描 U+FFFD：解码合法但原始字符已丢失
+function hasReplacementChar(content: string, threshold = 0): boolean {
+  let count = 0
+  for (let i = 0; i < content.length; i++) {
+    if (content.charCodeAt(i) === 0xFFFD) count++
+    if (count > threshold) return true
+  }
+  return false
+}
+```
+
+> **示例代码**: 参见 [examples/encoding-safety-rule-examples.md](examples/encoding-safety-rule-examples.md)。
+
 ## Checklist
 - [ ] 源文件（`.vue` / `.ts` / `.tsx` 等）为 UTF-8 无 BOM
 - [ ] 元配置文件（`.editorconfig` / `.vscode/settings.json` 等）为 UTF-8 无 BOM
 - [ ] 编码检测采用严格 UTF-8 解码，含 `U+FFFD` 判定为非 UTF-8
 - [ ] 检测时机覆盖 Edit 后与构建前
 - [ ] 纯 ASCII 文件按白名单短路放行
+- [ ] 文件内容扫描 `U+FFFD` 替换字符，超过阈值即判定为编码损坏

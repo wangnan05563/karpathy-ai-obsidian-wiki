@@ -37,8 +37,16 @@ Karpathy-Wiki 项目的通用编码规范与开发准则。规则与具体业务
 | 涉及错误处理/降级 | [references/fallback-rule.md](references/fallback-rule.md) |
 | 涉及文件编辑/编码/中文/构建门禁 | [references/encoding-guard-rule.md](references/encoding-guard-rule.md) |
 | 涉及 PowerShell/服务管理/端口 | [references/powershell-constraints-rule.md](references/powershell-constraints-rule.md) |
+| 涉及新增路由/接口注册 | [references/route-registration-rule.md](references/route-registration-rule.md) |
+| 涉及子进程/外部资源/异步赋值字段 | [references/null-guard-rule.md](references/null-guard-rule.md) |
+| 涉及子进程/定时器/长连接/服务退出 | [references/graceful-shutdown-rule.md](references/graceful-shutdown-rule.md) |
+| 涉及敏感字段/API Key/密码/GET 配置接口 | [references/sensitive-field-masking-rule.md](references/sensitive-field-masking-rule.md) |
+| 涉及后端/前端 types.ts 同步 | [references/type-sync-rule.md](references/type-sync-rule.md) |
+| 涉及 flex 布局/滚动容器/内容裁切 | [references/scroll-container-rule.md](references/scroll-container-rule.md) |
+| 涉及 SPA 内部跳转/视图切换/CustomEvent | [references/spa-navigation-rule.md](references/spa-navigation-rule.md) |
+| 涉及检查更新/版本对比/缓存轮询 | [references/update-check-rule.md](references/update-check-rule.md) |
 | 需要参考历史复盘/工作流模板 | [references/development-workflow.md](references/development-workflow.md) |
-| 不确定加载哪些 | 全部加载（约 14KB） |
+| 不确定加载哪些 | 全部加载（约 40KB） |
 
 ### 3. 示例按需
 仅当生成修复代码时加载 `references/examples/<rule>-examples.md`。
@@ -55,6 +63,14 @@ Karpathy-Wiki 项目的通用编码规范与开发准则。规则与具体业务
 8. **UTF-8 无 BOM**：所有源文件与 meta 文件 UTF-8 无 BOM（Windows cmd.exe 兼容）
 9. **编码守卫**：Edit/Write 含非 ASCII 字符文件前必须严格 UTF-8 解码检测；非 UTF-8 文件用 `encoding_fallback` 读写；构建前必须执行 `encoding_scan_command` 门禁
 10. **PowerShell 约束**：禁用 `&&`（用 `command_separator`）、禁用只读变量赋值（`readonly_vars`）、禁用 `cmd /c`（`blocked_commands`）；工作目录通过 `cwd_param` 指定而非 `cd`
+11. **路由注册守卫**：新增 `routes/*.ts` 文件必须在 `entry_file` 同步 import 与调用 `register_function_pattern`；自动发现框架（NestJS 等）可豁免
+12. **空值守卫**：由 `async_assignment_keywords`（spawn/exec/connect 等）赋值的字段使用前必须 `if (!x)` 守卫并重建/抛错，禁止直接访问
+13. **优雅停止**：创建子进程/定时器/长连接的模块必须注册 `shutdown_signals` 钩子，按"子进程→定时器→连接"顺序清理后 `process.exit`
+14. **敏感字段脱敏**：GET 接口返回字段名匹配 `sensitive_field_patterns` 时必须脱敏 + 附 `configured` 标志；POST 空串语义为"不修改"
+15. **类型同步**：后端 `backend_types_path` 与前端 `frontend_types_path` 同名 interface 字段必须对齐，提交前通过两端 `typecheck_command` 门禁
+16. **滚动容器单一职责**：容器链路上 `overflow-y: auto` 层数不得超过 `scroll_container.max_overflow_layers`（默认 1）；`flex-direction: column + flex: 1` 容器内的自然高度子项必须 `flex-shrink: 0`
+17. **SPA 内部跳转**：跨组件视图切换必须通过 `spa_navigation.event_name_pattern` 派发 CustomEvent，由入口组件监听切换；监听器必须在 onMounted/onBeforeUnmount 配对管理
+18. **更新检查缓存**：`/api/about/check-update` 类接口必须有 `check_update.cache_ttl_ms`（默认 5 分钟）后端缓存；轮询间隔 `poll_interval_ms` 必须 ≥ `cache_ttl_ms`；离线模式 `offline_mode: true` 时固定返回 `has_update: false`
 
 ## 开发流程
 
@@ -63,18 +79,24 @@ Karpathy-Wiki 项目的通用编码规范与开发准则。规则与具体业务
 2. 识别涉及的存储边界（前端/后端/文件/缓存）
 3. 设计数据流：明确权威源、缓存层、降级路径
 4. 编码时对照必检清单
-5. 编写端到端验证（含缓存刷新、降级、边界条件）
+5. 若新增路由文件 → 同步在 `entry_file` 导入与注册
+6. 若涉及子进程/定时器/长连接 → 注册 `shutdown_signals` 清理钩子
+7. 若新增 GET 配置接口 → 检查响应字段是否匹配敏感模式并脱敏
+8. 若后端 types.ts 新增/修改 interface → 同步前端 types.ts
+9. 编写端到端验证（含缓存刷新、降级、边界条件）
 
 ### Bug 修复
 1. 用 systematic-debugging 流程定位根因
 2. 修复前对照硬约束确认未违反
 3. 修复后必做：写盘函数→刷新缓存、路径函数→检查锚点、用户输入→白名单校验
-4. 编写复现脚本验证
+4. 修复后必做：子进程字段→空值守卫、敏感字段→脱敏、类型变更→前后端同步
+5. 编写复现脚本验证
 
 ### 重构
 1. 重构前梳理数据流（权威源、缓存、降级）
 2. 逐文件改造，每步保持测试通过
 3. 重构后对照必检清单全量自查
+4. 重构后必做：路由文件与入口注册对账、信号钩子覆盖、types.ts 两端对齐
 
 ## 必检清单（每次提交前）
 
@@ -90,7 +112,17 @@ Karpathy-Wiki 项目的通用编码规范与开发准则。规则与具体业务
 □ 构建前已执行 encoding_scan_command 门禁
 □ PowerShell 命令未用 &&、未赋值只读变量、未用 cmd /c
 □ 启动服务前已停止占用端口的旧进程
+□ 新增 routes/*.ts 已在 entry_file 同步导入与 register
+□ 异步赋值字段（this.provider/child/connection 等）使用前有空值守卫
+□ 创建子进程/定时器/长连接的模块已注册 SIGINT/SIGTERM 清理钩子
+□ GET 接口返回的敏感字段已脱敏并附 configured 标志
+□ POST 接口空串语义为"不修改"，未误清空敏感字段
+□ 后端 types.ts 与前端 types.ts 同名 interface 字段对齐
+□ 已通过后端 tsc --noEmit 与前端 vue-tsc --noEmit 门禁
 □ 端到端验证脚本通过（含缓存刷新、降级、路径穿越）
+□ 滚动容器链路上 overflow-y: auto 层数 ≤ 1，flex 子项需自然撑开时已加 flex-shrink: 0
+□ 跨组件 SPA 跳转通过 CustomEvent 派发，监听器在 onMounted/onBeforeUnmount 配对管理
+□ 检查更新类接口有后端缓存（≥ 1 分钟），轮询间隔 ≥ 缓存 TTL，离线模式返回固定值
 ```
 
 ## 适用场景
