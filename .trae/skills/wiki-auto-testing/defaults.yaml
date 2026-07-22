@@ -78,6 +78,9 @@ interactions:
 # --- API 测试配置 ---
 api_tests:
   use_playwright_request: true
+  # 默认请求超时（毫秒），Playwright ctx.request.get 不传 timeout 时使用此值
+  # 重 IO 端点（如 /api/stats 扫描整个 vault）应在 config.yaml 中按端点覆盖
+  default_timeout_ms: 30000
 
 # --- 控制台错误过滤 ---
 console_error_filter:
@@ -277,8 +280,8 @@ powershell_constraints:
 route_registration_check:
   enabled: false
   # 默认后端路由目录（项目应覆盖）
-  backend_route_directory: "services/api/src/routes"
-  backend_entry_file: "services/api/src/index.ts"
+  backend_route_directory: "api/src/routes"
+  backend_entry_file: "api/src/index.ts"
   # 默认注册函数命名模式（用于 Grep 匹配）
   register_function_pattern: "register"
   exempt_files: []
@@ -296,8 +299,8 @@ route_registration_check:
 # 默认关闭，项目在 config.yaml 中按实际路径开启
 type_sync_check:
   enabled: false
-  backend_types_path: "services/api/src/types.ts"
-  frontend_types_path: "packages/web/src/types.ts"
+  backend_types_path: "api/src/types.ts"
+  frontend_types_path: "frontend/src/types.ts"
   # 留空则检测全部 export interface
   sync_interfaces: []
   # 默认忽略的内部接口（仅后端使用）
@@ -448,4 +451,616 @@ update_check_tests:
   validate_no_external_call_in_offline: true
   # 失败时是否截图取证
   screenshot_on_fail: true
+
+# ============================================================
+# 以下为 Async 可靠性测试复盘补充默认配置（第五批次）
+# 覆盖超时防护、心跳可靠性、兜底数据、运行时验证
+# 项目特定值请在 config.yaml 中覆盖
+# ============================================================
+
+# --- Async 可靠性测试默认配置 ---
+# 默认关闭，项目在 config.yaml 中按实际 async 模式开启
+async_reliability_tests:
+  enabled: false
+  # 超时防护测试默认配置
+  timeout_protection:
+    enabled: false
+    test_cases:
+      - name: "async 调用必须设置超时"
+        rule_id: "CODING-021"
+        check_method: "grep"
+        pattern: "await\\s+\\w+\\."
+        whitelist_pattern: "asyncio\\.sleep|Promise\\.resolve"
+        required_wrapper: "asyncio.wait_for|Promise.race"
+        severity: "critical"
+      - name: "多层超时防护"
+        rule_id: "CODING-025"
+        check_method: "manual"
+        description: "审查长时 async 任务是否配置至少 2 层超时"
+        severity: "suggestion"
+  # 心跳可靠性测试默认配置
+  heartbeat_reliability:
+    enabled: false
+    test_cases:
+      - name: "心跳必须使用线程实现"
+        rule_id: "CODING-022"
+        check_method: "grep"
+        pattern: "asyncio\\.create_task|asyncio\\.Task"
+        forbidden_in_heartbeat: true
+        required_impl: "threading.Thread"
+        severity: "critical"
+      - name: "状态文件 ts 字段更新独立性"
+        rule_id: "CODING-023"
+        check_method: "grep"
+        pattern: "_write_status|_emit_status|set_status"
+        required_context: "threading.Thread"
+        max_loop_interval_sec: 10.0
+        severity: "critical"
+  # 兜底数据测试默认配置
+  fallback_data:
+    enabled: false
+    test_cases:
+      - name: "超时后必须有兜底数据"
+        rule_id: "CODING-024"
+        check_method: "grep"
+        pattern: "asyncio.wait_for|Promise.race"
+        except_branch_required: true
+        forbidden_actions: ["raise", "pass"]
+        required_action: "fallback_data_assignment"
+        severity: "warning"
+  # 运行时验证测试默认配置
+  runtime_verification:
+    enabled: false
+    test_cases:
+      - name: "状态文件 ts 字段持续更新"
+        description: "启动子进程后监控状态文件 ts 字段，确认 90s 内有更新"
+        check_method: "runtime"
+        monitor_duration_sec: 90
+        max_gap_sec: 10
+        status_file_pattern: "%TEMP%\\xh_browser_login\\*.json"
+        severity: "critical"
+      - name: "心跳线程存活验证"
+        description: "业务循环卡住时确认心跳线程仍在更新 ts"
+        check_method: "runtime"
+        simulate_blocking: true
+        monitor_duration_sec: 30
+        expected_heartbeat_count: 10
+        severity: "critical"
+
+# ============================================================
+# 以下为配置一致性/热更新/降级验证复盘补充默认配置（第六批次）
+# 项目特定值请在 config.yaml 中覆盖
+# ============================================================
+
+# --- 配置一致性/热更新/降级验证默认配置 ---
+verification:
+  # 配置读取一致性验证（默认关闭）
+  config_consistency_check:
+    enabled: false
+    check_entries: ["startup", "api_get", "api_test"]
+    verify_method: "compare_api_key_status"
+  # 热更新闭环验证（默认关闭）
+  hot_update_verification:
+    enabled: false
+    flow: "save→persist→updateConfig→verify"
+    verify_api: "GET /api/ai/config"
+  # 降级机制验证（默认关闭）
+  degradation_verification:
+    enabled: false
+    test_cases:
+      - name: "LLM 失效降级"
+        simulate: "invalid_api_key"
+        expected: "降级为检索模式"
+      - name: "服务不可用降级"
+        simulate: "service_down"
+        expected: "兜底提示"
+
+# --- 破坏性按钮白名单默认配置 ---
+destructive_buttons:
+  - "恢复初始配置"
+  - "删除"
+  - "清除"
+  - "重置"
+
+# ============================================================
+# 以下为 v2 导航栏改造复盘补充默认配置（第七批次）
+# 覆盖前置检查、测试用例同步、失败分类、服务管理四个协议
+# 所有参数可配置，避免硬编码
+# ============================================================
+
+# --- 前置检查协议默认配置（Pre-flight Check Protocol）---
+# 在阶段 1 构建之前执行，防止服务未就绪时全部用例误报失败
+precheck:
+  # 是否启用前置检查协议
+  enabled: true
+  # 必须监听的端口列表（项目应在 config.yaml 中覆盖）
+  required_ports:
+    - 3000
+    - 5173
+  # 端口期望状态（Listen 表示端口已进入监听状态）
+  port_check_state: "Listen"
+  # 端口检测方法（PowerShell cmdlet，通过端口反查状态）
+  port_check_method: "Get-NetTCPConnection"
+  # 健康检查端点路径
+  health_check_endpoint: "/health"
+  # 健康检查期望 HTTP 状态码
+  health_check_expected_status: 200
+  # 启动后最长等待毫秒数（超时则判定启动失败）
+  startup_timeout_ms: 30000
+  # 端口轮询间隔毫秒数
+  port_poll_interval_ms: 1000
+  # 是否执行浏览器可启动检查（验证 Playwright 环境）
+  browser_launch_check: true
+  # 服务启动脚本（检查失败时调用）
+  service_start_script: "automation.ps1 -Action start"
+  # 检查失败时是否自动启动服务（false 则中止测试）
+  auto_start_on_failure: true
+
+# --- 测试用例同步协议默认配置（Test Case Sync Protocol）---
+# 在阶段 5 补充测试中执行，防止代码变更影响 DOM 后测试引用已删除选择器
+test_sync:
+  # 是否启用测试用例同步协议
+  enabled: true
+  # 测试文件 glob 匹配模式列表
+  test_file_patterns:
+    - "**/test_*.py"
+    - "**/test_*.ts"
+    - "**/*.spec.ts"
+    - "**/*.test.ts"
+  # 选择器变更识别正则列表（class / id / 属性 / data-testid）
+  selector_patterns:
+    - '\.[-\w]+'
+    - '#[-\w]+'
+    - '[class="[^"]+"]'
+    - 'data-testid="[^"]+"'
+  # 是否要求代码与测试同 commit 提交（避免代码先行/测试滞后）
+  require_same_commit: true
+  # 是否禁止 except 分支静默吞错（必须 record(..., False, str(e))）
+  silent_failure_forbidden: true
+  # 失效选择器容忍阈值（0 = 零容忍）
+  stale_selector_threshold: 0
+
+# --- 失败分类协议默认配置（Failure Classification Protocol）---
+# 在阶段 6 结果汇总中执行，标准化测试失败的分类与处理流程
+failure_classification:
+  # 是否启用失败分类协议
+  enabled: true
+  # 是否对 selector_not_found 自动触发测试同步检查
+  auto_fix: true
+  # 失败类型匹配规则列表（每条含 type / pattern / suggestion）
+  rules:
+    - type: "connection_refused"
+      pattern: "ERR_CONNECTION_REFUSED|ECONNREFUSED"
+      suggestion: "运行 automation.ps1 -Action start 启动服务"
+    - type: "selector_not_found"
+      pattern: "TimeoutError.*waiting for selector|Element not found"
+      suggestion: "检查代码是否删除了该选择器，同步更新测试用例"
+    - type: "assertion_failed"
+      pattern: "AssertionError|expect\\(.*\\) to be"
+      suggestion: "检查断言预期值是否与实际行为一致"
+    - type: "timeout"
+      pattern: "TimeoutError|Exceeded timeout"
+      suggestion: "增加超时时间或优化等待策略"
+    - type: "browser_crash"
+      pattern: "Target closed|Browser crashed"
+      suggestion: "检查 Chromium 启动参数，参考 headless_crash_guard"
+    - type: "encoding_corrupted"
+      pattern: "U\\+FFFD|锟斤拷|乱码"
+      suggestion: "运行 node scripts/check-encoding.js --fix"
+    - type: "config_mismatch"
+      pattern: "config.*not.*found|undefined"
+      suggestion: "检查 config.yaml 与 defaults.yaml 配置项"
+  # 失败类型对应的修复建议映射（与 rules 中 suggestion 对齐，便于按 type 直接查询）
+  suggestions:
+    connection_refused: "运行 automation.ps1 -Action start 启动服务"
+    selector_not_found: "检查代码是否删除了该选择器，同步更新测试用例"
+    assertion_failed: "检查断言预期值是否与实际行为一致"
+    timeout: "增加超时时间或优化等待策略"
+    browser_crash: "检查 Chromium 启动参数，参考 headless_crash_guard"
+    encoding_corrupted: "运行 node scripts/check-encoding.js --fix"
+    config_mismatch: "检查 config.yaml 与 defaults.yaml 配置项"
+
+# --- 服务管理协议默认配置（Service Management Protocol）---
+# 贯穿阶段 1-6，标准化测试过程中的服务生命周期管理
+service_management:
+  # 是否启用服务管理协议
+  enabled: true
+  # 测试启动前是否停止占用端口的旧进程（避免端口冲突）
+  stop_old_process: true
+  # 是否清理日志重定向残留进程（cmd.exe 残留）
+  cleanup_residual: true
+  # 测试后是否停止服务（受 keep_running 控制）
+  cleanup_after_test: false
+  # 测试后是否保持服务运行（true 时即使 cleanup_after_test=true 也不停止）
+  keep_running: true
+  # 残留进程命令行匹配模式（用于识别日志重定向产生的残留进程）
+  residual_match_pattern: "pnpm run dev"
+  # 服务停止脚本（cleanup_after_test=true 且 keep_running=false 时调用）
+  stop_script: "automation.ps1 -Action stop"
+
+# ============================================================
+# 以下为 P0/P1/P2 目录结构优化复盘补充默认配置（第八批次）
+# 覆盖 .gitignore 规则验证、目录结构完整性、脚本引用完整性、类型检查回归、搜索结果交叉验证
+# 项目特定值请在 config.yaml 中覆盖
+# ============================================================
+
+# --- 目录结构验证测试默认配置（复盘提炼）---
+# 默认关闭，项目在 config.yaml 中按实际目录与命令开启
+structure_verification:
+  # 是否启用目录结构验证测试
+  enabled: false
+  # .gitignore 规则验证默认命令
+  gitignore_verify_command: "git check-ignore -v"
+  gitignore_tracked_check: "git ls-files --error-unmatch"
+  gitignore_untrack_command: "git rm --cached"
+  # 默认无目标模式（项目应在 config.yaml 中按实际 .gitignore 规则配置）
+  gitignore_target_patterns: []
+
+  # 目录结构完整性验证默认配置
+  # 默认无源码目录（项目应覆盖为实际源码目录）
+  expected_source_dirs: []
+  expected_data_dir: "data/"
+  expected_docs_dir: "docs/"
+  expected_scripts_dir: "scripts/"
+  # 默认无禁止混合模式（项目应按实际规范配置）
+  forbidden_mixing_patterns: []
+
+  # 脚本引用完整性验证默认配置
+  # 默认 grep 模式占位符（项目应在 config.yaml 中替换为实际旧文件名）
+  script_rename_grep_pattern: "old_script_name"
+  script_rename_verify_command: "git grep"
+
+  # 类型检查回归验证默认配置
+  typecheck_commands:
+    backend: "npx tsc --noEmit"
+    frontend: "npx vue-tsc --noEmit"
+  # 默认工作目录（项目应在 config.yaml 中按实际 monorepo 结构覆盖）
+  typecheck_working_dirs:
+    backend: "services/api/"
+    frontend: "packages/web/"
+
+# --- 搜索结果交叉验证协议默认配置（Search Result Cross-Verification Protocol）---
+# 默认启用，防止单一搜索方法因工具限制返回假阴性
+search_cross_verification:
+  # 主搜索方法列表（按优先级从高到低）
+  primary_tools:
+    - "Glob"
+    - "Grep"
+    - "LS"
+  # 互补搜索方法列表（主方法失败时按顺序尝试）
+  fallback_tools:
+    - "PowerShell Test-Path"
+    - "PowerShell Resolve-Path"
+  # LS 输出截断阈值（字符数），超出则降级为 Glob 精确模式
+  ls_truncate_threshold: 40000
+  # 是否强制交叉验证（true 时主方法未找到必须用互补方法复核）
+  cross_verify_required: true
+  # Glob 模式中需转义的特殊字符列表
+  glob_escape_chars:
+    - "+"
+    - "("
+    - ")"
+    - "["
+    - "]"
+  # Grep 内容搜索模式列表（{name} 占位符运行时替换为目标名称）
+  grep_content_patterns:
+    - "export class {name}"
+    - "export.*{name}"
+  # 验证矩阵：每种工具的适用场景与限制
+  verification_matrix:
+    Glob:
+      applicable: "文件名模式匹配"
+      limitation: "路径含特殊字符时可能转义失败"
+    Grep:
+      applicable: "文件内容搜索"
+      limitation: "无法搜索未入库的文件"
+    LS:
+      applicable: "目录列表"
+      limitation: "输出超长时可能截断（>40000字符）"
+    Test-Path:
+      applicable: "精确路径存在性"
+      limitation: "需已知完整路径"
+
+# --- Vite Proxy 配置检查默认配置（Vite Proxy Config Check）---
+# 基于 SSE 长连接被简写形式 proxy 中断的历史问题复盘提炼
+# 简写形式（'/api': 'http://localhost:3000'）缺少 changeOrigin/timeout/proxyTimeout，
+# 导致 SSE 长连接在首次响应后被中断，前端报 'Failed to fetch'
+vite_proxy_check:
+  # 是否启用本检查（仅在检测到 vite.config 时执行）
+  enabled: true
+  # Vite 配置文件候选路径（按优先级，首个存在即生效）
+  config_candidates:
+    - "vite.config.ts"
+    - "vite.config.js"
+    - "packages/web/vite.config.ts"
+  # proxy 配置根键名（在 config 文件中定位 server.proxy 字段）
+  proxy_root_key: "server.proxy"
+  # 必需字段：proxy 值为对象时必须包含的字段（缺失任一即判定失败）
+  required_keys:
+    - "changeOrigin"   # 跨域请求必须为 true
+    - "timeout"        # 0 表示不超时，SSE 长连接必需
+    - "proxyTimeout"   # 0 表示不超时，SSE 长连接必需
+  # 必需字段的期望值
+  required_values:
+    changeOrigin: true
+    timeout: 0
+    proxyTimeout: 0
+  # 禁止的简写模式正则（匹配即判定失败）
+  # 简写形式：'/api': 'http://localhost:XXX'（字符串值而非对象）
+  forbidden_shorthand_pattern: "['\"]\\/?api['\"]\\s*:\\s*['\"]https?:"
+  # 简写模式失败时的修复建议
+  shorthand_fix_suggestion: |
+    将简写形式改为对象配置：
+    '/api': {
+      target: 'http://localhost:3000',
+      changeOrigin: true,
+      timeout: 0,
+      proxyTimeout: 0
+    }
+  # 需要长连接支持的路径前缀（这些路径必须使用对象配置）
+  long_connection_prefixes:
+    - "/api/compile"     # SSE 批量编译
+    - "/api/query"       # SSE 查询流
+    - "/api/ingest"      # SSE 摄入流
+  # 是否在修复后自动重启 vite dev server
+  auto_restart_after_fix: true
+  # 重启后验证策略：发起一次 SSE 请求验证连接保持
+  verify_strategy: "sse_handshake"
+  # SSE 握手验证的超时（毫秒）
+  verify_timeout_ms: 5000
+
+# --- 端口冲突自动迁移默认配置（Port Conflict Resolution）---
+# 基于 5173 被占用迁移到 5174 的历史问题复盘提炼
+# 测试启动时端口被占用应自动迁移到可用端口，而非阻塞失败
+port_conflict_resolution:
+  # 是否启用端口冲突自动迁移
+  enabled: true
+  # 端口检测方法
+  detection_method: "tcp_listen_check"
+  # TCP 连接检测超时（毫秒）
+  detection_timeout_ms: 500
+  # 候选端口范围（主端口被占用时的回退顺序）
+  # 主端口从 config.yaml service.frontend_port 读取，此处仅配置回退范围
+  fallback_ports_range:
+    start: 5174
+    end: 5185
+  # 主端口被占用时的迁移策略
+  migration_strategy: "auto_select_next_available"
+  # 是否在迁移后更新运行时配置（避免硬编码到测试结果）
+  auto_update_config: true
+  # 需要更新配置的字段列表
+  config_fields_to_update:
+    - "service.frontend_port"
+    - "service.frontend_url"
+  # URL 模板（{port} 运行时替换）
+  url_template: "http://localhost:{port}"
+  # 迁移后是否在测试报告中显式标注
+  report_migration: true
+  # 迁移失败时的兜底策略
+  fallback_on_failure: "abort_with_diagnostic"
+  # 诊断信息收集项（迁移失败时输出）
+  diagnostic_items:
+    - "占用端口的进程信息（Get-NetTCPConnection + Get-Process）"
+    - "候选端口范围扫描结果"
+    - "当前 config.yaml 端口配置"
+  # 是否在测试结束后恢复原始端口配置
+  restore_original_config_on_cleanup: false
+
+# --- 编译产物污染检测默认配置（Compile Artifact Check）---
+# 基于 src 下同时存在 .ts 和 .js 导致 Vite 优先加载旧 .js 的历史问题复盘提炼
+# Vite 在解析 /src/composables/useTTS.js URL 时直接读取项目内 .js，
+# 而非动态编译 .ts，导致 store setup 时拿到旧版对象
+compile_artifact_check:
+  # 是否启用编译产物污染检测
+  enabled: true
+  # 需要检查的源码目录（相对于项目根）
+  check_directories:
+    - "packages/web/src"
+    - "services/api/src"
+  # 源文件扩展名（这些扩展名的文件是权威源）
+  source_extensions:
+    - ".ts"
+    - ".tsx"
+    - ".vue"
+  # 编译产物扩展名（与源文件同名时判定为污染）
+  artifact_extensions:
+    - ".js"
+    - ".jsx"
+    - ".d.ts"
+  # 同名污染检测策略：源文件去扩展名后与编译产物去扩展名后相同
+  collision_detection: "basename_without_extension"
+  # 路径解析策略：处理符号链接与大小写不敏感文件系统
+  path_resolution_strategy: "realpath_case_insensitive"
+  # 是否检测 .vite 缓存目录
+  check_vite_cache: true
+  # .vite 缓存目录候选路径
+  vite_cache_candidates:
+    - "node_modules/.vite"
+    - "packages/web/node_modules/.vite"
+  # 发现污染时的处理策略
+  cleanup_strategy: "delete_artifact_and_clear_vite_cache"
+  # 删除前的备份策略（false 表示直接删除不备份，因产物可由 tsc 重新生成）
+  backup_before_delete: false
+  # 污染检测失败时的修复建议
+  pollution_fix_suggestion: |
+    1. 删除 src 下所有 .ts 对应的 .js 编译产物
+    2. 清理 .vite 缓存目录（rm -rf node_modules/.vite）
+    3. 重启 Vite dev server
+    4. 在 .gitignore 中追加 src/**/*.js 防止再次污染
+  # .gitignore 应包含的排除规则
+  gitignore_rules:
+    - "src/**/*.js"
+    - "src/**/*.jsx"
+    - "src/**/*.d.ts"
+  # 是否在修复后自动重启服务
+  auto_restart_after_fix: true
+
+# --- 进程残留清理增强默认配置（Process Cleanup Enhanced）---
+# 基于日志重定向 cmd.exe 残留导致 stop-service.ps1 端口扫描找不到的历史问题复盘提炼
+# stop-service.ps1 只通过端口扫描杀进程，但日志重定向 cmd.exe（pnpm run dev:api > api-dev.log 2>&1）
+# 不监听端口，端口扫描找不到它；taskkill 主进程后该 cmd 仍持有日志文件句柄
+process_cleanup:
+  # 是否启用进程残留清理增强
+  enabled: true
+  # 主进程检测策略
+  primary_detection: "port_scan"
+  # 残留进程检测策略列表（按优先级）
+  residual_detection_methods:
+    - "command_line_pattern_match"  # 通过命令行匹配清理日志重定向残留
+    - "child_process_tree"            # 通过子进程树清理
+    - "handle_inheritance"            # 通过句柄继承关系清理
+  # 残留进程命令行匹配模式（正则，匹配即清理）
+  residual_process_patterns:
+    # 日志重定向 cmd：pnpm/npm 命令 + > 重定向符号
+    - "pnpm\\s+run\\s+dev:.*>\\s*\\S+\\.log"
+    - "npm\\s+run\\s+dev:.*>\\s*\\S+\\.log"
+    # 通用日志重定向 cmd
+    - "cmd\\.exe.*>\\s*\\S+\\.log\\s+2>&1"
+    # node 进程通过 pnpm 启动的中间 cmd
+    - "node\\s+.*--inspect.*>\\s*\\S+\\.log"
+  # 清理命令模板（PowerShell）
+  # {pattern} 运行时替换为匹配的进程命令行模式
+  cleanup_command: |
+    Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '{pattern}' } |
+      ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  # 清理后验证方法
+  verification_method: "recheck_pattern"
+  # 验证失败时的重试次数
+  max_retries: 3
+  # 重试间隔（毫秒）
+  retry_interval_ms: 500
+  # 是否清理日志文件句柄（强制释放被占用的 .log 文件）
+  release_log_handles: true
+  # 日志文件句柄释放命令（PowerShell）
+  handle_release_command: |
+    Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '\\.log' } |
+      ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  # 是否在测试启动前执行预防性清理
+  preemptive_cleanup_on_start: true
+  # 是否在测试结束后执行最终清理
+  final_cleanup_on_exit: true
+  # 清理失败的降级策略
+  fallback_strategy: "taskkill_tree"
+  # taskkill 兜底命令（{pid} 运行时替换）
+  taskkill_fallback_command: "taskkill /F /T /PID {pid}"
+  # 清理报告输出项
+  report_items:
+    - "primary_processes_killed"
+    - "residual_processes_killed"
+    - "log_handles_released"
+    - "verification_result"
+
+# ============================================================
+# 以下为 Tauri 2.x 桌面应用集成测试复盘补充默认配置（第九批次）
+# 覆盖 Tauri 构建/启动/窗口/invoke 权限/错误诊断/磁盘空间/Console 日志
+# 项目特定值请在 config.yaml 中覆盖
+# 详见 references/tauri-desktop-testing.md
+# ============================================================
+
+# --- Tauri 桌面应用默认配置 ---
+# 默认关闭，项目在 config.yaml 中按实际 Tauri 项目结构开启
+tauri:
+  # 是否启用 Tauri 桌面测试阶段
+  enabled: false
+  # 默认可执行文件名（项目应覆盖为 Cargo.toml 的 [[bin]] name）
+  exe_name: "tauri-app"
+  # 默认 src-tauri 目录（项目应覆盖为实际路径）
+  src_tauri_dir: "src-tauri"
+  # 默认 SPA 构建脚本路径（项目应覆盖为实际构建脚本）
+  build_script_path: "npm run build"
+  # 默认窗口标题关键词（空字符串表示不校验标题）
+  expected_window_title: ""
+  # 默认启动超时 15 秒（Tauri 应用首次启动需加载 WebView）
+  startup_timeout_ms: 15000
+  # 默认 Rust 编译超时 10 分钟（大型项目首次编译可能更久）
+  compile_timeout_sec: 600
+  # 默认 debug 模式编译（release 编译慢但产物小）
+  release_mode: false
+  # 默认不清理 target 目录（保留以加速二次编译）
+  cleanup_target_dir: false
+
+# --- SPA 产物验证默认配置 ---
+# 默认关闭，项目在 config.yaml 中按实际源码目录与产物路径开启
+# 详见 references/spa-artifact-verification.md
+spa:
+  # 默认无 package_name（项目应覆盖为前端 package.json 的 name）
+  package_name: ""
+  # 默认无 output_dir（项目应覆盖为 vite.config.ts 的 build.outDir）
+  output_dir: ""
+  # 默认无源码目录（项目应覆盖为需监控的源码目录列表）
+  source_dirs: []
+  # 默认源码文件扩展名过滤（覆盖 TS/Vue/JS 主流前端技术栈）
+  source_extensions:
+    - ".ts"
+    - ".tsx"
+    - ".vue"
+    - ".js"
+    - ".jsx"
+  # 默认产物标记文件
+  artifact_marker_file: "index.html"
+  # 默认无关键字符串（项目应按新增功能追加）
+  key_strings: []
+  # 默认要求全部关键字符串都命中（严格模式）
+  require_all_keys: true
+  # 默认不强制重建（优先用时间戳对比判定）
+  force_rebuild: false
+
+# --- 后端健康检查默认配置 ---
+# Tauri 启动后轮询后端服务健康检查端点
+health_check:
+  # 默认健康检查端点（项目应覆盖为实际端口与路径）
+  endpoint: "http://localhost:3000/health"
+  # 默认重试 30 次（覆盖 30 秒启动窗口）
+  retry_count: 30
+  # 默认每次重试间隔 1 秒
+  timeout: 1000
+  # 默认期望 HTTP 200
+  expected_status: 200
+
+# --- invoke 权限验证默认配置 ---
+# Tauri 2.x invoke 调用的三层权限验证
+# 默认无命令与权限（项目应按实际使用的插件配置）
+# 详见 references/invoke-permission-verification.md
+invoke:
+  # 默认无命令（项目应覆盖为实际 invoke 调用的命令名列表）
+  commands: []
+  # 默认无权限（项目应覆盖为 capabilities.json 中期望的权限名列表）
+  permissions: []
+  # 默认无 URL 模式（为空时跳过第 3 层验证）
+  url_patterns: []
+  # 默认 capabilities 文件 glob 模式
+  capabilities_glob: "capabilities/*.json"
+  # 默认 Cargo.toml 路径（相对 src_tauri_dir）
+  cargo_toml_path: "Cargo.toml"
+
+# --- 磁盘空间检查默认配置 ---
+# Rust 编译产物与 node_modules 占用大，必须预检磁盘空间
+disk_space:
+  # 默认 debug 模式最小磁盘空间 5GB
+  debug_min_gb: 5
+  # 默认 release 模式最小磁盘空间 10GB（release 编译产物更大）
+  release_min_gb: 10
+  # 默认编译产物目录大小阈值 20GB（超过时告警清理）
+  cleanup_threshold_gb: 20
+
+# --- Console 日志采集默认配置 ---
+# Tauri stderr 与 DevTools Console 日志的关键词过滤与错误分类
+console_log:
+  # 默认启用 Console 日志采集
+  enabled: true
+  # 默认日志前缀过滤列表（覆盖 Tauri 常见日志前缀）
+  prefixes:
+    - "[Tauri]"
+    - "[IPC]"
+    - "[Plugin]"
+  # 默认错误关键词列表（与 failure_classification.rules 的 pattern 对齐）
+  # 命中即判定失败，并触发错误分类
+  error_keywords:
+    - "Plugin not found"
+    - "not allowed"
+    - "URL: local"
+    - "command not found"
+    - "serialization error"
+    - "panicked at"
+    - "thread 'main' has overflowed its stack"
 

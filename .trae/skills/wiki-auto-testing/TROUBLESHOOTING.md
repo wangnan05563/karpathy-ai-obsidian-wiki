@@ -330,3 +330,65 @@ open('script.py', 'w', encoding='utf-8').write(content)
 - `validate_no_external_call_in_offline: true` 时验证后端未发起外部 GitHub API 调用
 - `validate_poll_ge_ttl: true` 时读取前端代码中的 `setInterval` 间隔，验证 ≥ `cache_ttl_ms`
 - `require_timer_cleanup: true` 时读取 `app_entry` 文件，验证 `setInterval` 与 `clearInterval` 在 `onMounted` / `onBeforeUnmount` 配对
+
+## 25. 构建产物 HTTP 404 或内容截断
+
+**症状**：vite build 后访问 `http://localhost:3000/assets/index-{hash}.js` 返回 404，或 `Invoke-WebRequest` 下载的内容远小于磁盘文件大小。
+
+**根因**：后端 tsx watch / nodemon 未自动加载新构建产物（特别是 hash 文件名变化时），或返回了 JSON 错误响应（如 `{ "error": "Not Found" }` 通常仅数百字节）。
+
+**解决**：
+1. 启用 `build_artifact_verification.enabled: true` 自动验证 HTTP 三要素
+2. 若 `restart_backend_on_404: true`，自动停止旧后端进程并重启
+3. 轮询 `health_check_endpoint` 直到返回 200
+
+## 26. Playwright MCP 报 "MCP server is not found"
+
+**症状**：调用 chrome-devtools-mcp 或 playwright-mcp 时报 `MCP server is not found` 错误。
+
+**根因**：MCP 服务未配置或未启动。
+
+**解决**：
+1. 启用 `browser_automation_fallback.enabled: true` 自动降级
+2. 降级链路：`playwright-mcp` → `browser-use-subagent` → `powershell-curl`
+3. 每级降级记录降级原因（`log_degradation_reason: true`）
+4. browser_use subagent 截图可能不可用（不可见 tab 限制），降级为 DOM 检查
+
+## 27. 导航栏折叠/展开切换失效
+
+**症状**：点击折叠/展开按钮无响应，或切换后布局抖动。
+
+**根因**：未用 Vue Transition `mode="out-in"`，或折叠状态未持久化到 localStorage。
+
+**解决**：
+1. 启用 `nav_dual_mode_tests.enabled: true` 自动验证切换逻辑
+2. 检查 `<Transition name="..." mode="out-in">` 是否正确包裹
+3. 验证 `localStorage.getItem('navCollapsed')` 持久化逻辑
+4. 验证 `menu_items` 列表与实际菜单项数量一致
+
+## 28. 图标不跟随主题变色
+
+**症状**：切换主题后图标颜色保持不变，或所有图标显示为同一硬编码色值。
+
+**根因**：SVG 图标的 `stroke` / `fill` 属性未设为 `currentColor`，或 CSS 中硬编码了色值。
+
+**解决**：
+1. 启用 `icon_theme_tests.enabled: true` 自动验证 currentColor 生效
+2. 扫描 `.vue` / `.svg` 文件中的 `<svg>` 标签
+3. 将 `stroke="#hex"` / `fill="rgb()"` 改为 `stroke="currentColor"` / `fill="currentColor"`
+4. 验证 `filter: drop-shadow(0 0 Xpx currentColor)` 用 currentColor 而非硬编码色值
+
+## 29. PowerShell 字符串验证输出混乱
+
+**症状**：`$js = curl.exe -s "url"; $js.Contains("keyword")` 输出非预期布尔值，或变量类型不可预测。
+
+**根因**：PowerShell 中 `curl.exe` 输出可能被解析为多个对象（数组），`.Contains()` 行为不可预测。
+
+**解决**：
+1. 启用 `powershell_string_verification.enabled: true` 自动检测禁止模式
+2. 改用 `Invoke-WebRequest` + `.Content.Contains()` 模式：
+   ```powershell
+   $r = Invoke-WebRequest -Uri "url" -UseBasicParsing
+   $r.Content.Contains("keyword")  # 始终返回正确的布尔值
+   ```
+3. `Invoke-WebRequest` 返回的 `.Content` 属性始终是单一字符串

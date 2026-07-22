@@ -212,6 +212,87 @@ function hasReplacementChar(content: string, threshold = 0): boolean {
 
 > **示例代码**: 参见 [examples/encoding-safety-rule-examples.md](examples/encoding-safety-rule-examples.md)。
 
+### ES-7: 禁用状态的可交互元素必须显式设置 disabled 属性
+
+IsUrgent: False
+Category: Encoding Safety
+
+### Description
+
+涉及禁用状态的可交互元素（button、input、select、option 等）必须设置 `disabled` 属性，而非仅依赖 CSS 类或样式置灰。
+
+仅用 CSS 类（如 `.is-disabled`）置灰时，Playwright/Testing Library 等自动化测试工具认为元素仍可点击，点击操作会无限重试直至超时（默认 30s），浪费测试时间且产生误报。此外，屏幕阅读器等辅助技术依赖 `disabled` 属性向残障用户传达状态。
+
+### Suggested Fix
+
+```vue
+<!-- ❌ 仅用 CSS 类置灰，测试工具无法识别 -->
+<el-button
+  type="primary"
+  :class="{ 'is-disabled': !isFormValid }"
+  @click="handleSubmit"
+>
+  提交
+</el-button>
+
+<!-- ✅ 显式 disabled 属性，便于测试与可访问性 -->
+<el-button
+  type="primary"
+  :disabled="!isFormValid"
+  @click="handleSubmit"
+>
+  提交
+</el-button>
+```
+
+### ES-8: UI 文案必须与设计文档一致，变更时同步更新测试用例
+
+IsUrgent: False
+Category: Encoding Safety
+
+### Description
+
+UI 文案（标题、按钮、菜单项、表单标签等）必须与设计文档中的定义一致。变更文案时必须同步更新设计文档与测试用例。
+
+测试脚本若用旧文案作为定位器或断言文本，而源码文案已变更，测试会失败但不易定位原因。例如 Config.vue 实际显示"AI 服务"，测试脚本却用"AI 配置"作为断言文本，导致测试无法通过且错误信息具有迷惑性。
+
+### Suggested Fix
+
+1. 从源码提取 UI 文本（Grep `title|label|placeholder|el-menu-item|el-button` 属性值）。
+2. 交叉比对设计文档与测试用例中的断言文本。
+3. git diff 涉及文案变更时，确认相关测试用例的断言文本同步更新。
+
+### ES-9: 多实例数据（主题列表、预设列表等）必须集中管理，禁止硬编码
+
+IsUrgent: True
+Category: Encoding Safety
+
+### Description
+
+主题列表、预设列表、菜单项列表等同类多实例数据必须集中管理（从配置文件或后端 API 读取），禁止在组件中硬编码数量或字面量数组。
+
+硬编码主题数量（如 `const themeCount = 3`）会在新增主题时导致计数失真。硬编码预设列表会导致前后端不一致（前端写死 3 个预设，后端新增第 4 个时前端无法展示）。集中管理后，新增/删除实例只需改配置或后端数据，前端自动适配。
+
+### Suggested Fix
+
+```typescript
+// ❌ 硬编码数量与列表
+const THEME_COUNT = 3;
+const THEMES = [
+  { key: 'light', label: '浅色' },
+  { key: 'dark', label: '深色' },
+  { key: 'auto', label: '跟随系统' },
+];
+
+// ✅ 从配置/API 加载，数量由数据源决定
+export const themes = ref<Theme[]>([]);
+export async function loadThemes() {
+  const resp = await fetch('/api/themes');
+  themes.value = (await resp.json()).themes;
+}
+export const themeCount = computed(() => themes.value.length);
+```
+
 ## Checklist
 - [ ] 源文件（`.vue` / `.ts` / `.tsx` 等）为 UTF-8 无 BOM
 - [ ] 元配置文件（`.editorconfig` / `.vscode/settings.json` 等）为 UTF-8 无 BOM
@@ -219,3 +300,6 @@ function hasReplacementChar(content: string, threshold = 0): boolean {
 - [ ] 检测时机覆盖 Edit 后与构建前
 - [ ] 纯 ASCII 文件按白名单短路放行
 - [ ] 文件内容扫描 `U+FFFD` 替换字符，超过阈值即判定为编码损坏
+- [ ] 禁用状态的可交互元素显式设置 `disabled` 属性（非仅 CSS 置灰）
+- [ ] UI 文案与设计文档一致，变更时同步更新测试用例
+- [ ] 多实例数据集中管理，禁止硬编码数量或字面量数组

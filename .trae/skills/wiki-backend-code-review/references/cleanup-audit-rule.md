@@ -3,7 +3,7 @@
 ## Scope
 
 - Covers: 清理类路由（删除、归档、回收、过期数据清理）的审计日志、`days` 参数下限保护、`dry_run` 预览模式、单子项失败独立 try-catch、实际执行后状态刷新。
-- 适用对象：`services/api/src/routes/` 下涉及批量删除/清理的路由（如 `cleanup.ts`、`archive.ts`）、清理 workflow、清理任务的审计日志写入逻辑。
+- 适用对象：`api/src/routes/` 下涉及批量删除/清理的路由（如 `cleanup.ts`、`archive.ts`）、清理 workflow、清理任务的审计日志写入逻辑。
 - Does NOT cover: 通用错误处理模式（见 [error-handling-rule.md](error-handling-rule.md)）、配置项硬编码（见 [config-management-rule.md](config-management-rule.md)）、跨目录路径计算（见 [filesystem-vault-rule.md](filesystem-vault-rule.md)）。
 
 > 所有具体审计路径、下限值、默认值均从 [config/review-config.md](../config/review-config.md) 的"清理操作审计参数"节读取，本规则文件只描述通用模式，不硬编码任何具体值。
@@ -231,7 +231,7 @@
 
 ### 适用
 
-- 评审 `services/api/src/routes/` 下清理/归档/回收类路由（如 `cleanup.ts`、`archive.ts`）。
+- 评审 `api/src/routes/` 下清理/归档/回收类路由（如 `cleanup.ts`、`archive.ts`）。
 - 评审批量删除 workflow、定时清理任务、过期数据回收逻辑。
 - 评审审计日志写入函数、`days` 参数解析、`dry_run` 默认值处理。
 - 评审清理后状态刷新（`loadStatus` / `refreshConfigCache`）逻辑。

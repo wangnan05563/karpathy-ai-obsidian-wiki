@@ -50,7 +50,7 @@ SPA 项目（无 vue-router）中，跨组件视图切换（如 About 视图内�
 |------|--------|------|
 | `spa_navigation.event_name_pattern` | `{project}:navigate` | 事件名模式，`{project}` 占位符运行时替换 |
 | `spa_navigation.project_name` | `karpathy` | 项目名，替换事件名中的 `{project}` 占位符 |
-| `spa_navigation.app_entry` | `packages/web/src/App.vue` | 监听事件的入口组件路径 |
+| `spa_navigation.app_entry` | `frontend/src/App.vue` | 监听事件的入口组件路径 |
 | `spa_navigation.allowed_views` | `[]` | 允许跳转的视图名白名单；留空表示不校验 |
 | `spa_navigation.require_lifecycle_pair` | `true` | 监听器必须在 `onMounted` / `onBeforeUnmount` 配对管理 |
 

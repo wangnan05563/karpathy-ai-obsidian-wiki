@@ -3,7 +3,7 @@
 ## Scope
 
 - Covers: 后端源文件（`.ts`）、配置文件（`.json`）以及规则/文档（`.md`）的字符编码一致性，BOM 与非 UTF-8 字节检测，PowerShell 编辑含中文注释时的编码保持。
-- 适用对象：所有 `services/api/` 下的 `.ts` 源文件、`config.json` / `tsconfig.json` 等配置文件、本技能及相邻技能目录下的 `.md` 规则文件；Edit 后、`tsc` 编译前的检测点。
+- 适用对象：所有 `api/` 下的 `.ts` 源文件、`config.json` / `tsconfig.json` 等配置文件、本技能及相邻技能目录下的 `.md` 规则文件；Edit 后、`tsc` 编译前的检测点。
 - Does NOT cover: 文件系统路径遍历防护（见 [security-rule.md](security-rule.md)）、跨目录路径计算（见 [filesystem-vault-rule.md](filesystem-vault-rule.md)）、配置项硬编码（见 [config-management-rule.md](config-management-rule.md)）。
 
 > 所有具体编码值、检测方法、扫描扩展名均从 [config/review-config.md](../config/review-config.md) 的"编码安全审查参数"节读取，本规则文件只描述通用模式，不硬编码任何具体值。
@@ -94,7 +94,7 @@
 
 ### 适用
 
-- 评审 `services/api/` 下 `.ts` / `.json` 文件的字符编码一致性。
+- 评审 `api/` 下 `.ts` / `.json` 文件的字符编码一致性。
 - 评审 Edit 钩子、CI 脚本中"写后即检测"的编码守卫。
 - 评审 PowerShell 维护脚本对含中文注释文件的处理。
 - 评审本技能及相邻技能目录下 `.md` 规则文件的编码（避免规则文件自身乱码）。

@@ -1,4 +1,8 @@
-﻿## 多实例配置必须按维度独立持久化
+# Rule Catalog — Config Isolation
+
+配置隔离审查规则：确保多实例配置按维度独立持久化，防止状态串扰与配置泄露。所有参数从 `config/review-config.md` 读取，禁止在规则文件中硬编码。
+
+## 多实例配置必须按维度独立持久化
 
 IsUrgent: True
 Category: Config Isolation
@@ -70,5 +74,35 @@ Category: Config Isolation
 ### Suggested Fix
 
 统一多入口的 localStorage key 命名；若无法立即统一，在保存时同步写入两个 key，并在读取时优先使用规范 key。
+
+> **示例代码**: 参见 [examples/config-isolation-rule-examples.md](examples/config-isolation-rule-examples.md)。
+
+## 预设列表必须从后端 API 获取，禁止前端硬编码
+
+IsUrgent: True
+Category: Config Isolation
+
+### Description
+
+预设列表（LLM 预设、配置模板等）必须通过后端 API 获取，禁止在前端代码中硬编码预设数组。前端硬编码预设列表会导致前后端不一致——后端新增预设时前端无法展示，需同步修改前端代码再部署。
+
+此规则是 ES-9（多实例数据集中管理）在预设场景下的具体应用。预设作为动态配置数据，其权威源必须是后端 API 或配置文件，前端仅做展示与交互。
+
+### Suggested Fix
+
+```typescript
+// ❌ 前端硬编码预设列表
+const PRESETS = [
+  { key: 'openai', label: 'OpenAI', ... },
+  { key: 'deepseek', label: 'DeepSeek', ... },
+];
+
+// ✅ 通过 API 获取预设
+const resp = await fetch('/api/ai/presets');
+const data = await resp.json();
+const presets = data.presets;
+```
+
+预设类型须与后端返回结构一致，使用 `types.ts` 中定义的接口。
 
 > **示例代码**: 参见 [examples/config-isolation-rule-examples.md](examples/config-isolation-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。

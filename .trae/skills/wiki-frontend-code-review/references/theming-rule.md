@@ -1,4 +1,8 @@
-﻿## 禁止硬编码主题色值，必须用 CSS 变量
+# Rule Catalog — Theming
+
+主题系统审查规则：确保 UI 元素使用 CSS 变量适配主题切换，禁止硬编码色值。所有参数从 `config/review-config.md` 读取，禁止在规则文件中硬编码。
+
+## 禁止硬编码主题色值，必须用 CSS 变量
 
 IsUrgent: True
 Category: Theming

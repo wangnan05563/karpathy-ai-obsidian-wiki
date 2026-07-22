@@ -58,6 +58,9 @@ navigation:
       label: "体检"
       expected_elements:
         - { selector: "[class*='health'], [class*='status']", name: "体检状态" }
+        # 批量修复按钮（.batch-btn/.batch-section-btn）为条件渲染（仅有可修复问题时显示），
+        # 不纳入基础元素检查，避免空 vault 环境下 count=0 误报失败。
+        # 交互测试阶段可手动验证或通过 dynamic engine 步骤触发。
     - key: "config"
       label: "配置"
       expected_elements:
@@ -69,6 +72,27 @@ navigation:
         - { selector: ".el-tag", name: "状态标签" }
         - { selector: ".el-button", name: "操作按钮" }
         - { selector: ".el-select", name: "Provider 选择器" }
+    - key: "progress"
+      label: "编译进度"
+      expected_elements:
+        - { selector: "[class*='progress'], [class*='compile']", name: "编译进度展示" }
+    - key: "cleanup"
+      label: "系统清理"
+      expected_elements:
+        - { selector: ".glass-card, [class*='cleanup']", name: "清理卡片" }
+        - { selector: ".el-switch, [role='switch']", name: "dry_run 开关" }
+        - { selector: ".el-button", name: "清理按钮" }
+    - key: "help"
+      label: "帮助文档"
+      expected_elements:
+        - { selector: ".help-content-area, [class*='help']", name: "帮助文档内容区" }
+        - { selector: ".anchor-item, [class*='anchor']", name: "锚点导航" }
+        - { selector: ".section-card, [class*='section-card']", name: "章节卡片" }
+    - key: "about"
+      label: "关于"
+      expected_elements:
+        - { selector: ".glass-card, [class*='about']", name: "关于卡片" }
+        - { selector: ".el-button", name: "检查更新按钮" }
 
 # --- 交互测试配置（项目特定） ---
 interactions:
@@ -97,6 +121,9 @@ api_tests:
       expected_status: 200
     - path: "/api/stats"
       expected_status: 200
+      # buildLinkGraph 扫描整个 vault 的 .md 文件提取 wikilinks，首次请求较慢
+      # 给 60s 超时避免 Playwright 默认 30s 超时失败
+      timeout_ms: 60000
     - path: "/api/config"
       expected_status: 200
     - path: "/api/files/tree"
@@ -450,3 +477,612 @@ update_check_tests:
   validate_no_external_call_in_offline: true
   # 失败时是否截图取证
   screenshot_on_fail: true
+
+# ============================================================
+# 以下为菜单图标设计与导航栏折叠/展开改造复盘补充配置（第四批次）
+# 覆盖构建产物验证、浏览器自动化降级、导航栏双模式、图标主题跟随、PowerShell 字符串验证
+# 所有参数可配置，避免硬编码
+# ============================================================
+
+# --- 构建产物验证配置 ---
+# vite build 后验证产物的 HTTP 可访问性、内容完整性、关键字符串包含性
+# 防止后端 watch 模式未加载新构建产物导致 404 或返回截断内容
+build_artifact_verification:
+  # 是否启用构建产物验证
+  enabled: true
+  # 构建产物访问端点模板（{api_port} 与 {bundle_filename} 运行时替换）
+  serving_endpoint_template: "http://localhost:{api_port}/assets/{bundle_filename}"
+  # 构建产物输出目录（相对项目根）
+  bundle_directory: "karpathy-wiki/api/public/assets"
+  # 必需的 HTTP 状态码
+  required_http_status: 200
+  # Content-Length 必须与磁盘文件大小一致
+  content_length_match: true
+  # 必须验证 bundle 中包含的关键 CSS 类/字符串
+  key_strings_check: true
+  # 关键字符串列表（新增组件/功能时追加）
+  key_strings:
+    - "nav-collapsed"
+    - "icon-btn"
+    - "icon-tooltip"
+    - "nav-icons-bar"
+    - "tab-icon"
+    - "nav-toggle"
+  # 后端 watch 模式未加载新产物时是否重启后端
+  restart_backend_on_404: true
+  # 后端重启超时（毫秒）
+  restart_timeout_ms: 30000
+  # 后端重启后轮询健康检查端点
+  health_check_endpoint: "/api/ai/config"
+  # 轮询间隔（毫秒）
+  poll_interval_ms: 1000
+
+# --- 浏览器自动化降级配置 ---
+# Playwright MCP 不可用时的降级链路与能力限制
+# 降级链路：Playwright MCP → browser_use subagent → PowerShell + curl
+browser_automation_fallback:
+  # 是否启用降级链路
+  enabled: true
+  # 降级链路顺序（按优先级从高到低）
+  chain:
+    - "playwright-mcp"
+    - "browser-use-subagent"
+    - "powershell-curl"
+  # 每级降级的最大重试次数
+  max_retry_per_level: 1
+  # 每级降级的超时（毫秒）
+  timeout_ms: 30000
+  # 每级降级必须记录降级原因
+  log_degradation_reason: true
+  # 降级后仍须完成的核心验证项
+  core_verifications:
+    - "http_status_check"
+    - "key_string_containment"
+    - "build_artifact_integrity"
+  # 降级后无法完成的验证项（在报告中标注"未验证"）
+  unsupported_verifications:
+    - "click_interaction"
+    - "hover_tooltip"
+    - "theme_switch"
+  # browser_use subagent 截图限制（不可见 tab 无法保存截图）
+  screenshot_unsupported_in_subagent: true
+  # 截图失败时是否降级为 DOM 检查
+  fallback_to_dom_check: true
+
+# --- 导航栏双模式测试配置 ---
+# 验证折叠/展开切换、tooltip 显示、12 图标导航、状态持久化
+# 基于菜单图标设计与折叠/展开改造复盘提炼
+nav_dual_mode_tests:
+  # 是否启用导航栏双模式测试
+  enabled: true
+  # 需要测试的页面（通常仅在主页面测试导航栏）
+  test_pages: ["dashboard"]
+  # 折叠/展开切换按钮选择器
+  toggle_selector: ".nav-toggle"
+  # 展开模式导航栏选择器
+  expanded_nav_selector: ".nav.glass-card"
+  # 折叠模式导航栏选择器
+  collapsed_nav_selector: ".nav-collapsed.glass-card"
+  # 展开模式菜单按钮选择器
+  expanded_tab_selector: ".tab-btn"
+  # 折叠模式图标按钮选择器
+  collapsed_icon_selector: ".icon-btn"
+  # tooltip 选择器
+  tooltip_selector: ".icon-tooltip"
+  # 展开模式图标尺寸（px）
+  expanded_icon_size: 16
+  # 折叠模式图标尺寸（px）
+  collapsed_icon_size: 22
+  # tooltip 显示延迟（毫秒）
+  tooltip_delay_ms: 200
+  # 切换动画等待时间（毫秒）
+  transition_wait_ms: 300
+  # localStorage 持久化 key
+  state_persistence_key: "navCollapsed"
+  # 12 个菜单图标列表（key + label，用于逐一验证点击导航）
+  menu_items:
+    - { key: "dashboard", label: "仪表盘" }
+    - { key: "ingest", label: "投递资料" }
+    - { key: "progress", label: "编译进度" }
+    - { key: "browse", label: "知识浏览" }
+    - { key: "query", label: "知识问答" }
+    - { key: "graph", label: "图谱" }
+    - { key: "health", label: "体检" }
+    - { key: "config", label: "配置" }
+    - { key: "tunnel", label: "内网穿透" }
+    - { key: "cleanup", label: "系统清理" }
+    - { key: "help", label: "帮助文档" }
+    - { key: "about", label: "关于" }
+  # 失败时是否截图取证
+  screenshot_on_fail: true
+
+# --- 图标主题跟随测试配置 ---
+# 验证矢量图标在主题切换时颜色是否自动跟随变化
+# 基于主题感知图标设计复盘提炼（currentColor + CSS 变量）
+icon_theme_tests:
+  # 是否启用图标主题跟随测试
+  enabled: true
+  # 需要测试的页面
+  test_pages: ["dashboard"]
+  # 图标选择器（含展开模式与折叠模式）
+  icon_selectors:
+    - ".tab-icon"
+    - ".nav-icon"
+    - ".icon-btn .nav-icon"
+  # 主题切换器选择器
+  theme_switcher_selector: ".theme-switcher .trigger"
+  # 主题项选择器
+  theme_item_selector: ".theme-switcher .theme-item"
+  # 测试的主题列表（key 对应 useTheme.ts 的主题列表）
+  test_themes:
+    - "macaron"
+    - "enterprise"
+    - "creative"
+    - "product"
+    - "ecommerce"
+    - "portfolio"
+  # 颜色验证方法：computed_style（getComputedStyle 读取 color 属性）
+  color_verification_method: "computed_style"
+  # 主题切换前后图标颜色必须不同（验证跟随生效）
+  require_color_change: true
+  # 主题切换后等待颜色生效的时间（毫秒）
+  color_settle_ms: 300
+  # 失败时是否截图取证
+  screenshot_on_fail: true
+
+# --- PowerShell 字符串验证配置 ---
+# 防止 curl.exe 管道赋值 + .Contains() 模式导致的变量捕获陷阱
+# 改用 Invoke-WebRequest + .Content.Contains() 模式
+powershell_string_verification:
+  # 是否启用 PowerShell 字符串验证模式守卫
+  enabled: true
+  # 禁止的字符串验证模式（正则）
+  forbidden_patterns:
+    - 'curl\.exe -s.*\|\s*\$\w+\s*='
+    - '\$\w+\s*=\s*curl\.exe'
+  # 推荐的字符串验证模式
+  recommended_pattern: "Invoke-WebRequest + .Content.Contains()"
+  # 推荐的 PowerShell 命令模板
+  recommended_template: |
+    $r = Invoke-WebRequest -Uri "{url}" -UseBasicParsing
+    if ($r.StatusCode -ne {expected_status}) {{ throw "HTTP 状态码异常" }}
+    if (-not $r.Content.Contains("{key_string}")) {{ throw "关键字符串未包含" }}
+  # 验证范围：扫描所有测试脚本
+  scan_scope: "test_scripts"
+  # 命中禁止模式时的处理：warn（告警）/ block（阻断）
+  on_violation: "warn"
+
+# ============================================================
+# 以下为 Async 可靠性测试复盘补充配置（第五批次）
+# 覆盖超时防护、心跳可靠性、兜底数据、运行时验证
+# 所有参数可配置，避免硬编码
+# ============================================================
+
+# --- Async 可靠性测试配置 ---
+# 复盘来源：浏览器登录 91s 超时，Playwright context.cookies() 永久挂起阻塞事件循环
+async_reliability_tests:
+  # 是否启用 Async 可靠性测试
+  enabled: true
+  # 超时防护测试
+  timeout_protection:
+    enabled: true
+    test_cases:
+      - name: "async 调用必须设置超时"
+        rule_id: "CODING-021"
+        check_method: "grep"
+        pattern: "await\\s+\\w+\\."
+        whitelist_pattern: "asyncio\\.sleep|Promise\\.resolve"
+        required_wrapper: "asyncio.wait_for|Promise.race"
+        severity: "critical"
+      - name: "多层超时防护"
+        rule_id: "CODING-025"
+        check_method: "manual"
+        description: "审查长时 async 任务是否配置至少 2 层超时"
+        severity: "suggestion"
+  # 心跳可靠性测试
+  heartbeat_reliability:
+    enabled: true
+    test_cases:
+      - name: "心跳必须使用线程实现"
+        rule_id: "CODING-022"
+        check_method: "grep"
+        pattern: "asyncio\\.create_task|asyncio\\.Task"
+        forbidden_in_heartbeat: true
+        required_impl: "threading.Thread"
+        severity: "critical"
+      - name: "状态文件 ts 字段更新独立性"
+        rule_id: "CODING-023"
+        check_method: "grep"
+        pattern: "_write_status|_emit_status|set_status"
+        required_context: "threading.Thread"
+        max_loop_interval_sec: 10.0
+        severity: "critical"
+  # 兜底数据测试
+  fallback_data:
+    enabled: true
+    test_cases:
+      - name: "超时后必须有兜底数据"
+        rule_id: "CODING-024"
+        check_method: "grep"
+        pattern: "asyncio.wait_for|Promise.race"
+        except_branch_required: true
+        forbidden_actions: ["raise", "pass"]
+        required_action: "fallback_data_assignment"
+        severity: "warning"
+  # 运行时验证测试
+  runtime_verification:
+    enabled: true
+    test_cases:
+      - name: "状态文件 ts 字段持续更新"
+        description: "启动子进程后监控状态文件 ts 字段，确认 90s 内有更新"
+        check_method: "runtime"
+        monitor_duration_sec: 90
+        max_gap_sec: 10
+        status_file_pattern: "%TEMP%\\xh_browser_login\\*.json"
+        severity: "critical"
+      - name: "心跳线程存活验证"
+        description: "业务循环卡住时确认心跳线程仍在更新 ts"
+        check_method: "runtime"
+        simulate_blocking: true
+        monitor_duration_sec: 30
+        expected_heartbeat_count: 10
+        severity: "critical"
+
+# ============================================================
+# 以下为配置一致性/热更新/降级验证复盘补充配置（第六批次）
+# 所有参数可配置，避免硬编码
+# ============================================================
+
+# --- 配置一致性/热更新/降级验证配置 ---
+verification:
+  # 配置读取一致性验证
+  config_consistency_check:
+    enabled: true
+    # 需要验证的配置读取入口
+    check_entries: ["startup", "api_get", "api_test"]
+    # 验证方法：比对 API Key 状态是否一致
+    verify_method: "compare_api_key_status"
+  # 热更新闭环验证
+  hot_update_verification:
+    enabled: true
+    # 热更新验证流程：保存→持久化→更新配置→验证
+    flow: "save→persist→updateConfig→verify"
+    # 验证使用的 API 端点
+    verify_api: "GET /api/ai/config"
+  # 降级机制验证
+  degradation_verification:
+    enabled: true
+    # 降级测试用例列表
+    test_cases:
+      - name: "LLM 失效降级"
+        simulate: "invalid_api_key"
+        expected: "降级为检索模式"
+      - name: "服务不可用降级"
+        simulate: "service_down"
+        expected: "兜底提示"
+
+# --- 破坏性按钮白名单 ---
+# 测试中遇到这些按钮须先备份配置，测试后恢复
+destructive_buttons:
+  - "恢复初始配置"
+  - "删除"
+  - "清除"
+  - "重置"
+
+# ============================================================
+# 以下为 v2 导航栏改造复盘补充配置（第七批次）
+# 覆盖前置检查、测试用例同步、失败分类、服务管理四个协议
+# 针对本项目定制，所有参数可配置，避免硬编码
+# ============================================================
+
+# --- 前置检查协议配置（Pre-flight Check Protocol）---
+# 在阶段 1 构建之前执行，防止服务未就绪时全部用例误报失败
+precheck:
+  # 是否启用前置检查协议
+  enabled: true
+  # 必须监听的端口列表（与 service.required_ports 对齐）
+  required_ports:
+    - 3000
+    - 5173
+  # 端口期望状态（Listen 表示端口已进入监听状态）
+  port_check_state: "Listen"
+  # 端口检测方法（PowerShell cmdlet）
+  port_check_method: "Get-NetTCPConnection"
+  # 健康检查端点路径（与 service.health_endpoint 对齐）
+  health_check_endpoint: "/health"
+  # 健康检查期望 HTTP 状态码
+  health_check_expected_status: 200
+  # 启动后最长等待毫秒数
+  startup_timeout_ms: 30000
+  # 端口轮询间隔毫秒数
+  port_poll_interval_ms: 1000
+  # 是否执行浏览器可启动检查（验证 Playwright 环境）
+  browser_launch_check: true
+  # 服务启动脚本（与 startup.script_path 对齐，bat 脚本需配合 bypass_bat_pause）
+  service_start_script: "karpathy-wiki/scripts/启动服务.bat"
+  # 检查失败时是否自动启动服务
+  auto_start_on_failure: true
+
+# --- 测试用例同步协议配置（Test Case Sync Protocol）---
+# 在阶段 5 补充测试中执行，防止代码变更影响 DOM 后测试引用已删除选择器
+test_sync:
+  # 是否启用测试用例同步协议
+  enabled: true
+  # 测试文件 glob 匹配模式列表
+  test_file_patterns:
+    - "**/test_*.py"
+    - "**/test_*.ts"
+    - "**/*.spec.ts"
+    - "**/*.test.ts"
+  # 选择器变更识别正则列表（class / id / 属性 / data-testid）
+  selector_patterns:
+    - '\.[-\w]+'
+    - '#[-\w]+'
+    - '[class="[^"]+"]'
+    - 'data-testid="[^"]+"'
+  # 是否要求代码与测试同 commit 提交
+  require_same_commit: true
+  # 是否禁止 except 分支静默吞错
+  silent_failure_forbidden: true
+  # 失效选择器容忍阈值（0 = 零容忍）
+  stale_selector_threshold: 0
+
+# --- 失败分类协议配置（Failure Classification Protocol）---
+# 在阶段 6 结果汇总中执行，标准化测试失败的分类与处理流程
+failure_classification:
+  # 是否启用失败分类协议
+  enabled: true
+  # 是否对 selector_not_found 自动触发测试同步检查
+  auto_fix: true
+  # 失败类型匹配规则列表
+  rules:
+    - type: "connection_refused"
+      pattern: "ERR_CONNECTION_REFUSED|ECONNREFUSED"
+      suggestion: "运行 karpathy-wiki/scripts/启动服务.bat 启动服务"
+    - type: "selector_not_found"
+      pattern: "TimeoutError.*waiting for selector|Element not found"
+      suggestion: "检查代码是否删除了该选择器，同步更新测试用例"
+    - type: "assertion_failed"
+      pattern: "AssertionError|expect\\(.*\\) to be"
+      suggestion: "检查断言预期值是否与实际行为一致"
+    - type: "timeout"
+      pattern: "TimeoutError|Exceeded timeout"
+      suggestion: "增加超时时间或优化等待策略"
+    - type: "browser_crash"
+      pattern: "Target closed|Browser crashed"
+      suggestion: "检查 Chromium 启动参数，参考 headless_crash_guard"
+    - type: "encoding_corrupted"
+      pattern: "U\\+FFFD|锟斤拷|乱码"
+      suggestion: "运行 node scripts/check-encoding.js --fix"
+    - type: "config_mismatch"
+      pattern: "config.*not.*found|undefined"
+      suggestion: "检查 config.yaml 与 defaults.yaml 配置项"
+  # 失败类型对应的修复建议映射
+  suggestions:
+    connection_refused: "运行 karpathy-wiki/scripts/启动服务.bat 启动服务"
+    selector_not_found: "检查代码是否删除了该选择器，同步更新测试用例"
+    assertion_failed: "检查断言预期值是否与实际行为一致"
+    timeout: "增加超时时间或优化等待策略"
+    browser_crash: "检查 Chromium 启动参数，参考 headless_crash_guard"
+    encoding_corrupted: "运行 node scripts/check-encoding.js --fix"
+    config_mismatch: "检查 config.yaml 与 defaults.yaml 配置项"
+
+# --- 服务管理协议配置（Service Management Protocol）---
+# 贯穿阶段 1-6，标准化测试过程中的服务生命周期管理
+service_management:
+  # 是否启用服务管理协议
+  enabled: true
+  # 测试启动前是否停止占用端口的旧进程（与 service_lifecycle.stop_old_process 对齐）
+  stop_old_process: true
+  # 是否清理日志重定向残留进程（本项目 pnpm run dev 可能产生 cmd.exe 残留）
+  cleanup_residual: true
+  # 测试后是否停止服务（受 keep_running 控制）
+  cleanup_after_test: false
+  # 测试后是否保持服务运行（true 时即使 cleanup_after_test=true 也不停止）
+  keep_running: true
+  # 残留进程命令行匹配模式（本项目用 pnpm）
+  residual_match_pattern: "pnpm run dev"
+  # 服务停止脚本（与 startup.stop_script_path 对齐）
+  stop_script: "karpathy-wiki/scripts/停止服务.bat"
+
+# ============================================================
+# 以下为 P0/P1/P2 目录结构优化复盘补充配置（第八批次）
+# 覆盖 .gitignore 规则验证、目录结构完整性、脚本引用完整性、类型检查回归、搜索结果交叉验证
+# 所有参数可配置，避免硬编码
+# ============================================================
+
+# 目录结构验证测试参数（P0/P1/P2 复盘提炼）
+structure_verification:
+  # 是否启用目录结构验证测试
+  enabled: true
+  # .gitignore 规则验证
+  gitignore_verify_command: "git check-ignore -v"
+  gitignore_tracked_check: "git ls-files --error-unmatch"
+  gitignore_untrack_command: "git rm --cached"
+  gitignore_target_patterns:
+    - "data/vault/raw/"
+    - "data/vault/log.md"
+    - "dist/"
+    - "build/"
+    - "w64devkit/"
+    - "test_screenshots/"
+    - "test_*.json"
+
+  # 目录结构完整性验证
+  expected_source_dirs: ["packages/", "services/"]
+  expected_data_dir: "data/vault/"
+  expected_docs_dir: "docs/"
+  expected_scripts_dir: "scripts/"
+  forbidden_mixing_patterns:
+    - pattern: "services/*/vault/raw/"
+      reason: "运行时数据禁止放在源码目录"
+    - pattern: "services/*/src/.skills/"
+      reason: "开发规范禁止放在源码目录"
+
+  # 脚本引用完整性验证
+  script_rename_grep_pattern: "old_script_name"
+  script_rename_verify_command: "git grep"
+
+  # 类型检查回归验证
+  typecheck_commands:
+    backend: "npx tsc --noEmit"
+    frontend: "npx vue-tsc --noEmit"
+  typecheck_working_dirs:
+    backend: "services/api/"
+    frontend: "packages/web/"
+
+# 搜索结果交叉验证参数
+search_cross_verification:
+  primary_tools: ["Glob", "Grep", "LS"]
+  fallback_tools: ["PowerShell Test-Path", "PowerShell Resolve-Path"]
+  ls_truncate_threshold: 40000
+  cross_verify_required: true
+  glob_escape_chars: ["+", "(", ")", "[", "]"]
+  grep_content_patterns:
+    - "export class {name}"
+    - "export.*{name}"
+  verification_matrix:
+    Glob:
+      applicable: "文件名模式匹配"
+      limitation: "路径含特殊字符时可能转义失败"
+    Grep:
+      applicable: "文件内容搜索"
+      limitation: "无法搜索未入库的文件"
+    LS:
+      applicable: "目录列表"
+      limitation: "输出超长时可能截断（>40000字符）"
+    Test-Path:
+      applicable: "精确路径存在性"
+      limitation: "需已知完整路径"
+
+# ============================================================
+# 以下为 Tauri 2.x 桌面应用集成测试复盘补充配置（第九批次）
+# 覆盖 Tauri 构建/启动/窗口/invoke 权限/错误诊断/磁盘空间/Console 日志
+# 所有参数可配置，避免硬编码项目特定路径、命令名、URL 模式或阈值
+# 适配不同 Tauri 项目时仅需修改本批次配置，无需改测试代码
+# 详见 references/tauri-desktop-testing.md
+# ============================================================
+
+# --- Tauri 桌面应用配置 ---
+# Tauri 2.x 桌面应用构建/启动/窗口验证参数
+# 与 SKILL.md 主流程的标准 6 阶段测试并行或串行执行
+tauri:
+  # 是否启用 Tauri 桌面测试阶段（仅 Tauri 项目启用）
+  enabled: false
+  # Tauri 应用可执行文件名（不含 .exe 后缀，对应 Cargo.toml 的 [[bin]] name 或包名）
+  exe_name: "karpathy-wiki"
+  # src-tauri 目录路径（相对项目根目录，含 Cargo.toml 与 tauri.conf.json）
+  src_tauri_dir: "karpathy-wiki/src-tauri"
+  # SPA 构建脚本路径（相对项目根目录，通常为 npm run build 的封装 bat）
+  build_script_path: "karpathy-wiki/scripts/前端构建.bat"
+  # 期望的窗口标题关键词（用于验证主窗口已创建并显示正确内容）
+  expected_window_title: "Karpathy"
+  # Tauri 应用启动超时（毫秒），超时后判定启动失败
+  startup_timeout_ms: 15000
+  # Rust 编译超时（秒），大型项目首次编译可能需 10 分钟以上
+  compile_timeout_sec: 600
+  # 是否使用 release 模式编译（true 时执行 cargo build --release）
+  release_mode: false
+  # 测试后是否清理 target 目录（false 保留以加速二次编译）
+  cleanup_target_dir: false
+
+# --- SPA 产物验证配置 ---
+# 防止源码已修改但产物未重建导致 Tauri 加载旧版前端
+# 详见 references/spa-artifact-verification.md
+spa:
+  # 前端 package.json 的 name 字段（用于验证构建脚本对应的包）
+  package_name: "karpathy-wiki-frontend"
+  # SPA 产物输出目录（相对项目根目录，与 vite.config.ts 的 build.outDir 一致）
+  output_dir: "karpathy-wiki/api/public"
+  # 需监控的源码目录列表（mtime 比较时递归扫描这些目录）
+  source_dirs:
+    - "karpathy-wiki/frontend/src"
+  # 源码文件扩展名过滤（仅这些扩展名的文件参与 mtime 比较）
+  source_extensions:
+    - ".ts"
+    - ".tsx"
+    - ".vue"
+    - ".js"
+    - ".jsx"
+  # 产物标记文件（用于 mtime 比较，默认 index.html）
+  artifact_marker_file: "index.html"
+  # JS chunk 中需验证的关键字符串列表（可选，用于辅助验证产物完整性）
+  # 新增组件/功能时追加能唯一标识新功能的字符串
+  key_strings:
+    - "nav-collapsed"
+    - "icon-tooltip"
+    - "useTheme"
+    - "invoke"
+  # 是否要求全部关键字符串都命中（true=全命中才通过，false=至少一个命中）
+  require_all_keys: true
+  # 是否强制重建（true 时跳过时间戳验证，直接执行构建）
+  force_rebuild: false
+
+# --- 后端健康检查配置 ---
+# Tauri 启动后轮询后端服务健康检查端点
+health_check:
+  # 健康检查端点 URL（含协议、主机、端口、路径）
+  endpoint: "http://localhost:3000/health"
+  # 重试次数（每次间隔 timeout 毫秒）
+  retry_count: 30
+  # 每次重试间隔（毫秒）
+  timeout: 1000
+  # 期望的 HTTP 状态码
+  expected_status: 200
+
+# --- invoke 权限验证配置 ---
+# Tauri 2.x invoke 调用的三层权限验证
+# 详见 references/invoke-permission-verification.md
+invoke:
+  # 需验证的命令名列表（格式 plugin:{plugin_name}|{command_name}）
+  commands:
+    - "plugin:log|info"
+    - "plugin:log|warn"
+    - "plugin:log|error"
+    - "plugin:http|fetch"
+  # 期望在 capabilities/*.json 的 permissions 数组中见到的权限名列表
+  permissions:
+    - "allow-log-info"
+    - "allow-log-warn"
+    - "allow-log-error"
+    - "allow-http-fetch"
+  # 远程 URL 模式列表（为空时跳过第 3 层验证）
+  # 这些模式必须被 capabilities/*.json 的 remote.urls 覆盖
+  url_patterns:
+    - "http://localhost:*"
+    - "http://127.0.0.1:*"
+  # capabilities 文件 glob 模式（相对 src_tauri_dir）
+  capabilities_glob: "capabilities/*.json"
+  # Cargo.toml 路径（相对 src_tauri_dir，用于第 1 层插件依赖检查）
+  cargo_toml_path: "Cargo.toml"
+
+# --- 磁盘空间检查配置 ---
+# Rust 编译产物与 node_modules 占用大，必须预检磁盘空间
+disk_space:
+  # debug 模式编译所需最小磁盘空间（GB）
+  debug_min_gb: 5
+  # release 模式编译所需最小磁盘空间（GB）
+  release_min_gb: 10
+  # 编译产物目录大小阈值（GB），超过时告警清理
+  cleanup_threshold_gb: 20
+
+# --- Console 日志采集配置 ---
+# Tauri stderr 与 DevTools Console 日志的关键词过滤与错误分类
+console_log:
+  # 是否启用 Console 日志采集
+  enabled: true
+  # 日志前缀过滤列表（仅采集含这些前缀的日志行，为空时采集全部）
+  prefixes:
+    - "[Tauri]"
+    - "[IPC]"
+    - "[Plugin]"
+  # 错误关键词列表（命中即判定失败，并触发错误分类）
+  # 这些关键词与 failure_classification.rules 的 pattern 对齐
+  error_keywords:
+    - "Plugin not found"
+    - "not allowed"
+    - "URL: local"
+    - "command not found"
+    - "serialization error"
+    - "panicked at"
+    - "thread 'main' has overflowed its stack"

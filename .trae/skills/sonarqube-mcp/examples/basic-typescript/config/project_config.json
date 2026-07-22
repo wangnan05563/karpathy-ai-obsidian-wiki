@@ -1,0 +1,52 @@
+{
+  "_meta": {
+    "purpose": "最小 TypeScript 项目示例（仅启用通用 core 硬约束）",
+    "version": "2.3.0",
+    "schema_version": "2.3.0",
+    "suitable_for": "纯 TypeScript 项目（Node.js CLI/库/工具，无 React/Vue 等前端框架）"
+  },
+  "project": {
+    "key": "my_typescript_project",
+    "name": "My TypeScript Project",
+    "base_path": "../..",
+    "description": "简单 TypeScript 项目示例"
+  },
+  "business_constraints": {
+    "_description": "业务特定硬约束文件加载清单（空数组表示仅加载 core.json 通用规则）",
+    "load_files": []
+  },
+  "modules": {
+    "backend": {
+      "path": "src",
+      "languages": ["typescript"],
+      "frameworks": [],
+      "layers": {
+        "core": "core",
+        "utils": "utils",
+        "types": "types"
+      },
+      "exclude": ["node_modules", "dist", "build", ".git", "coverage", "*.test.ts", "*.spec.ts"]
+    }
+  },
+  "verify": {
+    "test_command": "npm test",
+    "test_commands": {
+      "backend": "npm test"
+    }
+  },
+  "report": {
+    "output_dir": "docs/sonar-reports/"
+  },
+  "fix_strategies_overrides": {
+    "_description": "项目级修复策略覆盖（与 config/fix_strategies.json 配合使用）",
+    "rule_overrides": {}
+  },
+  "_usage_notes": [
+    "1. 复制此文件到 ../../config/project_config.json",
+    "2. 修改 project.key 为你的项目名",
+    "3. 根据需要调整 modules.backend.path",
+    "4. 设置环境变量 SONAR_TOKEN 和 SONARQUBE_URL",
+    "5. 运行 .\\scripts\\verify-connection.ps1 验证",
+    "6. 首次扫描会加载所有 core 硬约束规则（通用安全规则）"
+  ]
+}

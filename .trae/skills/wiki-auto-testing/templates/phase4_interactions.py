@@ -88,6 +88,25 @@ def test_tab_switching(page, cfg, results):
         results.log("TabSwitch-Click", True, "First tab clicked")
 
 
+def dismiss_dialog(page):
+    """关闭可能出现的 Element Plus MessageBox 确认对话框，避免阻塞后续操作。"""
+    try:
+        dialog = page.locator('.el-message-box')
+        if dialog.count() > 0:
+            # 优先点击取消按钮
+            cancel_btn = page.locator('.el-message-box__btns .el-button:first-child')
+            if cancel_btn.count() > 0 and cancel_btn.first.is_visible():
+                cancel_btn.first.click(timeout=1000)
+            else:
+                page.keyboard.press('Escape')
+            page.wait_for_timeout(300)
+    except Exception:
+        try:
+            page.keyboard.press('Escape')
+        except Exception:
+            pass
+
+
 def test_button_discovery(page, cfg, results):
     """Auto-discover and test all clickable buttons."""
     bd = cfg.get("button_discovery", {})
@@ -146,10 +165,13 @@ def test_button_discovery(page, cfg, results):
                         click_kwargs["timeout"] = click_timeout
                     elem.click(**click_kwargs)
                     page.wait_for_timeout(click_wait)
+                    # 关闭可能出现的确认对话框（如 cleanup 页面的清理确认）
+                    dismiss_dialog(page)
                     total_clicked += 1
                     click_nav_tab(page, tab_sel, p["label"], nav_wait)
                 except Exception:
                     total_failed += 1
+                    dismiss_dialog(page)
                     if not continue_on_fail:
                         return
                     click_nav_tab(page, tab_sel, p["label"], nav_wait)

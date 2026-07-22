@@ -162,13 +162,19 @@ class TestResults:
 # ============================================================
 
 def click_nav_tab(page, tab_selector, label, wait_ms=1500):
-    """Click a navigation tab by label text."""
-    tab = page.locator(f'{tab_selector}:has-text("{label}")')
-    if tab.count() > 0:
-        tab.first.click()
-        page.wait_for_timeout(wait_ms)
-        return True
-    return False
+    """Click a navigation tab by label text. Skips disabled tabs. Never raises."""
+    try:
+        tab = page.locator(f'{tab_selector}:has-text("{label}")')
+        if tab.count() > 0:
+            # 跳过 disabled 按钮，避免 Playwright 默认 30s 超时
+            if tab.first.get_attribute('disabled') is not None:
+                return False
+            tab.first.click(timeout=5000)
+            page.wait_for_timeout(wait_ms)
+            return True
+        return False
+    except Exception:
+        return False
 
 
 def safe_click(page, selector, wait_ms=500, force=False, timeout=None):

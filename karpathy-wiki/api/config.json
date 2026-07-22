@@ -21,11 +21,11 @@
     "staleDays": 30
   },
   "tunnel": {
-    "provider": "cloudflare",
+    "provider": "tailscale",
     "localPort": 0,
     "cpolarAuthtoken": "",
     "binaryPath": "",
-    "autoStart": false,
+    "autoStart": true,
     "tunnelMode": "quick",
     "tunnelName": "",
     "tunnelId": "",

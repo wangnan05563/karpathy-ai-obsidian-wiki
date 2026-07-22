@@ -1,3 +1,7 @@
+# Rule Catalog — Type Safety
+
+类型安全审查规则：确保 API 响应类型定义完整、ref 收窄规范、禁止 any 滥用。所有参数从 `config/review-config.md` 读取，禁止在规则文件中硬编码。
+
 ## API 响应须定义 TypeScript interface，禁止 any
 
 IsUrgent: True
@@ -169,5 +173,63 @@ if (isCleanFormItem(record[key])) {
 ```
 
 注意：`as` 断言只是"我担保"，运行时仍可能不符；type guard 更安全，优先选择。
+
+> **示例代码**: 参见 [examples/type-safety-rule-examples.md](examples/type-safety-rule-examples.md)。
+
+## await 后访问 ref 必须用局部变量收窄
+
+IsUrgent: True
+Category: Type Safety
+
+### Description
+
+在 async 函数中给 `ref<T | null>` 赋值后，`await` 之后再访问该 ref，TypeScript 认为它可能已被改为 `null`（vue-tsc 报错"Object is possibly null"）。这是因为 await 是一个同步断点，TS 无法保证 await 之间 ref 未被修改。
+
+必须将赋值结果保存到局部变量，通过局部变量访问，因为局部变量不会被外部修改。
+
+### Suggested Fix
+
+```typescript
+// ❌ 错误：await 后直接访问 ref.value 的属性
+aiTestResult.value = await res.json();
+if (aiTestResult.value.ok) { ... }  // possibly null
+
+// ✅ 正确：局部变量收窄
+const result: AiTestResult = await res.json();
+aiTestResult.value = result;
+if (result.ok) { ElMessage.success('成功'); }
+```
+
+> **示例代码**: 参见 [examples/type-safety-rule-examples.md](examples/type-safety-rule-examples.md)。
+
+## 模板中访问可空 ref 必须用计算属性封装
+
+IsUrgent: True
+Category: Type Safety
+
+### Description
+
+模板中直接用三元表达式访问 `ref<T | null>` 的属性，在 vue-tsc strict 模式下会报"Object is possibly null"。必须在 `<script setup>` 中用 `computed` 封装，将 null 检查逻辑收敛到计算属性内部，模板只消费计算属性的结果。
+
+`v-if` 守卫可以配合使用，但不应替代计算属性——模板中的复杂条件表达式可读性差且难以调试。
+
+### Suggested Fix
+
+```typescript
+// ❌ 错误：模板中直接访问可空 ref
+// <span>{{ aiTestResult.ok ? '成功' : aiTestResult.detail }}</span>
+
+// ✅ 正确：计算属性封装
+const testResultText = computed(() => {
+  const r = aiTestResult.value;
+  return r ? (r.ok ? '成功' : r.detail) : '';
+});
+```
+
+```vue
+<template>
+  <span>{{ testResultText }}</span>
+</template>
+```
 
 > **示例代码**: 参见 [examples/type-safety-rule-examples.md](examples/type-safety-rule-examples.md)。

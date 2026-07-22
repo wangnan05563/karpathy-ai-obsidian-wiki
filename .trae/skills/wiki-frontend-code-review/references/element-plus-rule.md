@@ -1,4 +1,8 @@
-﻿## 消息提示用 ElMessage，禁止 alert/confirm
+# Rule Catalog — Element Plus
+
+Element Plus 组件使用审查规则：确保 UI 反馈使用组件库 API，禁止原生弹窗。所有参数从 `config/review-config.md` 读取，禁止在规则文件中硬编码。
+
+## 消息提示用 ElMessage，禁止 alert/confirm
 
 IsUrgent: True
 Category: Element Plus

@@ -1,21 +1,30 @@
-﻿{
+{
     "_meta":  {
                   "file":  "core_config.json",
                   "purpose":  "通用配置（与具体项目无关）。所有项目复用此配置。",
-                  "version":  "2.1.0",
-                  "last_updated":  "2026-07-07",
-                  "changelog":  "v2.1.0: 新增 es_resilience（ES 弹性配置）/ precheck（环境预检配置）/ report_polling（报告轮询配置）/ nosonar_validation（NOSONAR 校验配置）/ failure_recovery（失败恢复动作映射）节点"
+                  "version":  "2.4.0",
+                  "schema_version":  "2.4.0",
+                  "min_compatible_version":  "2.0.0",
+                  "last_updated":  "2026-07-22",
+                  "changelog":  "v2.4.0: 新增 sandbox_bypass/project_lock_cleanup/log_output 节点, precheck 新增 jre_cache_check, failure_recovery.mappings 新增 sandbox_blocked/project_lock_held/process_termination_failed/jre_provisioning_timeout 4 个场景, nosonar_decision_matrix.can_suppress_rules 扩展; v2.3.0: 增加 schema_version/min_compatible_version 字段支持配置版本兼容性检查; v2.2.0: 新增 node_version_check/powershell_compat_check 预检项, nosonar_decision_matrix（NOSONAR 抑制 vs 修复决策矩阵）, subagent_verification（子代理修复结果二次核查）, test_failure_diagnosis（测试失败 git stash 归因）, 前端注释语法映射表; failure_recovery.mappings 新增 4 个场景"
               },
     "_configSections":  {
                             "sonarqube_server":  "SonarQube 服务器连接配置（端口/健康检查/启动超时）",
                             "es_resilience":  "Elasticsearch 弹性配置（磁盘 watermark / read-only 锁解除 / SonarQube 内嵌 ES API 端口）",
-                            "precheck":  "环境预检配置（Java 版本 / 磁盘空间 / ES 状态 / 配置文件位置）",
+                            "precheck":  "环境预检配置（Java 版本 / Node.js 版本 / PowerShell 兼容 / 磁盘空间 / ES 状态 / 配置文件位置 / JRE 缓存）",
                             "scan":  "扫描执行参数（严重级别/分页/并行）",
                             "report_polling":  "Compute Engine 报告处理状态轮询配置",
                             "priority":  "修复优先级排序",
                             "filters":  "通用过滤（路径/规则/严重级别）",
                             "verify":  "修复后验证（含 NOSONAR 校验开关）",
                             "nosonar_validation":  "NOSONAR 抑制注释校验配置",
+                            "nosonar_decision_matrix":  "NOSONAR 抑制 vs 代码修复决策矩阵（must_fix / can_suppress 规则分类）",
+                            "subagent_verification":  "子代理修复结果二次核查配置",
+                            "test_failure_diagnosis":  "测试失败归因配置（git stash 验证预存在 vs 本次引入）",
+                            "frontend_comment_syntax":  "前端文件类型注释语法映射表（.vue/.wxml/.wxss 等）",
+                            "sandbox_bypass":  "TRAE 沙箱旁路配置（检测 sandbox 限制关键字并切换 dangerouslyDisableSandbox）",
+                            "project_lock_cleanup":  "SonarQube 项目锁清理配置（僵尸进程 kill + 锁文件删除 + 临时目录清理）",
+                            "log_output":  "长任务日志输出规则（禁止 Select-Object -Last N 管道缓冲）",
                             "failure_recovery":  "失败场景→恢复动作映射表",
                             "report":  "报告输出",
                             "mcp_check":  "MCP 能力要求",
@@ -120,6 +129,37 @@
                                         "description":  "SONAR_TOKEN 环境变量必须存在",
                                         "env_var":  "SONAR_TOKEN",
                                         "on_failure":  "terminate_with_guide"
+                                    },
+                                    {
+                                        "name":  "node_version_check",
+                                        "description":  "Node.js 版本必须与 SonarJS bridge 兼容（v24+ 不兼容）",
+                                        "check_command":  "node --version",
+                                        "incompatible_versions":  [
+                                                                     "v24",
+                                                                     "v25"
+                                                                 ],
+                                        "compatible_lts":  "${ENV:SONAR_NODE_LTS|v20}",
+                                        "on_failure":  "skip_frontend_scan",
+                                        "_note":  "Node.js v24+ 的 SonarJS bridge 报 Cannot find module './globals-IVYI6PB4.json'，必须降级到 v20 LTS"
+                                    },
+                                    {
+                                        "name":  "powershell_compat_check",
+                                        "description":  "Windows PowerShell 5 下 sonar-scanner -D 参数需 .bat 封装",
+                                        "platform":  "windows",
+                                        "check_bat_wrapper_exists":  true,
+                                        "bat_wrapper_path":  "scripts/run-sonar-scanner.bat",
+                                        "on_failure":  "generate_bat_wrapper",
+                                        "_note":  "PowerShell 5 直接执行 sonar-scanner -D 参数含特殊字符时报错，需 .bat 文件封装"
+                                    },
+                                    {
+                                        "name":  "jre_cache_check",
+                                        "description":  "sonar-scanner 首次运行需下载 JRE 到 .sonar/cache/jre，可能耗时 10-30 分钟",
+                                        "check_method":  "检测 .sonar/cache/jre 目录是否存在且非空",
+                                        "cache_dir_relative_path":  ".sonar/cache/jre",
+                                        "on_first_run":  "warn_expected_long_duration",
+                                        "first_run_warning_message":  "首次运行需下载 JRE，预计耗时 10-30 分钟（取决于网络），后续运行使用缓存约 2 秒",
+                                        "on_failure":  "warn_only",
+                                        "_note":  "JRE 缓存预检不阻塞流程，仅输出耗时警告让用户有预期"
                                     }
                                 ]
                  },
@@ -331,12 +371,139 @@
                                "fallback_strategy":  "若 NOSONAR 未生效，按 nosonar_position_rules 表查 rule 对应的 position，重新放置 NOSONAR 到正确物理行",
                                "common_mistakes":  [
                                                        "NOSONAR 放在 def 行但规则报的是参数行（S107/S7483）",
+                                                       "NOSONAR 放在多行函数定义末行（-> ReturnType:）而非首行（def func(）",
                                                        "NOSONAR 放在 docstring 内（字符串内不生效）",
                                                        "使用小写 # nosonar（必须大写）",
                                                        "使用 Python # noqa（SonarQube 默认不识别）",
                                                        "JSX 标签内用 // NOSONAR（应改用 /* NOSONAR */）"
                                                    ]
                            },
+    "nosonar_decision_matrix":  {
+                                    "_description":  "NOSONAR 抑制 vs 代码修复决策矩阵。安全漏洞规则必须代码修复，禁止 NOSONAR 抑制；代码风格/认知复杂度规则允许 NOSONAR 抑制但需附带原因注释。",
+                                    "must_fix_rules":  [
+                                                            "python:S5443",
+                                                            "python:S930",
+                                                            "python:S2817",
+                                                            "python:S5886",
+                                                            "python:S3699",
+                                                            "typescript:S2817",
+                                                            "typescript:S5446",
+                                                            "java:S2076",
+                                                            "go:S2076"
+                                                        ],
+                                    "must_fix_description":  "安全漏洞/注入/硬编码凭据规则，必须代码修复，禁止 NOSONAR 抑制",
+                                    "can_suppress_rules":  [
+                                                               "python:S3776",
+                                                               "python:S7503",
+                                                               "python:S125",
+                                                               "python:S6353",
+                                                               "python:S107",
+                                                               "python:S7483",
+                                                               "python:S5850",
+                                                               "typescript:S3776",
+                                                               "typescript:S6353",
+                                                               "typescript:S6551",
+                                                               "typescript:S6754",
+                                                               "typescript:S6848",
+                                                               "typescript:S6819",
+                                                               "typescript:S3358"
+                                                           ],
+                                    "can_suppress_description":  "认知复杂度/代码风格/参数过多/typeof 类型收窄误报规则，允许 NOSONAR 抑制但需附带原因注释",
+                                    "require_reason_comment":  true,
+                                    "reason_comment_pattern":  "# NOSONAR - {reason}"
+                                },
+    "subagent_verification":  {
+                                  "_description":  "子代理修复结果二次核查配置。子代理可能遗漏 NOSONAR 或位置错误，主代理需在修复完成后进行 grep 验证。",
+                                  "enabled":  true,
+                                  "check_items":  [
+                                                       "nosonar_exists",
+                                                       "nosonar_position_correct",
+                                                       "nosonar_case_correct",
+                                                       "nosonar_not_in_must_fix_rules"
+                                                   ],
+                                  "nosonar_exists":  {
+                                                          "method":  "grep",
+                                                          "pattern":  "NOSONAR",
+                                                          "description":  "验证子代理报告已加 NOSONAR 的文件确实包含 NOSONAR 字符串"
+                                                      },
+                                  "nosonar_position_correct":  {
+                                                                   "method":  "ast_parse",
+                                                                   "description":  "对 Python 文件解析 AST，验证多行函数定义的 NOSONAR 在 def 行而非返回类型行"
+                                                               },
+                                  "on_verification_failure":  "reposition_or_add_nosonar"
+                              },
+    "test_failure_diagnosis":  {
+                                  "_description":  "测试失败归因配置。当修复后测试失败时，通过 git stash 验证区分预存在失败 vs 本次引入的失败。",
+                                  "enabled":  true,
+                                  "method":  "git_stash",
+                                  "steps":  [
+                                                "git stash push -m 'sonar-fix-test-check'",
+                                                "run test_command",
+                                                "if tests pass: failure is pre-existing, safe to continue",
+                                                "if tests fail: failure existed before fix, not introduced by sonar fix",
+                                                "git stash pop"
+                                            ],
+                                  "stash_message":  "sonar-fix-test-check",
+                                  "on_pre_existing_failure":  "warn_and_continue",
+                                  "on_new_failure":  "block_and_report_diff"
+                              },
+    "frontend_comment_syntax":  {
+                                    "_description":  "前端文件类型注释语法映射表。不同文件类型使用不同的 NOSONAR 注释语法，子代理修复时按此表查表确定格式。",
+                                    "mappings":  [
+                                                     {
+                                                         "file_extension":  ".js",
+                                                         "line_comment":  "// NOSONAR",
+                                                         "block_comment":  "/* NOSONAR */"
+                                                     },
+                                                     {
+                                                         "file_extension":  ".ts",
+                                                         "line_comment":  "// NOSONAR",
+                                                         "block_comment":  "/* NOSONAR */"
+                                                     },
+                                                     {
+                                                         "file_extension":  ".vue",
+                                                         "template_comment":  "\u003c!-- NOSONAR --\u003e",
+                                                         "script_line_comment":  "// NOSONAR",
+                                                         "script_block_comment":  "/* NOSONAR */",
+                                                         "style_comment":  "/* NOSONAR */",
+                                                         "_note":  ".vue 文件按 <template>/<script>/<style> 区块使用不同注释语法"
+                                                     },
+                                                     {
+                                                         "file_extension":  ".jsx",
+                                                         "line_comment":  "// NOSONAR",
+                                                         "block_comment_in_jsx":  "/* NOSONAR */",
+                                                         "_note":  "JSX 标签内用 /* NOSONAR */，标签外用 // NOSONAR"
+                                                     },
+                                                     {
+                                                         "file_extension":  ".tsx",
+                                                         "line_comment":  "// NOSONAR",
+                                                         "block_comment_in_jsx":  "/* NOSONAR */"
+                                                     },
+                                                     {
+                                                         "file_extension":  ".wxml",
+                                                         "comment":  "\u003c!-- NOSONAR --\u003e",
+                                                         "_note":  "微信小程序 WXML 模板文件使用 HTML 注释语法"
+                                                     },
+                                                     {
+                                                         "file_extension":  ".wxss",
+                                                         "comment":  "/* NOSONAR */",
+                                                         "_note":  "微信小程序 WXSS 样式文件使用 CSS 注释语法"
+                                                     },
+                                                     {
+                                                         "file_extension":  ".css",
+                                                         "comment":  "/* NOSONAR */"
+                                                     },
+                                                     {
+                                                         "file_extension":  ".scss",
+                                                         "line_comment":  "// NOSONAR",
+                                                         "block_comment":  "/* NOSONAR */"
+                                                     },
+                                                     {
+                                                         "file_extension":  ".html",
+                                                         "comment":  "\u003c!-- NOSONAR --\u003e"
+                                                     }
+                                                 ]
+                                },
     "failure_recovery":  {
                              "_description":  "失败场景→恢复动作映射表。预检失败或扫描失败时，按本表查找恢复动作。",
                              "mappings":  [
@@ -391,9 +558,143 @@
                                                   "action":  "reposition_nosonar",
                                                   "description":  "NOSONAR 未生效（OPEN 数未下降），按 nosonar_position_rules 表重新放置 NOSONAR 到正确物理行",
                                                   "retry_after":  true
+                                              },
+                                              {
+                                                  "failure":  "node_version_incompatible",
+                                                  "action":  "skip_frontend_scan",
+                                                  "description":  "Node.js 版本与 SonarJS bridge 不兼容，跳过前端扫描仅扫描后端",
+                                                  "retry_after":  false
+                                              },
+                                              {
+                                                  "failure":  "powershell_bat_missing",
+                                                  "action":  "generate_bat_wrapper",
+                                                  "description":  "Windows PowerShell 5 下 .bat 包装脚本缺失，自动生成后重试",
+                                                  "retry_after":  true
+                                              },
+                                              {
+                                                  "failure":  "subagent_fix_missing",
+                                                  "action":  "reposition_or_add_nosonar",
+                                                  "description":  "子代理修复结果二次核查发现 NOSONAR 遗漏或位置错误，主代理补加或重新定位",
+                                                  "retry_after":  true
+                                              },
+                                              {
+                                                  "failure":  "test_failure_unknown_cause",
+                                                  "action":  "git_stash_diagnose",
+                                                  "description":  "测试失败归因不明，通过 git stash 验证区分预存在 vs 本次引入",
+                                                  "retry_after":  true
+                                              },
+                                              {
+                                                  "failure":  "sandbox_blocked",
+                                                  "action":  "disable_sandbox_and_retry",
+                                                  "description":  "TRAE 沙箱限制文件访问（如 CryptnetUrlCache），导致 sonar-scanner Java 进程无法启动 HTTPS 连接。检测错误关键字 hit restricted / Not allow operate files / CryptnetUrlCache 后，重新执行命令时设置 dangerouslyDisableSandbox: true 参数",
+                                                  "retry_after":  true,
+                                                  "detection_keywords":  [
+                                                                            "hit restricted",
+                                                                            "Not allow operate files",
+                                                                            "CryptnetUrlCache"
+                                                                        ],
+                                                  "bypass_parameter":  "dangerouslyDisableSandbox: true",
+                                                  "_note":  "仅对 sonar-scanner 命令旁路沙箱，其他命令仍走沙箱；旁路原因必须记录到日志"
+                                              },
+                                              {
+                                                  "failure":  "project_lock_held",
+                                                  "action":  "cleanup_scanner_processes_and_lock",
+                                                  "description":  "SonarQube 项目锁被持有（Another SonarQube analysis is already in progress），通常因强杀扫描进程遗留 .sonar_lock 文件和僵尸 engine 子进程。执行清理：1) taskkill /F /T 终止所有 java.exe 含 scanner-engine 关键字的进程；2) 删除 .scannerwork/.sonar_lock 文件；3) 清理 .scannerwork/scanner-report 和 .sonartmp 目录",
+                                                  "retry_after":  true,
+                                                  "max_retries":  3,
+                                                  "detection_keyword":  "Another SonarQube analysis is already in progress",
+                                                  "cleanup_steps":  [
+                                                                       "Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | Where-Object { $_.CommandLine -like '*scanner-engine*' } | ForEach-Object { taskkill /F /PID $_.ProcessId /T }",
+                                                                       "Remove-Item -Force .scannerwork/.sonar_lock -ErrorAction SilentlyContinue",
+                                                                       "Remove-Item -Recurse -Force .scannerwork/scanner-report -ErrorAction SilentlyContinue",
+                                                                       "Remove-Item -Recurse -Force .scannerwork/.sonartmp -ErrorAction SilentlyContinue"
+                                                                   ],
+                                                  "_note":  "必须用 taskkill /T 终止进程树包括子进程；仅删 .sonar_lock 不够，还需清 scanner-report 目录避免残留报告干扰"
+                                              },
+                                              {
+                                                  "failure":  "process_termination_failed",
+                                                  "action":  "taskkill_force_tree",
+                                                  "description":  "Stop-Process 未能终止 sonar-scanner CLI 进程（报告成功但进程仍在运行），改用 taskkill /F /T 强制终止进程树",
+                                                  "retry_after":  true,
+                                                  "detection_keyword":  "进程仍在运行",
+                                                  "fallback_command":  "taskkill /F /T /PID {pid}",
+                                                  "_note":  "Stop-Process 对某些 Java 进程无效，taskkill /T 可递归终止子进程"
+                                              },
+                                              {
+                                                  "failure":  "jre_provisioning_timeout",
+                                                  "action":  "warn_and_wait",
+                                                  "description":  "sonar-scanner 首次运行下载 JRE 耗时过长（可能 10-30 分钟），输出警告让用户有预期，不阻塞流程",
+                                                  "retry_after":  false,
+                                                  "detection_keyword":  "JRE provisioning",
+                                                  "expected_duration_minutes":  "10-30",
+                                                  "cache_dir":  ".sonar/cache/jre",
+                                                  "_note":  "首次运行下载 JRE 是正常行为，后续运行使用缓存约 2 秒；如网络不稳定可手动下载 JRE 到 cache_dir"
                                               }
                                           ]
                          },
+    "sandbox_bypass":  {
+                          "_description":  "TRAE 沙箱旁路配置。TRAE IDE 沙箱限制部分文件路径访问（如 Windows CryptnetUrlCache），导致 sonar-scanner Java 进程无法启动 HTTPS 连接。本节点配置沙箱限制检测关键字与旁路参数。",
+                          "enabled":  true,
+                          "detection_keywords":  [
+                                                     "hit restricted",
+                                                     "Not allow operate files",
+                                                     "CryptnetUrlCache",
+                                                     "sandbox restriction"
+                                                 ],
+                          "bypass_parameter":  "dangerouslyDisableSandbox: true",
+                          "bypass_scope":  "sonar-scanner only",
+                          "_bypass_scope_note":  "仅对 sonar-scanner 命令旁路沙箱，其他命令（grep/Read/Edit 等）仍走沙箱；每次旁路仅对当前命令生效，后续命令默认回到沙箱模式",
+                          "log_bypass_reason":  true,
+                          "log_message_template":  "检测到 TRAE 沙箱限制（关键字: {keyword}），对 sonar-scanner 命令启用 dangerouslyDisableSandbox 旁路",
+                          "restricted_paths_examples":  [
+                                                            "C:\\\\Users\\\\<user>\\\\AppData\\\\LocalLow\\\\Microsoft\\\\CryptnetUrlCache",
+                                                            "其他 Windows 加密/证书缓存路径"
+                                                        ]
+                      },
+    "project_lock_cleanup":  {
+                                "_description":  "SonarQube 项目锁清理配置。强杀扫描进程或进程异常终止后，可能遗留 .sonar_lock 文件和僵尸 engine 子进程，导致再次扫描时报 'Another SonarQube analysis is already in progress'。本节点配置清理流程与最大重试次数。",
+                                "enabled":  true,
+                                "detection_keyword":  "Another SonarQube analysis is already in progress",
+                                "max_retries":  3,
+                                "retry_interval_seconds":  5,
+                                "cleanup_steps":  [
+                                                     "1. 查找所有 scanner-engine 相关 Java 进程: Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | Where-Object { $_.CommandLine -like '*scanner-engine*' }",
+                                                     "2. 强制终止进程树: taskkill /F /T /PID <pid>（必须用 /T 终止子进程）",
+                                                     "3. 删除项目锁文件: Remove-Item -Force .scannerwork/.sonar_lock -ErrorAction SilentlyContinue",
+                                                     "4. 清理 scanner-report 目录: Remove-Item -Recurse -Force .scannerwork/scanner-report -ErrorAction SilentlyContinue",
+                                                     "5. 清理 .sonartmp 目录: Remove-Item -Recurse -Force .scannerwork/.sonartmp -ErrorAction SilentlyContinue",
+                                                     "6. 重新执行扫描"
+                                                 ],
+                                "fallback_when_all_retries_fail":  "terminate_with_guide",
+                                "_note":  "Stop-Process 对某些 Java 进程无效，必须用 taskkill /F /T；仅删 .sonar_lock 不够，还需清 scanner-report 目录避免残留报告干扰"
+                            },
+    "log_output":  {
+                       "_description":  "长任务日志输出规则。PowerShell 的 Select-Object -Last N 是 sink cmdlet，必须缓冲所有管道输入直到上游命令完成才能输出末尾 N 行，导致长任务（如 sonar-scanner 首次扫描 19+ 分钟）期间日志文件保持 0 字节。本节点配置禁用模式与推荐替代方案。",
+                       "enabled":  true,
+                       "forbidden_patterns":  [
+                                                  "Select-Object -Last <N>",
+                                                  "Select -Last <N>",
+                                                  "| Select-Object -Last",
+                                                  "| select -last"
+                                              ],
+                       "long_task_threshold_seconds":  30,
+                       "long_task_commands":  [
+                                                  "sonar-scanner",
+                                                  "sonar-scanner.bat",
+                                                  "pytest",
+                                                  "npm test",
+                                                  "npm run build",
+                                                  "tsc"
+                                              ],
+                       "recommended_patterns":  [
+                                                   "Tee-Object -FilePath <log-file>",
+                                                   "Out-File -FilePath <log-file>",
+                                                   "重定向 > <log-file>",
+                                                   "Get-Content -Tail <N> <log-file>（查看时用）",
+                                                   "Get-Content -Wait <log-file>（实时查看用）"
+                                               ],
+                       "_rationale":  "Select-Object -Last N 必须缓冲所有输入直到上游命令完成，长任务期间日志文件为空，无法判断是否在运行；Tee-Object 实时追加到文件，可随时 Get-Content -Tail 查看"
+                   },
     "report":  {
                    "output_dir":  "docs/sonar-reports/",
                    "include_unfixed":  true,
@@ -417,7 +718,9 @@
                                                    "SONAR_SCANNER_HOME",
                                                    "JAVA_HOME_SONAR",
                                                    "SONARQUBE_HOME",
-                                                   "SONAR_MCP_SERVER_NAME"
+                                                   "SONAR_MCP_SERVER_NAME",
+                                                   "SONAR_NODE_LTS",
+                                                   "SONAR_ES_PORT"
                                                ],
                                   "notes":  "凭据必须从环境变量读取，禁止写入配置文件"
                               }

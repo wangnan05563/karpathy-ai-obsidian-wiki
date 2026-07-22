@@ -17,7 +17,7 @@ Category: Type Sync
 
 全栈 TypeScript 项目中，后端 `types.ts` 与前端 `types.ts` 通常通过手动维护的双向约定保持一致。后端新增 `interface`（如 `TunnelConfig`、`AccountConfig` 等配置接口）时，必须在前端 `types.ts` 同步定义同名的 `interface`，且字段名、字段类型必须逐一对应。
 
-复盘 TunnelConfig 时发现：后端 `services/api/src/types.ts` 新增了 `TunnelConfig` 接口，前端 `src/types.ts` 未同步，导致：
+复盘 TunnelConfig 时发现：后端 `api/src/types.ts` 新增了 `TunnelConfig` 接口，前端 `src/types.ts` 未同步，导致：
 - 前端调用 `/api/tunnel/config` 的请求函数返回 `any` 或 `unknown`，丢失类型提示。
 - 前端表单 reactive 对象的字段类型与后端响应不匹配，运行时静默丢字段。
 - IDE 跳转失败，重构后端字段时前端无类型错误提示，遗漏修改。
@@ -50,7 +50,7 @@ Category: Type Sync
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `backend_types_path` | `../services/api/src/types.ts` | 后端 types 文件路径（相对前端项目根） |
+| `backend_types_path` | `../api/src/types.ts` | 后端 types 文件路径（相对前端项目根） |
 | `frontend_types_path` | `src/types.ts` | 前端 types 文件路径 |
 | `sync_interfaces` | `[]` | 需同步的接口名清单；留空表示全部 interface 都需同步 |
 | `ignore_optional_marker` | `true` | 是否忽略 `?` 可选标记差异（后端必填前端可选视为兼容） |
@@ -58,7 +58,7 @@ Category: Type Sync
 ### Example
 
 ```ts
-// 后端 services/api/src/types.ts
+// 后端 api/src/types.ts
 export interface TunnelConfig {
   authtoken: string
   region: string

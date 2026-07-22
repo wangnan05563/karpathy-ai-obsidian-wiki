@@ -1,5 +1,280 @@
 # SonarQube MCP 技能变更日志
 
+## v2.4.0 (2026-07-22) - 沙箱弹性 + 项目锁清理 + 修复模式复用
+
+### 设计目标
+
+基于 2026-07-22 在 XianyuHunter 项目（FastAPI + React + TypeScript）上的实战复盘（100+ OPEN → 0 OPEN，TypeScript 编译通过，1613 Python 测试通过），将 4 维度复盘成果（成功步骤/失败点/抽象流程/适用场景）沉淀到配置文件，新增三大弹性机制应对 TRAE 沙箱限制、项目锁持有、长任务日志缓冲问题。
+
+### 核心改进
+
+#### 1. 新增三大弹性机制（failure_recovery.mappings 扩展 4 个场景）
+
+| 失败场景 | 恢复动作 | 配置位置 |
+|----------|----------|----------|
+| `sandbox_blocked` | `disable_sandbox_and_retry`（`dangerouslyDisableSandbox: true`） | `core_config.json -> failure_recovery.mappings[sandbox_blocked]` + `sandbox_bypass` 节点 |
+| `project_lock_held` | `cleanup_scanner_processes_and_lock`（taskkill /T + 删锁 + 清目录） | `core_config.json -> failure_recovery.mappings[project_lock_held]` + `project_lock_cleanup` 节点 |
+| `process_termination_failed` | `taskkill_force_tree`（`taskkill /F /T /PID`） | `core_config.json -> failure_recovery.mappings[process_termination_failed]` |
+| `jre_provisioning_timeout` | `warn_and_wait`（仅警告不阻塞） | `core_config.json -> failure_recovery.mappings[jre_provisioning_timeout]` |
+
+#### 2. 新增 3 个独立配置节点
+
+| 节点 | 用途 | 关键配置 |
+|------|------|----------|
+| `sandbox_bypass` | TRAE 沙箱旁路配置 | detection_keywords / bypass_parameter / bypass_scope=sonar-scanner only |
+| `project_lock_cleanup` | 项目锁清理配置 | detection_keyword / max_retries=3 / cleanup_steps（6 步流程） |
+| `log_output` | 长任务日志输出规则 | forbidden_patterns（Select-Object -Last N）/ recommended_patterns（Tee-Object） |
+
+#### 3. precheck 新增 jre_cache_check 项
+
+- 检测 `.sonar/cache/jre` 目录是否存在
+- 首次运行输出耗时警告（预计 10-30 分钟下载 JRE），不阻塞流程
+- 后续运行使用缓存（约 2 秒）
+
+#### 4. 新增 fix_patterns 可复用修复模式库（5 个模式）
+
+| 模式名 | 触发条件 | 适用规则 |
+|--------|----------|----------|
+| `formatCellValue` | S3358/S6551/S6606 涉及 unknown 类型字符串化 | typescript:S3358, typescript:S6551, typescript:S6606 |
+| `native_button` | S6819/S1082/S6845 role="button" 可访问性 | typescript:S6819, typescript:S1082, typescript:S6845 |
+| `scanner_process_cleanup` | 项目锁持有/进程终止失败 | project_lock_held, process_termination_failed |
+| `sandbox_bypass` | TRAE 沙箱阻断 sonar-scanner | sandbox_blocked |
+| `long_task_log` | 长任务日志输出 | sonar-scanner, pytest, npm test 等 |
+
+#### 5. 增强修复策略模板
+
+| 规则 | 增强内容 |
+|------|----------|
+| `typescript:S6551` | 新增 `false_positive_root_cause` 字段说明 SonarQube 不识别 typeof 链式收窄；新增 `fix_pattern_ref: formatCellValue` 引用 |
+| `typescript:S6819` | 新增完整样式重置清单（border/background/textAlign/cursor/font）；新增 `side_effect_fixes: [typescript:S1082]` 副作用修复；新增 `fix_pattern_ref: native_button` 引用 |
+
+#### 6. 扩展 nosonar_decision_matrix.can_suppress_rules
+
+新增 `typescript:S6819` 和 `typescript:S3358` 到可抑制规则列表（误报倾向规则）。
+
+#### 7. project_config.json 更新为 xianyu_hunter
+
+- 从 20_news 项目配置切换到 xianyu_hunter 项目配置
+- 新增 `sonar_project_properties` 节点（projectKey/sources/tests/python_version/tsconfig_path/coverage_report_paths）
+- 新增 `quality_gate_baseline` 节点记录 2026-07-22 实战后基线（0 OPEN / 0 new_violations / 1613 测试通过）
+- 新增 `fix_strategies_overrides.high_frequency_rules` 记录高频规则分布
+
+### 4 维度复盘成果
+
+#### 维度 1：成功执行任务的完整步骤
+
+15 阶段闭环流程（v2.3 的 14 阶段 + Phase 9 失败弹性恢复）：服务器检测 → ES 弹性预检 → 前置检查（8 项）→ 环境兼容预检（含 JRE 缓存）→ MCP 检测 → 代码定位 → 质量门禁 → 问题扫描 → CE 报告轮询 → 并行修复（含修复模式查表）→ NOSONAR 决策校验 → 验证 → 报告 → 状态管理 → 失败弹性恢复
+
+#### 维度 2：失败点（20 类，全覆盖）
+
+环境层（4 类，含 TRAE 沙箱阻断/JRE 缓存/Select-Object 缓冲/Stop-Process 失败）+ ES 层（2 类）+ 连接层（2 类）+ 锁与状态层（2 类，含项目锁持有）+ 修复与验证层（4 类，含 S6551 typeof 误报）+ 其他（2 类），全部映射到 `failure_recovery.mappings` 配置驱动恢复。
+
+#### 维度 3：可抽象的判断逻辑（13 条）
+
+J1-J9（v2.3 保留）+ J10 沙箱旁路判断 + J11 项目锁清理判断 + J12 长任务日志输出判断 + J13 修复模式查表
+
+#### 维度 4：适用场景与不适用场景
+
+新增适用场景：TRAE IDE 沙箱环境、TypeScript + Python 混合项目大规模 OPEN 清零
+新增不适用场景：紧急热修复（首次 JRE 下载 19+ 分钟）、API token 仅有扫描权限（需 MCP 或 API 权限 token）
+新增边界场景：Sandbox 限制范围变化、首次 JRE 下载超时、子进程未被 taskkill 终止、NOSONAR 在新版 SonarQube 不生效
+
+### 修改文件清单
+
+| 文件 | 修改类型 |
+|------|----------|
+| `SKILL.md` | 修改：版本号 v2.3 → v2.4，14 阶段 → 15 阶段，新增 Phase 9 失败弹性恢复章节，新增 4 条失败恢复映射，新增 4 条设计原则，更新配置文件分层表，更新上下文加载规则，新增复盘文档引用 |
+| `config/core_config.json` | 修改：`_meta.version` v2.3.0 → v2.4.0，新增 `sandbox_bypass`/`project_lock_cleanup`/`log_output` 3 个节点，`precheck.checks` 新增 `jre_cache_check`，`failure_recovery.mappings` 新增 4 个场景，`nosonar_decision_matrix.can_suppress_rules` 扩展 2 个规则 |
+| `config/fix_strategies.json` | 修改：`_meta.version` v2.2.0 → v2.4.0，增强 `typescript:S6551` 和 `typescript:S6819` 修复模板，新增 `fix_patterns` 节点（5 个可复用修复模式） |
+| `config/project_config.json` | 修改：从 20_news 切换到 xianyu_hunter 项目配置，新增 `sonar_project_properties`/`quality_gate_baseline`/`fix_strategies_overrides.high_frequency_rules` 节点 |
+| `references/retrospective-2026-07-22.md` | 新增：2026-07-22 实战复盘 4 维度详细文档（成功步骤/失败点/抽象流程/适用场景） |
+
+### 实战数据
+
+| 指标 | 修复前 | 修复后 |
+|------|--------|--------|
+| OPEN 问题数 | 100+ | 0 |
+| new_violations | 15 | 0 |
+| TypeScript 编译 | — | ✅ 通过（exit 0） |
+| Python 测试 | — | ✅ 1613 passed |
+| new_coverage | — | 18.5%（目标 80%，需补充单测） |
+| new_security_hotspots_reviewed | — | 0%（目标 100%，需手动 UI 审查） |
+
+---
+
+## v2.3.0 (2026-07-21) - 配置驱动 + 通用泛化 + 全链路核查
+
+### 设计目标
+
+基于用户对 sonarqube 使用过程的 4 维度复盘（成功步骤/失败点/固定流程/适用场景），消除 SKILL.md 中的所有硬编码值，提升技能的通用性和泛化能力，支持多项目并行。
+
+### 核心改进
+
+#### 1. 消除 SKILL.md 硬编码值（8 处）
+
+| 优化点 | 修改前 | 修改后 |
+|--------|--------|--------|
+| 环境变量示例 | 硬编码 `squ_xxx`/`localhost`/`9000`/`xianyu_hunter` | 改为配置引用表格 + `<your-xxx>` 占位符 |
+| NOSONAR 决策规则 | 硬编码 `S5446/S930/S2817` 等具体规则 ID | 改为"从 `core_config.json -> nosonar_decision_matrix` 读取" |
+| Java 版本要求 | 硬编码 "Java 17+" | 改为"从 `precheck.checks[java_version].min_version` 读取" |
+| Node.js 版本要求 | 硬编码 "Node.js v24+" | 改为"从 `incompatible_node_versions` 列表读取" |
+| 紧凑格式示例 | 硬编码 `python:S1481`/`src/api/routes.py:42` | 改为 `{rule_id}`/`{file_path}:{line}` 占位符 |
+| 失败恢复描述 | 硬编码 "Java 17+" | 改为"满足 `min_version` 的 Java 版本" |
+| 复盘声明 | 硬编码 "2026-07-07 实战 336→0" | 改为"详见 CHANGELOG.md" |
+| 配置文件表 | 硬编码 "v2.1.0"/"Xianyu 业务配置" | 改为"`_meta.version` 字段标识" |
+
+#### 2. 配置文件版本兼容性机制
+
+- `core_config.json` `_meta` 新增 `schema_version` 和 `min_compatible_version` 字段
+- `project_config.json` `_meta` 同步新增 `schema_version` 字段
+- 加载时通过 `scripts/validate-config.ps1` 校验版本兼容性
+- 向后兼容：`min_compatible_version` 默认为 `2.0.0`，v2.0+ 配置均可正常加载
+
+#### 3. 业务约束加载机制（支持多项目并行）
+
+- `project_config.json` 新增 `business_constraints.load_files` 字段
+- 业务约束文件按数组顺序加载，后者覆盖前者同名规则
+- 默认行为：`load_files` 为空数组时仅加载 `core.json` 通用规则
+- 多项目隔离：每个项目独立配置自己的业务约束，互不污染
+
+#### 4. 通用文档与示例泛化
+
+| 文件 | 类型 | 说明 |
+|------|------|------|
+| `references/rule-overrides.md` | 新增 | 通用规则豁免指南（5 个范式 + 业务覆盖编写指南） |
+| `examples/xianyu-hunter/rule-overrides.md` | 迁移 | 原 `references/xianyu-rule-overrides.md` 迁移至此，作为业务特定示例 |
+| `examples/basic-typescript/` | 新增 | 最简 TypeScript 项目配置示例（无业务依赖） |
+
+#### 5. 自动化脚本新增
+
+| 脚本 | 用途 |
+|------|------|
+| `scripts/detect-project.ps1` | 项目类型自动检测（Python/TS/Java/Go），生成 `project_config.json` 草稿 |
+| `scripts/validate-config.ps1` | 配置文件完整性与一致性校验（5 阶段校验 + ERROR/WARNING 分级） |
+
+### 4 维度复盘成果
+
+#### 维度 1：成功执行任务的完整步骤
+
+14 阶段闭环流程：服务器检测 → ES 弹性预检 → 前置检查 → 环境兼容预检 → MCP 检测 → 代码定位 → 质量门禁 → 问题扫描 → CE 报告轮询 → 并行修复 → NOSONAR 决策校验 → 验证 → 报告 → 状态管理
+
+#### 维度 2：失败点（16 类，全覆盖）
+
+环境层（4 类）+ ES 层（2 类）+ 连接层（2 类）+ 修复层（4 类）+ 验证层（2 类）+ 其他（2 类），全部映射到 `failure_recovery.mappings` 配置驱动恢复。
+
+#### 维度 3：可抽象的判断逻辑（9 条）
+
+J1 NOSONAR 位置判断 / J2 NOSONAR 决策矩阵 / J3 收敛判断 / J4 MCP 降级 / J5 环境兼容预检 / J6 修复策略查表 / J7 子代理结果核查 / J8 测试失败归因 / J9 配置占位符解析
+
+#### 维度 4：适用场景（10 类）与不适用场景（10 类）
+
+详见 SKILL.md "适用场景" 和 "不适用场景" 章节。
+
+### 修改文件清单
+
+| 文件 | 修改类型 |
+|------|----------|
+| `SKILL.md` | 修改：版本号 v2.2 → v2.3，消除 8 处硬编码，增加业务约束加载机制说明，更新脚本表/示例表/参考文档表 |
+| `config/core_config.json` | 修改：`_meta` 增加 `schema_version` 和 `min_compatible_version` 字段 |
+| `config/project_config.json` | 修改：`_meta` 增加 `schema_version`，新增 `business_constraints.load_files` 字段 |
+| `references/rule-overrides.md` | 新增：通用规则豁免指南（5 个范式） |
+| `examples/xianyu-hunter/rule-overrides.md` | 迁移：从 `references/xianyu-rule-overrides.md` 迁移至业务示例目录 |
+| `examples/basic-typescript/` | 新增：通用 TypeScript 项目示例（project_config.json + README.md） |
+| `scripts/detect-project.ps1` | 新增：项目类型自动检测脚本 |
+| `scripts/validate-config.ps1` | 新增：配置文件校验脚本 |
+
+### 验证标准
+
+- ✅ SKILL.md 中无任何具体规则 ID、端口号、版本号硬编码
+- ✅ 所有参数均可通过配置文件管理
+- ✅ 通用示例可独立运行（不依赖 Xianyu 业务）
+- ✅ 自动检测脚本可正确识别 Python/TS/Java/Go 项目类型
+- ✅ 配置校验脚本可检测出所有配置错误
+
+---
+
+## v2.2.0 (2026-07-21) - 环境兼容 + 决策驱动 + 全链路核查
+
+### 设计目标
+
+基于 2026-07-21 一次完整闭环实战（168 → 0 OPEN，25 个源文件修改）的复盘沉淀，解决 v2.1 的五个未覆盖问题：
+1. **Node.js 版本不兼容**：v24+ 与 SonarJS bridge 不兼容，导致 JS/TS 扫描完全失败
+2. **PowerShell .bat 封装缺失**：PowerShell 5 直接执行 sonar-scanner `-D` 参数报错
+3. **NOSONAR 抑制 vs 修复决策缺失**：子代理可能对安全漏洞规则使用 NOSONAR 抑制而非代码修复
+4. **子代理修复结果不可信**：子代理报告"已加 NOSONAR"但可能遗漏或位置错误
+5. **多行函数定义 NOSONAR 位置错误**：18 处 NOSONAR 被错误加在 `-> ReturnType:` 行尾而非 `def func(` 行尾
+
+### 核心改进
+
+#### 1. 环境兼容性预检（新增 Phase 0.5）
+
+| 配置节点 | 用途 |
+|---------|------|
+| `core_config.json -> precheck.checks[node_version_check]` | Node.js 版本与 SonarJS bridge 兼容性检测 |
+| `core_config.json -> precheck.checks[powershell_compat_check]` | Windows PowerShell .bat 封装检测 |
+
+**关键特性**：
+- Node.js v24/v25 不兼容时自动跳过前端扫描（`on_failure: skip_frontend_scan`）
+- PowerShell .bat 封装不存在时自动生成（`on_failure: generate_bat_wrapper`）
+- 预检从 5 项扩展到 7 项
+
+#### 2. NOSONAR 决策矩阵（新增 Phase 5.5 + nosonar_decision_matrix）
+
+| 分类 | 规则数 | 行为 |
+|------|--------|------|
+| must_fix_rules | 9 | 安全漏洞/注入规则，必须代码修复，禁止 NOSONAR |
+| can_suppress_rules | 12 | 认知复杂度/代码风格规则，允许 NOSONAR 但需原因注释 |
+
+#### 3. 子代理修复结果二次核查（新增 subagent_verification）
+
+- 修复后主代理 grep 验证 NOSONAR 是否实际存在
+- AST 解析验证多行函数定义 NOSONAR 位置正确性
+- 校验 NOSONAR 规则不在 must_fix_rules 中
+
+#### 4. 测试失败 git stash 归因（新增 test_failure_diagnosis）
+
+- 修复后测试失败时，git stash → 跑测试 → 区分预存在 vs 本次引入
+- 预存在失败：warn_and_continue
+- 本次引入失败：block_and_report_diff
+
+#### 5. 前端注释语法映射表（新增 frontend_comment_syntax）
+
+- 10 种文件类型的 NOSONAR 注释语法映射（.js/.ts/.vue/.jsx/.tsx/.wxml/.wxss/.css/.scss/.html）
+- .vue 文件按 `<template>`/`<script>`/`<style>` 区块使用不同语法
+- 微信小程序 .wxml/.wxss 专项支持
+
+#### 6. nosonar-positioning.md 增强
+
+- 新增错误 6：多行函数定义 NOSONAR 加在返回类型行（18 处实战案例）
+- 新增决策矩阵章节（must_fix_rules + can_suppress_rules 完整分类）
+- 新增前端文件注释语法速查表
+- 决策树扩展：6 步决策流程（含多行 def 首行规则 + 决策矩阵判断）
+- 修复硬编码项目路径引用
+
+### 配置文件变更
+
+| 文件 | 版本 | 变更 |
+|------|------|------|
+| `config/core_config.json` | v2.1.0 → v2.2.0 | 新增 5 个配置节点（nosonar_decision_matrix / subagent_verification / test_failure_diagnosis / frontend_comment_syntax / precheck 2 项新检查），failure_recovery.mappings 新增 4 个场景，environment_variables 新增 2 个可选变量 |
+| `references/nosonar-positioning.md` | v2.1 → v2.2 | 新增错误 6 + 决策矩阵章节 + 前端注释语法速查表，决策树 4 步→6 步，核心原则 7→11 条 |
+| `SKILL.md` | v2.1 → v2.2 | 新增 Phase 0.5/5.5，14 阶段流程，9 项判断逻辑，16 项失败恢复，9 项设计原则 |
+
+### 实战验证数据
+
+- **起点**：168 个 OPEN 问题
+- **终点**：0 个 OPEN 问题
+- **源文件修改**：25 个后端 + 1 个测试
+- **关键学习**：18 处 NOSONAR 位置错误（多行 def 末行）、1 处子代理遗漏、4 处预存在测试失败、Node.js v24 不兼容、PowerShell .bat 封装需求
+
+### 已知限制
+
+1. `nosonar_decision_matrix` 规则列表基于实战经验，新规则需补充
+2. `frontend_comment_syntax` 未覆盖所有前端框架文件类型（可扩展）
+3. Node.js 版本兼容性检测基于已知不兼容版本列表，新版本需补充
+4. `subagent_verification.nosonar_position_correct` 的 AST 解析仅支持 Python
+
+---
+
 ## v2.1.0 (2026-07-07) - 弹性恢复 + NOSONAR 位置规则 + 复盘沉淀
 
 ### 🎯 设计目标

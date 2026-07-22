@@ -2,6 +2,7 @@
 
 > 防止在 SPA（手动路由切换）中直接使用 `<a href="#...">` 或 `router.push` 失效。
 > 本规则由历史问题复盘提炼（About.vue→Help.vue 内部跳转需要通过 CustomEvent 派发）。
+> 所有参数从 `config/coding-standards-config.md` 的 `spa_navigation` 节读取，禁止在规则文件中硬编码。事件名（如 `{project}:navigate`）应与 `config.spa_navigation.event_name_pattern` 保持一致。
 
 ## 触发关键词
 

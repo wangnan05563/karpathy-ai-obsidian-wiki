@@ -3,7 +3,7 @@
 ## Scope
 
 - Covers: 配置文件路径解析锚点、写盘后缓存刷新、HTTP 参数防路径穿越、跨 origin 持久化边界、降级策略日志、落盘目录与 `.gitignore` 同步。
-- 适用对象：所有 `services/api/` 下涉及配置持久化、文件落盘、内存缓存、HTTP 路由参数到文件系统映射的代码。
+- 适用对象：所有 `api/` 下涉及配置持久化、文件落盘、内存缓存、HTTP 路由参数到文件系统映射的代码。
 - Does NOT cover: 通用路径遍历防护（见 [security-rule.md](security-rule.md)）、配置类路由生命周期（见 [config-management-rule.md](config-management-rule.md)）、会话状态缓存失效（见 [session-state-rule.md](session-state-rule.md)）。
 
 > 所有具体路径、正则、函数名、目录约定均从 [config/review-config.md](../config/review-config.md) 的"持久化与缓存刷新审查参数"节读取，本规则文件只描述通用模式，不硬编码任何具体值。

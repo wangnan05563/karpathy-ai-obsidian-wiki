@@ -6,14 +6,14 @@
 
 | 用途       | 目录约定（相对于项目根） |
 | ---------- | ------------------------- |
-| 页面视图   | `packages/web/src/views/` |
-| 状态仓库   | `packages/web/src/stores/` |
-| 通用组件   | `packages/web/src/components/` |
-| 类型定义   | `packages/web/src/types/` |
-| 工具函数   | `packages/web/src/utils/` |
-| API 请求层 | `packages/web/src/api/` |
+| 页面视图   | `frontend/src/views/` |
+| 状态仓库   | `frontend/src/stores/` |
+| 通用组件   | `frontend/src/components/` |
+| 类型定义   | `frontend/src/types/` |
+| 工具函数   | `frontend/src/utils/` |
+| API 请求层 | `frontend/src/api/` |
 
-评审范围：仅评审 `packages/web/` 下的 `.vue`、`.ts`、`.tsx` 文件。其他目录（如 `packages/server/`、`scripts/`）不在本技能覆盖范围内。
+评审范围：仅评审 `frontend/` 下的 `.vue`、`.ts`、`.tsx` 文件。其他目录（如 `api/`、`scripts/`）不在本技能覆盖范围内。
 
 ## 技术栈
 
@@ -51,14 +51,14 @@
 
 | 文件路径 | 用途 |
 |----------|------|
-| `packages/web/src/style.css` `:root` | creative 默认主题变量 |
-| `packages/web/src/styles/themes/macaron.css` | 马卡龙主题覆盖 |
-| `packages/web/src/styles/themes/enterprise.css` | 现代企业主题覆盖 |
-| `packages/web/src/styles/themes/product.css` | 产品展示主题覆盖 |
-| `packages/web/src/styles/themes/ecommerce.css` | 电商零售主题覆盖 |
-| `packages/web/src/styles/themes/portfolio.css` | 艺术作品集主题覆盖 |
-| `packages/web/src/styles/themes/index.css` | @import 入口 |
-| `packages/web/src/composables/useTheme.ts` | 主题状态管理与持久化 |
+| `frontend/src/style.css` `:root` | creative 默认主题变量 |
+| `frontend/src/styles/themes/macaron.css` | 马卡龙主题覆盖 |
+| `frontend/src/styles/themes/enterprise.css` | 现代企业主题覆盖 |
+| `frontend/src/styles/themes/product.css` | 产品展示主题覆盖 |
+| `frontend/src/styles/themes/ecommerce.css` | 电商零售主题覆盖 |
+| `frontend/src/styles/themes/portfolio.css` | 艺术作品集主题覆盖 |
+| `frontend/src/styles/themes/index.css` | @import 入口 |
+| `frontend/src/composables/useTheme.ts` | 主题状态管理与持久化 |
 
 ### CSS 变量三层架构
 
@@ -157,13 +157,13 @@ SSE 流式接口须按下列事件类型分段推送，前端按类型分发到�
 
 ### 适用
 
-- 评审 `packages/web/` 下新增或修改的 Vue 3 / TypeScript 前端文件。
+- 评审 `frontend/` 下新增或修改的 Vue 3 / TypeScript 前端文件。
 - 评审涉及 Element Plus 组件、Pinia store、vis-network 图谱、SSE 流式消费的代码。
 - 提交前自查（pending-change review）或针对指定文件的定向评审（file-targeted review）。
 
 ### 不适用
 
-- 后端代码（`packages/server/`、Python、Node 服务端逻辑）。
+- 后端代码（`api/`、Python、Node 服务端逻辑）。
 - 纯配置文件（`vite.config.ts`、`tsconfig.json`）的评审，除非涉及上述规则的具体违反。
 - 构建脚本、CI 配置、文档文件。
 - 第三方依赖升级的兼容性评估（属于迁移任务，非评审任务）。
@@ -256,8 +256,8 @@ SSE 流式接口须按下列事件类型分段推送，前端按类型分发到�
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| `views_directory` | `packages/web/src/views/` | 视图文件所在目录（相对项目根） |
-| `app_entry` | `packages/web/src/App.vue` | 应用入口文件路径 |
+| `views_directory` | `frontend/src/views/` | 视图文件所在目录（相对项目根） |
+| `app_entry` | `frontend/src/App.vue` | 应用入口文件路径 |
 | `view_type_name` | `ViewName` | 视图 key 的字面量联合类型名称 |
 | `required_hooks` | `['import', 'type', 'v-for', 'v-else-if']` | 视图注册必须完成的钩子列表 |
 
@@ -269,8 +269,8 @@ SSE 流式接口须按下列事件类型分段推送，前端按类型分发到�
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| `backend_types_path` | `packages/server/src/types.ts` | 后端 types 文件路径（相对项目根） |
-| `frontend_types_path` | `packages/web/src/types.ts` | 前端 types 文件路径 |
+| `backend_types_path` | `api/src/types.ts` | 后端 types 文件路径（相对项目根） |
+| `frontend_types_path` | `frontend/src/types.ts` | 前端 types 文件路径 |
 | `sync_interfaces` | `[]` | 需同步的接口名清单；留空表示全部 `export interface` 都需同步 |
 | `ignore_optional_marker` | `true` | 是否忽略 `?` 可选标记差异（后端必填前端可选视为兼容） |
 
@@ -311,7 +311,7 @@ SSE 流式接口须按下列事件类型分段推送，前端按类型分发到�
 |------|-----|------|
 | `spa_navigation.event_name_pattern` | `{project}:navigate` | 事件名模式，`{project}` 占位符运行时替换为 `project_name` |
 | `spa_navigation.project_name` | `karpathy` | 项目名，替换事件名中的 `{project}` 占位符 |
-| `spa_navigation.app_entry` | `packages/web/src/App.vue` | 监听事件的入口组件路径（相对项目根） |
+| `spa_navigation.app_entry` | `frontend/src/App.vue` | 监听事件的入口组件路径（相对项目根） |
 | `spa_navigation.allowed_views` | `[]` | 允许跳转的视图名白名单；留空表示不校验 |
 | `spa_navigation.require_lifecycle_pair` | `true` | 监听器必须在 `onMounted` / `onBeforeUnmount` 配对管理 |
 
@@ -333,3 +333,314 @@ SSE 流式接口须按下列事件类型分段推送，前端按类型分发到�
 | `check_update.cleanup_hook` | `onBeforeUnmount` | 定时器清理生命周期钩子名 |
 
 > 适用场景：Vue 3 + `<script setup>` 的"关于"页面或"设置"面板的检查更新功能，含轮询定时的异步状态机。PWA Service Worker 更新、Electron autoUpdater、一次性检查（无轮询）不适用。
+
+## 图标与导航栏审查参数
+
+> 图标与导航栏规则（见 [references/icon-and-navigation-rule.md](../references/icon-and-navigation-rule.md)）所依赖的可配置参数集中在此管理，规则文件只描述通用模式。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `icon_navigation.enabled` | `true` | 是否启用图标与导航栏审查 |
+| `icon_navigation.severity` | `error` | 违规严重级别 |
+| `icon_navigation.color_attribute` | `currentColor` | SVG 必须使用的颜色属性值 |
+| `icon_navigation.forbidden_color_values` | `#hex, rgb(), rgba(), hsl()` | 禁止硬编码的颜色值格式 |
+| `icon_navigation.nav_threshold` | `7` | 菜单项数量阈值，超过此值必须实现双模式 |
+| `icon_navigation.tooltip_implementation` | `pure-css-hover` | tooltip 实现方式（pure-css-hover=纯 CSS hover，js-tooltip=JS 库） |
+| `icon_navigation.transition_mode` | `out-in` | Vue Transition 切换模式 |
+| `icon_navigation.state_persistence_key` | `navCollapsed` | localStorage 持久化 key 名 |
+| `icon_navigation.state_persistence_type` | `boolean` | 持久化值类型 |
+| `icon_navigation.expanded_icon_size` | `16` | 展开模式图标尺寸（px） |
+| `icon_navigation.collapsed_icon_size` | `22` | 折叠模式图标尺寸（px） |
+| `icon_navigation.tooltip_position` | `bottom` | tooltip 出现位置 |
+| `icon_navigation.tooltip_delay_ms` | `200` | tooltip 显示延迟（毫秒） |
+| `icon_navigation.glow_filter_template` | `drop-shadow(0 0 {radius}px currentColor)` | 主题色光晕滤镜模板 |
+| `icon_navigation.glow_radius_default` | `4` | 光晕默认半径（px） |
+| `icon_navigation.glow_radius_hover` | `8` | hover 时光晕半径（px） |
+| `icon_navigation.viewbox_standard` | `0 0 24 24` | SVG viewBox 标准 |
+| `icon_navigation.stroke_width_default` | `1.8` | stroke 默认宽度 |
+| `icon_navigation.whitelist_pure_white` | `true` | 纯白高光 rgba(255,255,255,X) 允许硬编码 |
+
+> 适用场景：Vue 3 + `<script setup>` + 多主题切换 + SVG 矢量图标的 SPA 项目，导航栏菜单项 >7 需折叠。Font Awesome 字体图标、单主题项目、移动端无 hover 场景不适用。
+
+## 严重级别定义
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `severity_critical` | `🔴 严重` | 必须修复，阻止合并 |
+| `severity_warning` | `🟡 警告` | 建议修复，不阻止合并 |
+| `severity_suggestion` | `🟢 建议` | 可选优化 |
+| `severity_positive` | `✅ 优点` | 正面反馈 |
+
+## Vue 3 审查参数
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `vue.required_script_setup` | `true` | 必须使用 script setup |
+| `vue.required_lang_ts` | `true` | 必须使用 lang="ts" |
+| `vue.forbidden_options_api` | `true` | 禁止 Options API |
+| `vue.cleanup_required` | `true` | 事件监听器必须清理 |
+
+## 类型收窄审查参数
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `type_narrowing.ref_nullable_pattern` | `computed_or_local_var` | 可空 ref 访问模式 |
+| `type_narrowing.ref_await_rule` | `use_local_var` | await 后访问 ref 必须用局部变量 |
+| `type_narrowing.ref_template_rule` | `use_computed` | 模板中访问可空 ref 必须用计算属性 |
+
+## 预设配置审查参数
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `preset.source` | `backend_api` | 预设来源应为后端 API |
+| `preset.hardcode_forbidden` | `true` | 禁止前端硬编码预设 |
+| `preset.fetch_pattern` | `fetch('/api/.../presets')` | 预设获取模式 |
+
+## SSE 消费审查参数
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `sse.consumer_pattern` | `consumeSSEStream` | SSE 消费统一函数 |
+| `sse.content_type` | `text/event-stream` | SSE Content-Type |
+| `sse.event_format` | `event: <name>\ndata: <json>\n\n` | SSE 事件格式 |
+
+## 输出格式参数
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `output.max_issues_per_section` | `10` | 每个级别最多输出条数 |
+| `output.include_code_snippet` | `true` | 是否包含代码片段 |
+| `output.include_rule_reference` | `true` | 是否引用规范依据 |
+| `output.suggest_fix_code` | `true` | 是否提供修复代码示例 |
+
+## 编码与运行时审查参数
+
+> 用于 ES-7 ~ ES-9 规则，详见 references/encoding-safety-rule.md。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `encoding.disabled_attribute_required` | `true` | 禁用元素必须用 disabled 属性 |
+| `encoding.disabled_attribute_name` | `disabled` | 禁用属性名 |
+| `encoding.ui_text_consistency_required` | `true` | UI 文本必须与设计文档一致 |
+| `encoding.ui_text_source` | `设计文档 + 源码` | UI 文本一致性验证来源 |
+| `encoding.multi_instance_data_source` | `backend_api,config_file` | 多实例数据来源 |
+| `encoding.multi_instance_hardcode_forbidden` | `true` | 禁止硬编码多实例数据 |
+| `encoding.theme_list_source` | `config_file` | 主题列表来源 |
+| `encoding.preset_list_source` | `backend_api` | 预设列表来源 |
+
+## Async 可靠性审查参数
+
+> 供 references/async-reliability-rule.md 引用，禁止在规则文件硬编码。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `async_reliability.default_call_timeout_sec` | `5.0` | 前端 async 请求默认超时（秒） |
+| `async_reliability.heartbeat_interval_sec` | `3.0` | SSE 心跳检测间隔（秒） |
+| `async_reliability.heartbeat_miss_threshold` | `3` | 心跳丢失阈值（连续 N 次无消息判定断线） |
+| `async_reliability.reconnect_enabled` | `true` | SSE 断线是否自动重连 |
+| `async_reliability.reconnect_max_retries` | `3` | 最大重连次数 |
+| `async_reliability.reconnect_delay_sec` | `2.0` | 重连延迟（秒） |
+| `async_reliability.timeout_whitelist` | `Promise.resolve,EventSource.open` | 无需超时保护的调用白名单 |
+| `async_reliability.ui_feedback_required` | `true` | async 失败必须有 UI 反馈 |
+| `async_reliability.timer_cleanup_required` | `true` | 定时器必须在 onBeforeUnmount 清理 |
+| `async_reliability.fallback_ui_patterns` | `ElMessage.error,empty_state,retry_button` | 降级 UI 模式 |
+
+## 类型检查缓存清理审查参数（FR-026）
+
+> 供 references/typecheck-cache-frontend-rule.md 引用，禁止在规则文件硬编码。本规则针对 vue-tsc / tsc 幽灵错误（源码已收窄但工具仍报错）场景下的清缓存流程与绕过关键字禁令。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `typecheck_cache_frontend.typecheck_command` | `vue-tsc --noEmit` | 类型检查命令 |
+| `typecheck_cache_frontend.cache_cleanup_targets` | `*.tsbuildinfo, node_modules/.vite, src/**/*.js` | 幽灵错误时清理的缓存产物 glob 列表（逗号分隔） |
+| `typecheck_cache_frontend.bypass_keywords` | `as any, as unknown as, @ts-ignore, !.` | 禁止用作常规修复手段的绕过关键字（逗号分隔） |
+| `typecheck_cache_frontend.allow_ts_expect_error` | `true` | 是否允许 `@ts-expect-error`（须配 issue 链接） |
+| `typecheck_cache_frontend.test_file_allowlist` | `*.spec.ts, *.test.ts, **/__mocks__/**` | 允许放宽类型的测试文件 glob（逗号分隔） |
+| `typecheck_cache_frontend.recheck_after_clean` | `true` | 清缓存后必须重新执行 typecheck_command 验证 |
+
+> 适用场景：Vue 3 + `<script setup lang="ts">` 项目使用 `vue-tsc` 报告与源码逻辑不一致的错误（幽灵错误）。React/Next.js 改用 `tsc --noEmit`，清理目标含 `.next/`；纯 JavaScript 项目不适用。第三方库 `d.ts` 不完整走 `declare module` 或 `@ts-expect-error` + issue 引用例外路径。
+
+## Composable API 先读后用审查参数（FR-027）
+
+> 供 references/composable-api-frontend-rule.md 引用，禁止在规则文件硬编码。本规则约束调用 `useXxx` 前必须读源码确认 API 形状，并禁止诊断代码用 `$dispose` / `_s.delete` 重建 store。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `composable_api_frontend.use_xxx_pattern` | `use[A-Z]\w*` | 标识 composable 调用的正则 |
+| `composable_api_frontend.store_lifecycle_forbidden` | `pinia._s.delete, $dispose, $reset` | 诊断代码禁止的 store 生命周期 API（逗号分隔） |
+| `composable_api_frontend.diagnostic_allowlist_in_tests` | `*.spec.ts, *.test.ts` | 允许使用上述 API 的测试文件 glob（逗号分隔） |
+| `composable_api_frontend.must_read_source_before_use` | `true` | 调用 useXxx 前必须读源码 |
+| `composable_api_frontend.required_source_read_evidence` | `false` | 是否要求 PR 描述中显式贴出源码片段（推荐开启） |
+| `composable_api_frontend.cleanup_hooks_to_check` | `onBeforeUnmount, onScopeDispose` | 检查 composable 副作用清理的生命周期钩子（逗号分隔） |
+
+> 适用场景：Vue 3 Composition API 项目中调用任意 `useXxx`（自定义 composable / `useStore` / `useRoute` / `useRouter` / `useI18n` / `useHead` 等）与 Pinia store 状态诊断。React Hooks 同样要求先读源码（返回元组 vs 对象易混淆）；Vue 2 降级为"先读 Vuex store 字段定义"；纯 JavaScript 仅保留先读源码要求。
+
+## 混合类型运行时分流审查参数（FR-028）
+
+> 供 references/mixed-type-dispatch-frontend-rule.md 引用，禁止在规则文件硬编码。本规则约束联合类型 `T | U` 升级时的运行时分流方式与跨形态强转禁令。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `mixed_type_dispatch_frontend.forbidden_casts` | `as any, as unknown as` | 禁止的跨形态强转关键字（逗号分隔） |
+| `mixed_type_dispatch_frontend.typeguard_module` | `frontend/src/types/guards.ts` | 集中导出 `isXxx` 类型守卫的模块路径 |
+| `mixed_type_dispatch_frontend.required_dispatch_keywords` | `typeof, in, isXxx` | 允许的运行时分流方式（任一即可，逗号分隔） |
+| `mixed_type_dispatch_frontend.required_test_per_member` | `true` | 联合类型每个成员必须有测试覆盖 |
+| `mixed_type_dispatch_frontend.exhaustive_branch_required` | `true` | 消费联合类型的代码必须穷尽所有分支 |
+| `mixed_type_dispatch_frontend.allowed_structural_cast` | `extends, optional field extension` | 允许的结构兼容强转场景（不视为违规，逗号分隔） |
+
+> 适用场景：后端响应从单形态升级为联合形态（成功/失败分支、旧版/新版 schema 共存）、消息总线事件多态、第三方库返回联合类型。React/Next.js 守卫模块路径改为 `app/_types/guards.ts` 或 `src/types/guards.ts`；Vue 2 仍建议抽到独立模块；纯 JavaScript 降级为"运行时必须用 typeof/in 分流"。
+
+## Vue SFC 单 script 块审查参数（FR-029）
+
+> 供 references/sfc-single-script-frontend-rule.md 引用，禁止在规则文件硬编码。本规则约束 `.vue` 文件中 `<script>` 块的数量、属性与例外标注。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `sfc_script_block_frontend.allowed_script_count` | `1` | 每个 `.vue` 文件允许的 `<script>` 块数量上限 |
+| `sfc_script_block_frontend.required_attrs` | `setup, lang="ts"` | 必须同时具备的 script 块属性（逗号分隔） |
+| `sfc_script_block_frontend.exception_marker` | `// 例外：` | 例外注释必须包含的关键字 |
+| `sfc_script_block_frontend.allowed_exceptions` | `named-export-non-reactive, options-extends-compat` | 允许的例外场景标识（逗号分隔） |
+| `sfc_script_block_frontend.banned_macros_in_plain_script` | `defineProps, defineEmits, defineExpose, defineOptions, defineSlots` | 禁止在非 setup 块中调用的编译宏（逗号分隔） |
+| `sfc_script_block_frontend.name_via` | `defineOptions({ name })` | 组件名声明的合规方式 |
+
+> 适用场景：Vue 3 + `<script setup>` 项目中的所有 `.vue` 文件，包括 Options API → Composition API 迁移 PR 与新建 `.vue` 文件评审。Vue 2 不适用（无 `<script setup>` 语法）；纯 JavaScript 降级为"`<script setup>` 必须存在且唯一"，去掉 `lang="ts"` 要求；React/Next.js 不适用（非 SFC）。
+
+## E2E 测试前置服务检查审查参数（FR-030）
+
+> 供 references/e2e-precheck-frontend-rule.md 引用，禁止在规则文件硬编码。本规则约束 E2E 测试套件执行前的端口监听 + 健康检查 + 失败中止流程。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `e2e_precheck_frontend.required_ports` | `5173, 8000` | 必须监听的端口列表（逗号分隔，前端 dev + 后端 API） |
+| `e2e_precheck_frontend.health_endpoints` | `http://localhost:5173/, http://localhost:8000/health` | 健康检查端点列表（逗号分隔） |
+| `e2e_precheck_frontend.health_timeout_ms` | `3000` | 单次健康检查请求超时（毫秒） |
+| `e2e_precheck_frontend.retry_count` | `5` | 服务就绪检查失败重试次数 |
+| `e2e_precheck_frontend.retry_interval_ms` | `1000` | 重试间隔（毫秒） |
+| `e2e_precheck_frontend.abort_on_failure` | `true` | 服务未就绪时是否中止测试 |
+| `e2e_precheck_frontend.distinct_report_section` | `true` | 测试报告中是否独立 preflight 段 |
+| `e2e_precheck_frontend.connection_refused_indicator` | `ERR_CONNECTION_REFUSED, ECONNREFUSED` | 标识"服务未起"的错误码关键字（逗号分隔） |
+
+> 适用场景：项目使用 Playwright / Cypress / Selenium / Puppeteer 运行 E2E 测试，且前端 dev server 与后端 API 服务为独立进程。React/Next.js 端口改为 `3000` 或 `4173`；Vue 2 dev server 默认 `8080`（vue-cli）；纯 JavaScript 项目仍适用；Docker Compose 启动可借助 `docker compose up --wait` 内置健康检查。
+
+## 测试用例与代码结构同步审查参数（FR-031）
+
+> 供 references/test-case-sync-frontend-rule.md 引用，禁止在规则文件硬编码。本规则约束 DOM 变更与测试选择器同步、try/catch 静默吞错禁令、选择器优先级与集中化。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `test_case_sync_frontend.dom_impact_triggers` | `class rename, id rename, data-testid change, structural change, text change, v-if/v-show change` | 触发测试同步的 DOM 变更类型（逗号分隔） |
+| `test_case_sync_frontend.same_commit_required` | `true` | DOM 变更与测试更新必须在同一 commit/PR |
+| `test_case_sync_frontend.silence_patterns` | `try/catch with empty body, try/except pass, catch with only console.log` | 禁止的静默吞错模式（逗号分隔） |
+| `test_case_sync_frontend.allowed_catch_terminators` | `throw, test.fail, test.skip, pytest.fail, expect.assertions` | catch 块必须包含的至少一种终止符（逗号分隔） |
+| `test_case_sync_frontend.selector_priority` | `data-testid, aria-label, role, text, class` | 选择器优先级（从高到低，逗号分隔） |
+| `test_case_sync_frontend.class_selector_discouraged` | `true` | 是否禁止 class 选择器（仅用于样式断言时允许） |
+| `test_case_sync_frontend.selector_module` | `e2e/selectors.ts` | 集中导出选择器常量的模块路径 |
+| `test_case_sync_frontend.selector_lint_files` | `e2e/**/*.spec.ts, e2e/**/*.test.ts, e2e/test_*.py, tests/**/*.spec.ts` | 需扫描选择器同步情况的测试文件 glob（逗号分隔） |
+
+> 适用场景：Vue 3 / React 项目修改 `.vue` / `.tsx` 文件中影响 DOM 的代码、PR 同时涉及前端组件与对应测试用例、Python / TypeScript E2E 测试套件维护。React/Next.js 选择器模块路径改为 `__tests__/selectors.ts`；Vue 2 触发条件相同；纯 JavaScript 通过 ESLint `no-empty-catch` 自动化；Python E2E 通过 `flake8-bugbear` B902 检查。
+
+## 阅读视野优化与输入区固定审查参数（FR-032）
+
+> 供 references/reading-viewport-frontend-rule.md 引用，禁止在规则文件硬编码。本规则约束阅读类视口的版面占比（标题头 ≤15%、内容区 ≥75%）与输入区 sticky bottom + 毛玻璃 + z-index 样式。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `reading_viewport_frontend.target_views` | `Query.vue, Reader.vue, Help.vue, ChatView.vue` | 适用本规则的视图文件名清单（逗号分隔） |
+| `reading_viewport_frontend.header_max_ratio` | `0.15` | 标题头区垂直占比上限（占视口高度比例） |
+| `reading_viewport_frontend.content_min_ratio` | `0.75` | 内容阅读区垂直占比下限 |
+| `reading_viewport_frontend.responsive_breakpoint` | `768` | 响应式断点（px），断点下用 mobile_* 阈值 |
+| `reading_viewport_frontend.mobile_header_max_ratio` | `0.20` | 移动端标题头占比上限 |
+| `reading_viewport_frontend.mobile_content_min_ratio` | `0.65` | 移动端内容区占比下限 |
+| `reading_viewport_frontend.input_bar_position` | `sticky` | 输入区定位方式（sticky / fixed） |
+| `reading_viewport_frontend.input_bar_bottom` | `0` | 输入区 bottom 偏移（px） |
+| `reading_viewport_frontend.input_bar_blur_radius` | `12px` | 毛玻璃模糊半径 |
+| `reading_viewport_frontend.input_bar_alpha` | `0.85` | 输入区背景色 alpha 值（0-1） |
+| `reading_viewport_frontend.input_bar_min_zindex` | `2` | 输入区最小 z-index |
+| `reading_viewport_frontend.input_bar_border_top` | `1px solid rgba(0,0,0,0.08)` | 输入区顶部分隔边框 |
+| `reading_viewport_frontend.input_bar_outside_scroll` | `true` | 输入区必须在滚动容器外 |
+
+> 适用场景：Vue 3 阅读类视图（Query.vue / Reader.vue / Help.vue / ChatView.vue 等含大量文本 + 底部输入区的页面）。React/Next.js 可用 Tailwind 类实现，参数仍从 config 读取；Vue 2 兼容；纯 JavaScript 降级为 CSS 审查；移动端优先项目可调整 `responsive_breakpoint` 与 mobile 阈值。
+
+## 主题色变量映射审查参数（FR-035 ~ FR-040）
+
+> 供 references/theme-color-mapping-frontend-rule.md 引用，禁止在规则文件硬编码。
+> 复盘来源：仪表盘 .recent-log 与 FloatingChat 在浅色主题下辨识度低，11 处硬编码 rgba() 颜色替换为 CSS 变量。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `theme_color_mapping_frontend.enabled` | `true` | 是否启用主题色变量映射审查 |
+| `theme_color_mapping_frontend.severity` | `error` | 违规严重级别 |
+| `theme_color_mapping_frontend.variable_definition_files` | `["frontend/src/styles/themes.css", "frontend/src/styles/variables.css"]` | CSS 变量定义文件列表（Grep 查找可用变量名） |
+| `theme_color_mapping_frontend.whitelist_patterns` | `rgba(255, 255, 255, *), transparent, inherit, currentColor` | 允许硬编码的颜色值模式（逗号分隔，支持通配符） |
+| `theme_color_mapping_frontend.forbidden_color_formats` | `rgba(), rgb(), #hex, hsl(), hsla()` | 禁止硬编码的颜色值格式（逗号分隔） |
+| `theme_color_mapping_frontend.allowed_alpha_values` | `03, 05, 06, 08, 10, 12, 15, 18, 20, 25, 30, 35, 40, 45, 50, 60, 70` | 允许的 alpha 百分比列表（两位数字，逗号分隔） |
+| `theme_color_mapping_frontend.alpha_variable_pattern` | `--accent-{color}-a{NN}` | alpha 变体变量名命名模板 |
+| `theme_color_mapping_frontend.color_identifiers` | `cyan, purple, pink, magenta` | 支持的颜色标识列表（替换 {color} 占位符） |
+| `theme_color_mapping_frontend.semantic_priority` | `scene_bg, card_bg, text, border, shadow, scrollbar` | 语义变量优先级（从高到低，逗号分隔） |
+| `theme_color_mapping_frontend.semantic_variable_map` | `scene_bg=--bg-scene, card_bg=--bg-card-solid, text=--text-base\|--text-muted, border=--accent-{color}-a15, shadow=--glow-{color}, scrollbar=--accent-{color}-a20\|--accent-{color}-a40` | 语义场景到变量名的映射表（\| 分隔多个可选变量） |
+| `theme_color_mapping_frontend.edit_tool_preferred` | `true` | 是否优先使用 Edit 精准替换（禁止 Write 重写整个文件） |
+| `theme_color_mapping_frontend.edit_threshold_ratio` | `0.5` | 修改范围占文件总行数的阈值，高于此值且文件含非 ASCII 时标记「疑似 Write 重写」 |
+| `theme_color_mapping_frontend.backend_typecheck_command` | `npx tsc --noEmit` | 后端类型检查命令 |
+| `theme_color_mapping_frontend.frontend_typecheck_command` | `npx vue-tsc --noEmit` | 前端类型检查命令（Vue 项目用 vue-tsc） |
+| `theme_color_mapping_frontend.require_both_pass` | `true` | 是否要求前后端类型检查均通过才允许提交 |
+| `theme_color_mapping_frontend.test_themes` | `macaron, enterprise, portfolio, creative, product` | PR 须提供的主题切换截图列表（浅色 + 深色） |
+| `theme_color_mapping_frontend.light_themes` | `macaron, enterprise, portfolio` | 浅色主题列表（用于对比度验证） |
+| `theme_color_mapping_frontend.dark_themes` | `creative, product` | 深色主题列表（用于对比度验证） |
+
+> 适用场景：Vue 3 + CSS 变量分层架构（L1/L2/L3）+ 多主题切换项目。React/Next.js 可用 CSS-in-JS 变量，参数仍从 config 读取；单主题项目将 `enabled` 设为 `false`；CSS-in-JS 项目（styled-components/emotion）变量引用方式改为 `theme.xxx`；Material Design 项目修改 `semantic_priority` 为 `surface, background, on_surface, outline, shadow`。
+
+## Tauri invoke 命令三层声明审查参数（FR-041）
+
+> 供 references/tauri-invoke-rule.md 引用，禁止在规则文件硬编码。本规则约束 Tauri 2.x 桌面应用前端调用 `invoke()` 命令时，命令名必须在 build.rs / capabilities / lib.rs 三层同时声明。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `tauri_invoke_frontend.enabled` | `true` | 是否启用 invoke 三层声明审查 |
+| `tauri_invoke_frontend.build_manifest_path` | `src-tauri/build.rs` | 第 1 层构建清单文件路径（相对项目根，AppManifest::commands 数组所在） |
+| `tauri_invoke_frontend.capabilities_path` | `src-tauri/capabilities/default.json` | 第 2 层权限清单文件路径（permissions 数组所在） |
+| `tauri_invoke_frontend.runtime_handler_path` | `src-tauri/src/lib.rs` | 第 3 层运行时注册文件路径（invoke_handler + generate_handler! 所在） |
+| `tauri_invoke_frontend.commands` | `[]` | 项目实际使用的 invoke 命令名清单（逗号分隔）；留空表示从前端源码自动扫描 invoke('xxx') 调用 |
+| `tauri_invoke_frontend.permission_prefix` | `allow-` | 第 2 层权限名前缀，去除后与命令名比对（如 `allow-save-config` → `save-config`） |
+| `tauri_invoke_frontend.error_keyword_layer1` | `Plugin not found` | 第 1 层缺失的运行时错误关键词 |
+| `tauri_invoke_frontend.error_keyword_layer2` | `not allowed` | 第 2 层缺失的运行时错误关键词 |
+| `tauri_invoke_frontend.error_keyword_layer3` | `command not found` | 第 3 层缺失的运行时错误关键词 |
+| `tauri_invoke_frontend.plugin_command_allowlist` | `start_dragging, set_title, set_size, set_position, close, show, hide, maximize, minimize, unmaximize, unminimize` | 插件自带命令白名单（逗号分隔），不纳入三层检查（由 Tauri window/shell 等插件注册） |
+
+> 适用场景：Tauri 2.x 桌面应用项目，前端通过 `@tauri-apps/api` 的 `invoke()` 调用 Rust 后端命令。Tauri 1.x 项目不适用（命令注册机制不同，无 capabilities 权限层）；纯 Web 项目不适用；Electron 项目不适用（IPC 机制不同）。
+
+## Tauri 透明窗口 CSS 覆盖审查参数（FR-042）
+
+> 供 references/tauri-transparent-css-rule.md 引用，禁止在规则文件硬编码。本规则约束 `transparent: true` 的 Tauri 窗口须对 html/body/#app/* 四层选择器全覆盖透明背景，并在 floating-active 状态下用通配符 + `!important` 强制覆盖。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `tauri_transparent_css_frontend.enabled` | `true` | 是否启用透明窗口 CSS 审查 |
+| `tauri_transparent_css_frontend.tauri_conf_path` | `src-tauri/tauri.conf.json` | Tauri 配置文件路径，用于读取 `app.windows[].transparent` 字段 |
+| `tauri_transparent_css_frontend.floating_active_class` | `floating-active` | 窗口激活态 class 名（挂到 `<html>` 元素上），用于通配符规则选择器 |
+| `tauri_transparent_css_frontend.app_root_selector` | `#app` | 前端入口根选择器（Vue 默认 `#app`，React 可改为 `#root`） |
+| `tauri_transparent_css_frontend.required_transparent_layers` | `html, body, #app, *` | 必须设置透明背景的四层选择器（逗号分隔） |
+| `tauri_transparent_css_frontend.glass_card_selectors` | `.glass-card` | 毛玻璃卡片选择器清单（逗号分隔），须显式声明半透明背景 |
+| `tauri_transparent_css_frontend.glass_card_min_alpha` | `0.3` | 毛玻璃卡片背景色最小 alpha 值（低于此值可读性差，告警） |
+| `tauri_transparent_css_frontend.forbidden_transparent_properties` | `opacity: 0, visibility: hidden` | 禁止用作窗口透明替代的属性（逗号分隔，会清空文字与子元素） |
+| `tauri_transparent_css_frontend.require_global_wrapper` | `true` | scoped 样式场景是否要求 `:global()` 包裹通配符规则 |
+| `tauri_transparent_css_frontend.require_important_on_wildcard` | `true` | 通配符规则是否必须带 `!important`（覆盖组件库内联背景） |
+
+> 适用场景：Tauri 2.x 桌面应用，`tauri.conf.json` 中 `app.windows[].transparent = true`，前端含悬浮卡片 / 浮动面板布局。非透明窗口项目、Electron / PWA 项目、全屏独占模式应用不适用。
+
+## Tauri drag+click 冲突处理审查参数（FR-043）
+
+> 供 references/tauri-drag-click-rule.md 引用，禁止在规则文件硬编码。本规则约束同时承担窗口拖动与点击交互的 UI 元素必须用 JS mousedown/mousemove/mouseup 三阶段区分，禁用 `data-tauri-drag-region` 直接挂载。
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `tauri_drag_click_frontend.enabled` | `true` | 是否启用 drag+click 冲突审查 |
+| `tauri_drag_click_frontend.move_threshold_px` | `5` | 鼠标移动阈值（像素），超过此值视为拖动意图而非点击抖动 |
+| `tauri_drag_click_frontend.start_dragging_command` | `start_dragging` | 调用 Rust 端启动原生拖动的 invoke 命令名（须与 FR-041 plugin_command_allowlist 中一致） |
+| `tauri_drag_click_frontend.drag_region_attribute` | `data-tauri-drag-region` | Tauri 原生 drag 属性名（用于识别误用） |
+| `tauri_drag_click_frontend.required_mouse_events` | `mousedown, mousemove, mouseup` | drag+click 元素必须绑定的鼠标事件列表（逗号分隔） |
+| `tauri_drag_click_frontend.click_max_move_px` | `5` | 视为 click 的最大移动距离（与 move_threshold_px 通常一致） |
+| `tauri_drag_click_frontend.dblclick_timeout_ms` | `300` | 双击间隔（毫秒），元素含 @dblclick 时须额外检查时序 |
+| `tauri_drag_click_frontend.allow_data_tauri_drag_region_on_pure_drag` | `true` | 是否允许在纯 drag 元素（无 click 职责）上使用 `data-tauri-drag-region` |
+| `tauri_drag_click_frontend.prevent_duplicate_invoke` | `true` | 单次 mousedown 周期内是否禁止重复调用 start_dragging |
+
+> 适用场景：Tauri 2.x 桌面应用，存在同时需要拖动窗口与点击交互的 UI 元素（如悬浮卡片标题栏、可折叠工具栏）。纯拖动元素（无 click 职责）不适用本规则；纯点击元素（无 drag 职责）不适用；浏览器 Web 应用、Electron 项目不适用（拖动机制不同）。

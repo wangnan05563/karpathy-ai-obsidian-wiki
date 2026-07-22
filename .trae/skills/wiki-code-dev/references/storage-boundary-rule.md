@@ -1,5 +1,7 @@
 # Storage Boundary Rule
 
+> 所有参数从 `config/coding-standards-config.md` 的 `storage_boundary` 节读取，禁止在规则文件中硬编码。示例中的项目特定值（如 `karpathy-wiki:conversations:*`）仅为说明用途，实际值应从配置读取。
+
 ## 触发关键词
 localStorage, IndexedDB, sessionStorage, origin, dbGet, dbPut, 浏览器存储
 

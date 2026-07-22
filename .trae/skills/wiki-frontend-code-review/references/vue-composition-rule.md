@@ -1,4 +1,8 @@
-﻿## 强制使用 script setup + TypeScript
+# Rule Catalog — Vue Composition
+
+Vue Composition API 审查规则：确保组件使用 script setup + TypeScript 规范、生命周期管理正确。所有参数从 `config/review-config.md` 读取，禁止在规则文件中硬编码。
+
+## 强制使用 script setup + TypeScript
 
 IsUrgent: True
 Category: Vue Composition

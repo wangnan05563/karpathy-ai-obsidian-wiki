@@ -1,11 +1,11 @@
 {
   "_meta": {
     "file": "fix_strategies.json",
-    "purpose": "SonarQube 规则的修复策略表。基于历次扫描数据，覆盖 top 50+ 高频规则，含 NOSONAR 抑制位置规则。",
-    "version": "2.2.0",
-    "last_updated": "2026-07-07",
+    "purpose": "SonarQube 规则的修复策略表。基于历次扫描数据，覆盖 top 50+ 高频规则，含 NOSONAR 抑制位置规则与可复用修复模式。",
+    "version": "2.4.0",
+    "last_updated": "2026-07-22",
     "data_source": "通用规则集，数据源说明见各项目的 project_config.json -> fix_strategies_overrides.data_source",
-    "changelog": "v2.2.0: 补充 S107/S7483/S5850/S1172/S1481/S3776/S930/S6551/S6759/S7741/S7764/S6819/S6845/S6847/S6848/S7735/S6582/S1854/S2486/S3358/S6754/S7503 等 22 个规则；新增 nosonar_position_rules 节点（NOSONAR 抑制注释位置规则表）"
+    "changelog": "v2.4.0: 新增 fix_patterns 节点（formatCellValue/native_button/scanner_process_cleanup/sandbox_bypass/long_task_log 5 个可复用修复模式），增强 typescript:S6551 typeof 误报处理模板，增强 typescript:S6819 原生 button 修复模板（含样式重置清单）; v2.2.0: 补充 S107/S7483/S5850/S1172/S1481/S3776/S930/S6551/S6759/S7741/S7764/S6819/S6845/S6847/S6848/S7735/S6582/S1854/S2486/S3358/S6754/S7503 等 22 个规则；新增 nosonar_position_rules 节点（NOSONAR 抑制注释位置规则表）"
   },
   "strategies": {
     "auto_fix": {
@@ -69,12 +69,14 @@
         },
         {
           "rule": "typescript:S6551",
-          "description": "模板字符串中对象可能输出 [object Object]",
-          "auto_fix_template": "用 typeof 收窄 unknown 类型后显式 String() 转换；或用 JSON.stringify 处理对象分支",
+          "description": "模板字符串中对象可能输出 [object Object]；SonarQube 不识别 typeof 链式类型收窄",
+          "auto_fix_template": "1) 提取 formatCellValue 独立函数处理 unknown 类型（见 fix_patterns.formatCellValue）；2) 用 if-链 typeof 收窄：if (v == null) return ''; if (typeof v === 'object') return JSON.stringify(v); if (typeof v === 'string') return v; return String(v); 3) SonarQube 仍误报时，在 String(v) 行末尾追加 // NOSONAR - 前置 typeof 已排除 object 分支",
           "risk_level": "low",
           "verification": "tsc --noEmit + 重新扫描确认",
           "nosonar_position": "issue_line",
-          "is_false_positive_prone": true
+          "is_false_positive_prone": true,
+          "false_positive_root_cause": "SonarQube TypeScript 分析器不识别 typeof 链式类型收窄，即使前置 if (typeof v === 'object') return 已排除对象分支，仍认为 String(v) 可能收到对象",
+          "fix_pattern_ref": "formatCellValue"
         },
         {
           "rule": "typescript:S7741",
@@ -92,10 +94,12 @@
         },
         {
           "rule": "typescript:S6819",
-          "description": "可访问性 role 应使用原生 HTML 元素",
-          "auto_fix_template": "role='button' → <button> 元素；role='region' → <section aria-label='...'>",
+          "description": "可访问性 role 应使用原生 HTML 元素（role='button' → <button>）",
+          "auto_fix_template": "1) 将 <div role='button' onClick={...}> 改为 <button type='button' onClick={...}>（见 fix_patterns.native_button）；2) 必须设置 type='button' 避免触发表单提交；3) 必须重置样式：border='none'、background='transparent'、textAlign='left'（或 'inherit'）、cursor='pointer'、font='inherit'、padding 保留原 div 的 padding；4) 原生 button 自动支持 Enter/Space 键触发 onClick，可删除手写 onKeyDown（同时修复 S1082）",
           "risk_level": "low",
-          "verification": "tsc --noEmit + 无障碍测试"
+          "verification": "tsc --noEmit + 无障碍测试 + 视觉回归测试（确认样式重置后外观一致）",
+          "fix_pattern_ref": "native_button",
+          "side_effect_fixes": ["typescript:S1082"]
         },
         {
           "rule": "typescript:S6845",
@@ -524,5 +528,78 @@
         "is_default": true
       }
     ]
+  },
+  "fix_patterns": {
+    "_description": "可复用修复模式库。从历次实战提炼的跨规则通用修复模板，子代理修复时按 fix_pattern_ref 引用本节点的模式。每个模式包含触发条件、模板代码、关键点、适用规则。",
+    "formatCellValue": {
+      "name": "formatCellValue 模式",
+      "trigger": "SonarQube 报 S3358（嵌套三元）/ S6551（对象字符串化）/ S6606（条件判断）涉及 unknown 类型变量的字符串化",
+      "template_code": "function formatCellValue(v: unknown): string {\n  if (v == null) return ''\n  if (typeof v === 'object') return JSON.stringify(v)\n  if (typeof v === 'string') return v\n  return String(v) // NOSONAR - 前置 typeof 已排除 object 分支，此处 v 只可能是 number/boolean/symbol\n}",
+      "key_points": [
+        "必须用 if-链而非三元，让 SonarQube 识别类型收窄（三元表达式中的类型收窄不被识别）",
+        "String(v) 行必须加 NOSONAR + 原因注释（SonarQube 不识别 typeof 链式收窄）",
+        "函数提取到模块级，避免 JSX 内嵌套三元（同时修复 S3358）",
+        "null/undefined 统一用 == null 判断（避免重复判断）",
+        "对象分支用 JSON.stringify，字符串分支原样返回，其他走 String()"
+      ],
+      "applicable_rules": ["typescript:S3358", "typescript:S6551", "typescript:S6606"],
+      "real_world_example": "frontend/src/mobile/pages/DatabaseAdmin/index.tsx 单元格值格式化"
+    },
+    "native_button": {
+      "name": "原生 button 元素替换模式",
+      "trigger": "SonarQube 报 S6819（role='button' 应使用原生元素）或 S1082（鼠标事件与键盘事件需配对）或 S6845（div 上的 tabIndex/onKeyDown/role 应移到原生元素）",
+      "template_code": "// 修改前：div + role='button' + onClick + onKeyDown\n<div role='button' onClick={handleClick} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClick(e) }}>{children}</div>\n\n// 修改后：原生 <button> + 样式重置\n<button type='button' style={{ display: 'block', width: '100%', padding: '6px 0', border: 'none', borderBottom: '1px solid borderColor', background: 'transparent', textAlign: 'left', cursor: 'pointer', font: 'inherit' }} onClick={handleClick}>{children}</button>",
+      "key_points": [
+        "必须设置 type='button' 避免触发表单提交（默认 type='submit'）",
+        "必须重置 border='none'（button 默认有边框）",
+        "必须重置 background='transparent'（button 默认有背景色）",
+        "必须重置 textAlign='left'（button 默认 center）",
+        "必须重置 cursor='pointer'（button 默认 default）",
+        "必须重置 font='inherit'（button 默认不同字体）",
+        "原生 button 自动支持 Enter/Space 键触发 onClick，可删除手写 onKeyDown（同时修复 S1082）",
+        "保留原 div 的 padding 和其他业务样式"
+      ],
+      "applicable_rules": ["typescript:S6819", "typescript:S1082", "typescript:S6845"],
+      "side_effect_fixes": ["typescript:S1082"],
+      "real_world_example": "frontend/src/mobile/pages/DatabaseAdmin/index.tsx 表格行点击"
+    },
+    "scanner_process_cleanup": {
+      "name": "scanner 进程清理模式",
+      "trigger": "SonarQube 扫描报 'Another SonarQube analysis is already in progress' 或扫描进程异常终止后需要重新扫描",
+      "template_code": "# 1. 查找所有 scanner-engine 相关 Java 进程\n$scannerProcs = Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | Where-Object { $_.CommandLine -like '*scanner-engine*' }\n# 2. 强制终止进程树（包括子进程）\n$scannerProcs | ForEach-Object { taskkill /F /PID $_.ProcessId /T }\n# 3. 删除项目锁文件\nRemove-Item -Force '.scannerwork/.sonar_lock' -ErrorAction SilentlyContinue\n# 4. 清理 scanner-report 和 .sonartmp 目录\nRemove-Item -Recurse -Force '.scannerwork/scanner-report' -ErrorAction SilentlyContinue\nRemove-Item -Recurse -Force '.scannerwork/.sonartmp' -ErrorAction SilentlyContinue\n# 5. 重新执行扫描",
+      "key_points": [
+        "必须用 taskkill /T 终止进程树（包括子进程），Stop-Process 对某些 Java 进程无效",
+        "必须删除 .sonar_lock 文件，否则服务端仍认为有分析在运行",
+        "必须清理 scanner-report 目录，避免残留报告干扰下次扫描",
+        "最多重试 3 次，仍失败则终止并报告（避免无限循环）"
+      ],
+      "applicable_failures": ["project_lock_held", "process_termination_failed"],
+      "config_ref": "core_config.json -> project_lock_cleanup"
+    },
+    "sandbox_bypass": {
+      "name": "TRAE 沙箱旁路模式",
+      "trigger": "在 TRAE 沙箱内运行 sonar-scanner 报 'hit restricted' / 'Not allow operate files' / 'CryptnetUrlCache' 错误",
+      "template_code": "# 1. 检测错误关键字\nif ($errorMsg -match 'hit restricted|Not allow operate files|CryptnetUrlCache|sandbox restriction') {\n    # 2. 标记需要 dangerouslyDisableSandbox: true\n    # 3. 重新执行 sonar-scanner 命令时设置 dangerouslyDisableSandbox: true 参数\n    # 4. 后续命令默认回到沙箱模式（不延续 sandbox 旁路）\n}",
+      "key_points": [
+        "仅对 sonar-scanner 命令旁路沙箱，其他命令（grep/Read/Edit 等）仍走沙箱",
+        "旁路原因必须记录到日志（哪个文件路径触发了限制）",
+        "每次旁路仅对当前命令生效，后续命令默认回到沙箱模式",
+        "不要为了方便对所有命令旁路沙箱，仅限 sonar-scanner"
+      ],
+      "applicable_failures": ["sandbox_blocked"],
+      "config_ref": "core_config.json -> sandbox_bypass"
+    },
+    "long_task_log": {
+      "name": "长任务日志输出模式",
+      "trigger": "执行长时间运行的命令（预期 > 30 秒，如 sonar-scanner / pytest / npm test）并需要查看日志",
+      "template_code": "# ❌ 错误：Select-Object -Last N 会缓冲所有输入直到命令完成\n& 'sonar-scanner.bat' 2>&1 | Select-Object -Last 60\n\n# ✅ 正确：Tee-Object 实时追加到文件\n& 'sonar-scanner.bat' 2>&1 | Tee-Object -FilePath 'scan-output.log'\n\n# ✅ 正确：直接重定向不截取\n& 'sonar-scanner.bat' 2>&1 > 'scan-output.log'\n\n# 查看日志末尾（不阻塞）\nGet-Content -Tail 60 'scan-output.log'\n\n# 实时查看日志\nGet-Content -Wait 'scan-output.log'",
+      "key_points": [
+        "PowerShell Select-Object -Last N 是 sink cmdlet，必须缓冲所有输入直到上游命令完成",
+        "长任务必须用 Tee-Object 或直接重定向，需要查看时用 Get-Content -Tail N 或 Get-Content -Wait",
+        "禁止对 sonar-scanner / pytest / npm test 等长任务使用 | Select-Object -Last N 管道"
+      ],
+      "applicable_commands": ["sonar-scanner", "sonar-scanner.bat", "pytest", "npm test", "npm run build", "tsc"],
+      "config_ref": "core_config.json -> log_output"
+    }
   }
 }

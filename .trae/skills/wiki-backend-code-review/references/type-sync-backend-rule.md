@@ -17,7 +17,7 @@
 - Description: 全栈 TypeScript 项目中，后端 `types.ts` 定义 API 请求/响应的契约，前端 `types.ts` 引用相同类型进行编译期校验。若后端新增 interface 或修改字段而前端未同步，前端编译不会报错（因类型独立解析），但运行时调用 API 会因字段不匹配而出现 `undefined` 字段、类型断言失败、表单提交缺字段等问题，且难以定位。评审时必须对比两侧 `export interface` 列表与字段定义，差异即视为不通过。
 - Judgment logic:
   1. 用 `Read` 读取 `backend_types_path`（默认 `src/types.ts`）的 `export interface` 列表与字段定义。
-  2. 用 `Read` 读取 `frontend_types_path`（默认 `../../packages/web/src/types.ts`）的 `export interface` 列表与字段定义。
+  2. 用 `Read` 读取 `frontend_types_path`（默认 `../../frontend/src/types.ts`）的 `export interface` 列表与字段定义。
   3. 若 `sync_interfaces` 配置非空，仅校验该列表中的接口；否则校验全部 `export interface`。
   4. 对比字段名与类型签名——后端新增 interface 前端缺失、字段名不一致、可选性不一致（`?` 缺失）、类型不一致（`string` vs `string | null`）均视为缺陷。
   5. 建议但非强制：前端可仅同步"请求/响应契约"接口，内部辅助类型可不同步——若 `sync_interfaces` 已显式列出需同步接口则按列表，否则全部校验。
@@ -28,7 +28,7 @@
 - Example:
   - Bad:
     ```typescript
-    // services/api/src/types.ts —— 后端新增 ConversationMeta
+    // api/src/types.ts —— 后端新增 ConversationMeta
     export interface ConversationMeta {
       id: string;
       title: string;
@@ -36,7 +36,7 @@
       tokenCount: number; // 新增字段
     }
 
-    // packages/web/src/types.ts —— 前端未同步，tokenCount 缺失
+    // frontend/src/types.ts —— 前端未同步，tokenCount 缺失
     export interface ConversationMeta {
       id: string;
       title: string;
@@ -46,7 +46,7 @@
     ```
   - Good:
     ```typescript
-    // services/api/src/types.ts —— 后端新增字段
+    // api/src/types.ts —— 后端新增字段
     export interface ConversationMeta {
       id: string;
       title: string;
@@ -54,7 +54,7 @@
       tokenCount: number;
     }
 
-    // packages/web/src/types.ts —— 前端同步新增字段
+    // frontend/src/types.ts —— 前端同步新增字段
     export interface ConversationMeta {
       id: string;
       title: string;

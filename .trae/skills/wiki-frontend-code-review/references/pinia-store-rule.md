@@ -1,4 +1,8 @@
-﻿## 使用 setup 语法定义 store
+# Rule Catalog — Pinia Store
+
+Pinia Store 审查规则：确保 store 定义规范、状态管理模式一致。所有参数从 `config/review-config.md` 读取，禁止在规则文件中硬编码。
+
+## 使用 setup 语法定义 store
 
 IsUrgent: True
 Category: Pinia Store

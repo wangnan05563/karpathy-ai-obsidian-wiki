@@ -1,4 +1,8 @@
-﻿## vis-network 大图分级降级
+# Rule Catalog — Performance
+
+性能审查规则：确保大图分级降级、SSE 连接管理、资源懒加载等性能关键点合规。所有参数从 `config/review-config.md` 读取，禁止在规则文件中硬编码。
+
+## vis-network 大图分级降级
 
 IsUrgent: True
 Category: Performance
@@ -87,3 +91,36 @@ Category: Performance
 确认数据项有 `id` 字段（或其它稳定唯一键），绑定到 `:key`；缺失 ID 时在后端补齐或前端生成稳定 key。
 
 > **示例代码**: 参见 [examples/performance-rule-examples.md](examples/performance-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。
+
+## SSE 连接管理必须清理，done 事件必须正确结束流
+
+IsUrgent: True
+Category: Performance
+
+### Description
+
+SSE（Server-Sent Events）连接管理须满足以下要求：
+
+1. **统一封装**：使用 `consumeSSEStream` 统一消费函数，禁止手动构造 `EventSource` 未清理。
+2. **连接清理**：SSE 连接必须在 `onBeforeUnmount` 中关闭，否则连接泄漏导致内存泄漏。
+3. **done 事件处理**：`done` 事件必须正确结束流并关闭连接，未处理 `done` 事件会导致连接泄漏。
+4. **错误降级**：SSE 连接失败必须有降级提示（ElMessage），网络中断有重连逻辑（参见 [async-reliability-rule.md](async-reliability-rule.md) AR-2）。
+
+### Suggested Fix
+
+```typescript
+// ❌ 手动构造 EventSource 未清理
+const es = new EventSource('/api/stream');
+es.onmessage = (event) => { /* 处理消息 */ };
+// 未在 onBeforeUnmount 中 es.close()
+
+// ✅ 统一封装 + 生命周期清理
+const { close } = consumeSSEStream('/api/stream', {
+  onMessage(event) { /* 处理消息 */ },
+  onDone() { /* 流结束 */ },
+  onError(err) { ElMessage.error('流式响应中断'); },
+});
+onBeforeUnmount(() => { close(); });
+```
+
+> **示例代码**: 参见 [examples/performance-rule-examples.md](examples/performance-rule-examples.md)。

@@ -211,7 +211,7 @@ function isUtf8NoBom(bytes: Uint8Array): boolean {
   catch { return false }
 }
 
-scan('packages/web')
+scan('frontend')
 if (failed.length) {
   console.error('Non-UTF-8 files detected:\n' + failed.join('\n'))
   process.exit(1)
