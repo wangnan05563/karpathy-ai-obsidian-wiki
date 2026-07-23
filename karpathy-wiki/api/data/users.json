@@ -1,0 +1,37 @@
+{
+  "users": [
+    {
+      "id": "6b26d8c2-ad3a-4c85-b646-d5d2a0271995",
+      "username": "admin",
+      "passwordHash": "0ET3pWRTqmzeUoK+KBq+VWcYP9jp9QRsSvohaIMV4D6iwXdRRXQEHbIHL5SEsiqnBm/7/JdTDmQrSVBtj4vo4g==",
+      "salt": "4qJ64mjsBkJgvUiSmampLw==",
+      "role": "admin",
+      "enabled": true,
+      "createdAt": "2026-07-22T14:36:08.935Z",
+      "updatedAt": "2026-07-22T14:36:08.935Z",
+      "lastLoginAt": "2026-07-23T04:20:59.594Z"
+    },
+    {
+      "id": "22c928ed-69e4-49a4-af4b-03db826137a4",
+      "username": "user",
+      "passwordHash": "QEeBPF58EbGcrIpIMjziuPWPJbIPJnvWpKmx34GSnOlp3NUm/Q29AOteKJ/FsodRBCFstFXAk0Y4C1EDsRqjAQ==",
+      "salt": "+D9huUfP+Arlp+17LDIC6Q==",
+      "role": "user",
+      "enabled": true,
+      "createdAt": "2026-07-22T14:36:08.935Z",
+      "updatedAt": "2026-07-22T14:36:08.935Z",
+      "lastLoginAt": "2026-07-23T03:48:25.419Z"
+    },
+    {
+      "id": "1fcf236b-a28c-414c-8f60-1a6f63683659",
+      "username": "guest",
+      "passwordHash": "yyFJ6eKz7CDq7NCglWF8mE/D/ORlaorZZJJcjtYCCIjh/zG7dfEdMavUBGzYyjbNHNoLQI7Bfwjng8EOKaI/DQ==",
+      "salt": "I2NAWmUDfrOh264mF5hPXg==",
+      "role": "guest",
+      "enabled": true,
+      "createdAt": "2026-07-22T14:36:08.935Z",
+      "updatedAt": "2026-07-22T14:36:08.935Z",
+      "lastLoginAt": "2026-07-23T03:47:56.444Z"
+    }
+  ]
+}
