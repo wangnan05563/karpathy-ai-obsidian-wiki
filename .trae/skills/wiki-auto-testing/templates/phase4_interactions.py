@@ -109,6 +109,7 @@ def dismiss_dialog(page):
 
 def test_button_discovery(page, cfg, results):
     """Auto-discover and test all clickable buttons."""
+    import time as _time
     bd = cfg.get("button_discovery", {})
     if not bd.get("enabled", False):
         results.log("ButtonDiscovery-Skipped", True, "Disabled in config")
@@ -124,22 +125,37 @@ def test_button_discovery(page, cfg, results):
     continue_on_fail = bd.get("continue_on_failure", True)
     # 按钮发现的点击超时从 config.timeout.button_discovery_click_timeout_ms 读取
     click_timeout = cfg.get("timeout", {}).get("button_discovery_click_timeout_ms")
+    # 整体超时保护：避免某个按钮触发 SSE/长连接导致整个发现过程无限卡住
+    total_timeout_ms = bd.get("total_timeout_ms", 120000)
+    start_time = _time.monotonic()
 
     total_found = total_clicked = total_skipped = total_failed = 0
 
     for p in cfg["navigation"]["pages"]:
+        # 整体超时检查
+        elapsed_ms = int((_time.monotonic() - start_time) * 1000)
+        if elapsed_ms > total_timeout_ms:
+            results.log("ButtonDiscovery-Timeout", True,
+                        f"Total timeout {total_timeout_ms}ms reached, stopped at page '{p['label']}'")
+            break
         click_nav_tab(page, tab_sel, p["label"], nav_wait)
         for sel in selectors:
             elements = page.locator(sel)
             for i in range(elements.count()):
+                # 每个按钮前也检查超时
+                elapsed_ms = int((_time.monotonic() - start_time) * 1000)
+                if elapsed_ms > total_timeout_ms:
+                    break
                 elem = elements.nth(i)
                 total_found += 1
 
-                # Exclusion check
+                # Exclusion check：用 closest 而非 matches，检查祖先链
+                # 为什么：点击 .el-upload 内部的 .upload-icon 子元素时，事件冒泡仍会触发文件选择对话框
+                # matches 只检查元素自身，会漏掉所有需排除元素的子节点
                 excluded = False
                 for ex in exclude_sels:
                     try:
-                        matched = elem.evaluate('e => e.matches("' + ex + '")')
+                        matched = elem.evaluate('e => e.closest("' + ex + '") !== null')
                     except Exception:
                         matched = False
                     if matched:
@@ -149,9 +165,9 @@ def test_button_discovery(page, cfg, results):
                     total_skipped += 1
                     continue
 
-                # Destructive check
+                # Destructive check：inner_text 加短超时避免不可见元素阻塞
                 try:
-                    text = elem.inner_text().strip()[:30]
+                    text = elem.inner_text(timeout=2000).strip()[:30]
                 except Exception:
                     text = ""
                 if is_destructive(text, destructive_texts):

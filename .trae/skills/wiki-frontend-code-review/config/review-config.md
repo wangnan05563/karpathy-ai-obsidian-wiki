@@ -644,3 +644,21 @@ SSE 流式接口须按下列事件类型分段推送，前端按类型分发到�
 | `tauri_drag_click_frontend.prevent_duplicate_invoke` | `true` | 单次 mousedown 周期内是否禁止重复调用 start_dragging |
 
 > 适用场景：Tauri 2.x 桌面应用，存在同时需要拖动窗口与点击交互的 UI 元素（如悬浮卡片标题栏、可折叠工具栏）。纯拖动元素（无 click 职责）不适用本规则；纯点击元素（无 drag 职责）不适用；浏览器 Web 应用、Electron 项目不适用（拖动机制不同）。
+
+## 测试选择器优先级审查参数（FR-044）
+
+> 测试选择器优先级规则（见 [references/test-selector-priority-rule.md](../references/test-selector-priority-rule.md)）所依赖的参数集中在本节。
+> 规则文件不硬编码选择器或等待策略，所有参数从本节读取，便于适配不同测试框架。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `test_selector_priority.enabled` | `true` | 是否启用测试选择器优先级审查 |
+| `test_selector_priority.severity` | `suggestion` | 违规严重级别（suggestion = 非阻断性建议） |
+| `test_selector_priority.selector_priority_order` | `#id,[data-testid],[aria-label],.class,[placeholder],:has-text()` | 选择器优先级顺序（从高到低） |
+| `test_selector_priority.forbidden_wait_strategy` | `networkidle` | 禁用的等待策略（有持续加载资源时） |
+| `test_selector_priority.recommended_wait_strategy` | `domcontentloaded` | 推荐的等待策略 |
+| `test_selector_priority.persistent_resource_patterns` | `background-image,event-stream,video,polling` | 持续加载资源模式（触发禁用 networkidle） |
+| `test_selector_priority.required_stable_attributes` | `id,data-testid` | 关键交互元素必须提供的稳定属性 |
+
+- 适配 Cypress：`forbidden_wait_strategy` 改为 `networkIdle`，`recommended_wait_strategy` 改为 `domContentLoaded`。
+- 适配纯静态页面（无背景图/SSE）：`forbidden_wait_strategy` 可设为空字符串跳过检查。

@@ -75,6 +75,8 @@ Karpathy-Wiki 项目的通用编码规范与开发准则。规则与具体业务
 | 涉及 Tauri 构建脚本/SPA 构建/产物验证/递归构建死循环 | [references/tauri-build-script-rule.md](references/tauri-build-script-rule.md) |
 | 涉及 Tauri 自定义标题栏/drag-region 吞 click/拖动与点击冲突 | [references/tauri-drag-click-conflict-rule.md](references/tauri-drag-click-conflict-rule.md) |
 | 涉及 PowerShell 调用 cargo/rustc/go build 的 stderr 进度中断 | [references/powershell-stderr-rule.md](references/powershell-stderr-rule.md) |
+| 涉及认证中间件/publicPaths/全局 preHandler | [references/auth-endpoint-classification-rule.md](references/auth-endpoint-classification-rule.md) |
+| 涉及 Windows 文件删除/目录操作/fs.rm 静默失败 | [references/windows-file-operation-rule.md](references/windows-file-operation-rule.md) |
 | 需要参考历史复盘/工作流模板 | [references/development-workflow.md](references/development-workflow.md) |
 | 不确定加载哪些 | 全部加载（约 50KB） |
 
@@ -136,6 +138,8 @@ Karpathy-Wiki 项目的通用编码规范与开发准则。规则与具体业务
 51. **Tauri 构建脚本 SPA 构建步骤**：`tauri-build-debug.ps1` 与 `tauri-build-release.ps1` 必须包含「清理旧产物→构建 SPA→产物验证→构建 Tauri」四步；SPA 构建用 `pnpm --filter <pkg> build`（禁止 `pnpm run build`，递归构建风险）；验证含 mtime 对比 + JS chunk 关键字符串搜索（CODING-051）
 52. **Tauri drag-region 与 click 冲突**：`data-tauri-drag-region` 会吞掉 click 事件，需同时支持拖动与点击的元素必须用 JS 区分：`mousedown` 记录位置，`mousemove` 超 5px 触发 `invoke('start_dragging')`，`mouseup` 未超阈值视为 click；配合 Rust 端 `start_dragging` 命令（需 ACL 三层声明）（CODING-052）
 53. **PowerShell 调用 cargo 的 stderr 处理**：调用 `cargo`/`rustc`/`go build` 等输出 stderr 进度的工具必须用 `Start-Process -NoNewWindow -Wait -PassThru` 替代直接调用，避免 `$ErrorActionPreference=Stop` 拦截 stderr 进度；用 `$process.ExitCode` 判断真实错误（0=成功），stderr 有输出不代表失败（CODING-053）
+54. **认证端点分类守卫**：需鉴权端点（如 `/api/auth/me`）禁止放入 `auth_endpoint_classification.public_paths_whitelist`（默认仅 `login`/`health`）；publicPaths 中的路径会让全局 `auth_endpoint_classification.middleware_hook`（默认 `preHandler`）跳过 token 解析，导致 `currentUser` 永远为 null，authGuard 必然返回 401——这是反直觉陷阱，看似“公开”实际导致认证失效（CODING-054）
+55. **Windows 文件操作验证**：`windows_file_operation.platform`（默认 `win32`）环境下服务进程的目录删除必须用 `windows_file_operation.delete_command`（默认 `rd /s /q`）+ `windows_file_operation.verify_after_delete`（默认 true）existsSync 验证；`windows_file_operation.fallback_method`（默认 `fs.rmSync`）作为回退，`windows_file_operation.retry_count`（默认 1）次重试后仍失败必须抛错——Windows 文件句柄占用会导致 fs.rm 静默失败（不抛异常但目录仍存在）（CODING-055）
 
 ## 开发流程
 
@@ -435,11 +439,11 @@ wiki-code-dev/
 
 ## 阶段交接声明
 
-- 当前阶段：v2.1.0 Tauri 2.x 桌面应用集成复盘与编码规范提炼 ✅ 已完成
-- 下一阶段：v2.2.0 基于后续开发任务持续迭代
+- 当前阶段：v2.2.0 Skill 导入模块与认证文件操作复盘与编码规范提炼 ✅ 已完成
+- 下一阶段：v2.3.0 基于后续开发任务持续迭代
 - 下一阶段智能体：wiki-code-dev 或 wiki 代码审查相关智能体
 - 下一阶段技能：wiki-code-dev / wiki-backend-code-review / wiki-frontend-code-review / wiki-auto-testing
-- 交接上下文：v2.1.0 基于 Tauri 2.x 桌面应用集成历史问题复盘，提炼 CODING-047~053 七条规则，覆盖 ACL 三层声明、外部 URL capability、多 webview 状态隔离、透明窗口 CSS 全覆盖、构建脚本 SPA 步骤、drag-click 冲突、PowerShell stderr 处理。参数全部从 config/coding-standards-config.md 的 tauri_acl / tauri_external_url / tauri_webview_isolation / tauri_transparent_window / tauri_build_script / tauri_drag_click_conflict / powershell_stderr 段读取。复盘系统覆盖 Tauri 桌面集成的四维度（成功步骤/不确定性/可抽象流程/适用场景）。
+- 交接上下文：v2.2.0 基于 Skill 导入模块开发历史问题复盘，提炼 CODING-054~055 两条规则，覆盖认证端点分类守卫（publicPaths 陷阱）和 Windows 文件操作验证（fs.rm 静默失败兜底）。参数全部从 config/coding-standards-config.md 的 auth_endpoint_classification / windows_file_operation 段读取。复盘系统覆盖认证中间件与文件操作的四维度（成功步骤/不确定性/可抽象流程/适用场景）。
 
 ## 版本历史
 

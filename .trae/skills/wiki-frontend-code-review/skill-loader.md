@@ -54,6 +54,7 @@ eferences/examples/{category}-examples.md when:
 | FR41 | Tauri Invoke | [references/tauri-invoke-rule.md](references/tauri-invoke-rule.md) | — | *.vue, *.ts (含 invoke('xxx') / @tauri-apps/api / tauri.conf.json / build.rs / capabilities / lib.rs) | 3 | 3 |
 | FR42 | Tauri Transparent CSS | [references/tauri-transparent-css-rule.md](references/tauri-transparent-css-rule.md) | — | *.vue, *.css (含 transparent / floating-active / :global(html.floating-active *) / backdrop-filter / glass-card) | 3 | 4 |
 | FR43 | Tauri Drag Click | [references/tauri-drag-click-rule.md](references/tauri-drag-click-rule.md) | — | *.vue, *.ts (含 data-tauri-drag-region / start_dragging / mousedown / mousemove / mouseup) | 3 | 4 |
+| FR44 | Test Selector Priority | [references/test-selector-priority-rule.md](references/test-selector-priority-rule.md) | — | *.spec.ts, *.test.ts, test_*.py, *.vue, *.tsx (含 placeholder / :has-text / networkidle / wait_until / page.locator / [data-testid / waitForSelector) | 1 | 4 |
 
 ## 3. Quick Routing Table
 
@@ -85,6 +86,7 @@ eferences/examples/{category}-examples.md when:
 | *.vue / *.ts + invoke('xxx') / @tauri-apps/api / tauri.conf.json / src-tauri/ | tauri-invoke-rule (FR41) | tauri-drag-click-rule (if 含 start_dragging / data-tauri-drag-region) |
 | *.vue / *.css + transparent: true / floating-active / :global(html.floating-active *) / glass-card | tauri-transparent-css-rule (FR42) | theming (if 毛玻璃), scroll-container (if overflow-y) |
 | *.vue / *.ts + data-tauri-drag-region / start_dragging / @mousedown + @click 同元素 | tauri-drag-click-rule (FR43) | tauri-invoke-rule (if invoke 调用), vue-composition (if <script setup>) |
+| *.spec.ts / *.test.ts / test_*.py + placeholder / :has-text / networkidle / wait_until / page.locator / [data-testid | test-selector-priority-rule (FR44) | test-case-sync-frontend (if DOM 变更同步), e2e-precheck-frontend (if playwright.config.ts) |
 
 ## 4. Keyword Scanning Guide
 
@@ -125,6 +127,7 @@ ormalize |
 | tauri-invoke-rule | invoke(, @tauri-apps/api, tauri.conf.json, src-tauri, build.rs, capabilities, default.json, lib.rs, generate_handler!, AppManifest, Plugin not found, not allowed, command not found |
 | tauri-transparent-css-rule | transparent, floating-active, :global(html.floating-active *), backdrop-filter, glass-card, opacity: 0, visibility: hidden, background-color: transparent |
 | tauri-drag-click-rule | data-tauri-drag-region, start_dragging, mousedown, mousemove, mouseup, dragStarted, isDragging, move_threshold |
+| test-selector-priority-rule | placeholder=, :has-text(, has_text=, networkidle, wait_until, waitUntil, page.locator, cy.get, waitForSelector, domcontentloaded, background-image: url, EventSource, [data-testid, page.goto |
 
 ## 5. Token Budget
 

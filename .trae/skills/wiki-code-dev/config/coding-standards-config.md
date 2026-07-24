@@ -919,3 +919,42 @@
 - 适配不同工具链：`stderr_progress_tools` 追加新工具（如 cmake / make / ninja）
 - 适配需要捕获输出的场景：`Start-Process -RedirectStandardOutput` + `-RedirectStandardError` 分别重定向
 - 适配 CI 环境：显式设置 $ErrorActionPreference，避免依赖环境默认值
+
+## 认证端点分类守卫参数（auth_endpoint_classification）
+
+> 认证端点分类规则（见 [references/auth-endpoint-classification-rule.md](../references/auth-endpoint-classification-rule.md)）所依赖的参数集中在本节。
+> 规则文件不硬编码端点路径或中间件名称，所有参数从本节读取，便于适配不同框架。
+> 复盘来源：携带有效 token 调用 `/api/auth/me` 返回 401，根因是 `/api/auth/me` 误入 publicPaths 白名单导致全局 preHandler 跳过 token 解析。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `auth_endpoint_classification.enabled` | `true` | 是否启用认证端点分类守卫 |
+| `auth_endpoint_classification.severity` | `error` | 违规严重级别（error = 必须修复） |
+| `auth_endpoint_classification.public_paths_whitelist` | `/api/auth/login,/health` | 完全公开端点列表（逗号分隔，仅放无需鉴权的端点） |
+| `auth_endpoint_classification.auth_required_pattern` | `/api/auth/me,/api/auth/logout` | 需鉴权端点示例列表（用于识别"看似公开实则需鉴权"的端点） |
+| `auth_endpoint_classification.middleware_hook` | `preHandler` | 认证中间件 hook 名称（Fastify 用 preHandler，Express 用 use） |
+| `auth_endpoint_classification.skip_mechanism` | `isPublicPath` | 跳过 token 解析的机制名称（白名单匹配函数名） |
+
+- 适配 Express：`middleware_hook` 改为 `use`，`skip_mechanism` 改为 `path match`。
+- 适配无认证应用：`enabled` 设为 `false`。
+
+## Windows 文件操作守卫参数（windows_file_operation）
+
+> Windows 文件操作规则（见 [references/windows-file-operation-rule.md](../references/windows-file-operation-rule.md)）所依赖的参数集中在本节。
+> 规则文件不硬编码命令或平台，所有参数从本节读取，便于跨平台适配。
+> 复盘来源：API 服务进程调用 `fs.rm` 删除目录，调用完成不抛异常但目录仍存在，根因是 Windows 文件句柄占用导致 fs.rm 静默失败。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `windows_file_operation.enabled` | `true` | 是否启用 Windows 文件操作守卫 |
+| `windows_file_operation.severity` | `error` | 违规严重级别 |
+| `windows_file_operation.platform` | `win32` | 触发原生命令的平台（process.platform 值） |
+| `windows_file_operation.delete_command` | `rd /s /q` | Windows 原生删除命令 |
+| `windows_file_operation.delete_command_flags` | `/s /q` | 递归 + 静默标志（/s 递归，/q 静默不确认） |
+| `windows_file_operation.fallback_method` | `fs.rmSync` | 原生命令失败时的回退方法 |
+| `windows_file_operation.verify_after_delete` | `true` | 删除后必须 existsSync 验证 |
+| `windows_file_operation.retry_count` | `1` | fallback 重试次数 |
+| `windows_file_operation.retry_delay_ms` | `100` | 重试间隔（毫秒） |
+
+- 适配 Linux/macOS：`platform` 改为 `linux`/`darwin`，`delete_command` 改为 `rm -rf`。
+- 适配容器环境：`enabled` 设为 `false`（容器内 fs.rm 通常可靠）。

@@ -926,3 +926,39 @@
 - 适配不同工具链：`start_process_required_commands` 按项目实际使用的外部工具扩展（如 Go 项目追加 `golangci-lint`；Python 项目追加 `pip` / `poetry`；Java 项目追加 `mvn` / `gradle`）。
 - 适配 Bash / Zsh 脚本：本规则仅适用于 PowerShell（`.ps1`），Bash 中 `2>&1` 是合法用法（语义不同），无需检查；将 `script_glob_pattern` 设为 `**/*.ps1` 即可仅扫描 PowerShell 脚本。
 - 适配 PowerShell Core 7+：默认仍按 5.1 行为；建议统一用 `Start-Process` 模式以兼容 5.1 与 7+。
+
+## 认证端点分类审查参数（auth_endpoint_classification）
+
+> 认证端点分类规则（见 references/auth-endpoint-classification-rule.md）所依赖的参数集中在本节。
+> 规则文件不硬编码端点路径或中间件名称，所有参数从本节读取，便于适配不同框架。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `auth_endpoint_classification.enabled` | `true` | 是否启用认证端点分类审查 |
+| `auth_endpoint_classification.severity` | `critical` | 违规严重级别（critical = 安全漏洞） |
+| `auth_endpoint_classification.public_paths_whitelist` | `/api/auth/login,/health` | 完全公开端点列表（逗号分隔） |
+| `auth_endpoint_classification.auth_required_endpoints` | `/api/auth/me,/api/auth/logout` | 需鉴权端点示例列表（用于识别误放入 publicPaths 的端点） |
+| `auth_endpoint_classification.middleware_hook` | `preHandler` | 认证中间件 hook 名称 |
+| `auth_endpoint_classification.skip_mechanism` | `isPublicPath` | 跳过 token 解析的机制名称 |
+
+- 适配 Express：`middleware_hook` 改为 `use`，`skip_mechanism` 改为 `path match`。
+- 适配无认证应用：`enabled` 设为 `false`。
+
+## Windows 文件操作审查参数（windows_file_operation）
+
+> Windows 文件操作规则（见 references/windows-file-operation-rule.md）所依赖的参数集中在本节。
+> 规则文件不硬编码命令或平台，所有参数从本节读取，便于跨平台适配。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `windows_file_operation.enabled` | `true` | 是否启用 Windows 文件操作审查 |
+| `windows_file_operation.severity` | `critical` | 违规严重级别（critical = 数据丢失风险） |
+| `windows_file_operation.platform` | `win32` | 触发原生命令的平台 |
+| `windows_file_operation.delete_command` | `rd /s /q` | Windows 原生删除命令 |
+| `windows_file_operation.fallback_method` | `fs.rmSync` | 原生命令失败时的回退方法 |
+| `windows_file_operation.verify_after_delete` | `true` | 删除后必须 existsSync 验证 |
+| `windows_file_operation.retry_count` | `1` | fallback 重试次数 |
+| `windows_file_operation.retry_delay_ms` | `100` | 重试间隔（毫秒） |
+
+- 适配 Linux/macOS：`platform` 改为 `linux`/`darwin`，`delete_command` 改为 `rm -rf`。
+- 适配容器环境：`enabled` 设为 `false`（容器内 fs.rm 通常可靠）。

@@ -90,6 +90,9 @@ avigation | 导航选择器、页面列表及期望元素 |
 | invoke | Tauri invoke 权限三层验证（插件依赖/权限声明/URL 白名单） |
 | disk_space | 磁盘空间检查（debug/release 最小空间阈值） |
 | console_log | Tauri 日志采集（前缀过滤/错误关键词分类） |
+| playwright_wait_strategy | Playwright 等待策略（禁用 networkidle + domcontentloaded + 显式等待） |
+| test_selector_priority | 测试选择器优先级（ID > data-testid > aria-label > class > placeholder） |
+| vite_cache_cleanup | Vite 缓存清理（测试前清理缓存或硬刷新） |
 
 ## 测试流程（6 阶段）
 
@@ -166,6 +169,38 @@ avigation | 导航选择器、页面列表及期望元素 |
 2. 验证 `headless_crash_guard.required_launch_args` 中每个参数都被包含（默认 `--disable-gpu` / `--no-sandbox` / `--disable-dev-shm-usage` / `--disable-setuid-sandbox`）
 3. 缺失任一参数即判定失败
 4. 若浏览器启动崩溃，按 `max_retries` 重试，间隔 `retry_interval_ms`
+
+#### 子阶段 3.5：Playwright 等待策略验证（可选）
+> 基于历史问题复盘提炼，防止背景图/SSE/视频等持续加载资源阻塞 networkidle 等待策略。
+
+仅在 `playwright_wait_strategy.enabled: true` 时执行：
+
+1. 遍历 `playwright_wait_strategy.check_pages` 中配置的页面（为空则全局应用）
+2. 检查测试代码中是否使用了 `playwright_wait_strategy.forbidden_wait_strategy`（默认 `networkidle`）
+3. 若页面含 `playwright_wait_strategy.persistent_resource_patterns`（如 `background-image`、`event-stream`）匹配的资源，使用 `forbidden_wait_strategy` 即判定失败
+4. 验证测试代码改用 `playwright_wait_strategy.recommended_wait_strategy`（默认 `domcontentloaded`）+ 显式 `wait_for_selector(selector, state=playwright_wait_strategy.explicit_wait_state, timeout=playwright_wait_strategy.explicit_wait_timeout_ms)`
+5. 失败时输出建议：将 `wait_until="networkidle"` 改为 `wait_until="domcontentloaded"` + `page.wait_for_selector("#element-id", state="visible", timeout=10000)`
+
+#### 子阶段 3.6：测试选择器优先级验证（可选）
+> 基于历史问题复盘提炼，防止 placeholder/text 选择器误匹配导致测试不稳定。
+
+仅在 `test_selector_priority.enabled: true` 时执行：
+
+1. 扫描 `test_selector_priority.test_file_patterns` 匹配的测试文件
+2. 对每个选择器，检查是否属于 `test_selector_priority.discouraged_selectors`（如 `[placeholder*='用户']`、`button:has-text('登录')`）
+3. 验证关键交互元素是否提供 `test_selector_priority.required_stable_attributes`（如 `id`、`data-testid`）
+4. 选择器优先级低于 `test_selector_priority.selector_priority_order` 中 `.class` 级别的，给出建议（非阻断）
+5. 失败时输出建议：将 `input[placeholder*='用户']` 改为 `#login-username`，将 `button:has-text('登录')` 改为 `.login-btn`
+
+#### 子阶段 3.7：Vite 缓存清理验证（可选）
+> 基于历史问题复盘提炼，防止 Vite dev server 缓存旧版本 JS chunk 导致测试加载旧代码。
+
+仅在 `vite_cache_cleanup.enabled: true` 时执行：
+
+1. 检查 `vite_cache_cleanup.vite_cache_dirs` 中的缓存目录是否存在
+2. 若 `vite_cache_cleanup.auto_cleanup_before_test: true`，测试前执行 `vite_cache_cleanup.cleanup_command` 清理缓存
+3. 测试运行中监控控制台错误，匹配 `vite_cache_cleanup.stale_version_signals`（如 `Failed to fetch`、`module parse error`）
+4. 发现旧版本加载信号时，提示用户执行 `vite_cache_cleanup.hard_refresh_shortcut`（硬刷新）或运行清理命令
 
 ### 阶段 4：交互功能
 主题切换 → 表单输入 → 标签页切换 → **按钮自动发现**
@@ -307,6 +342,9 @@ esponsive_check | - | 响应式布局检查 |
 | test_sync_check | test_file_patterns, selector_patterns | 测试用例同步检查：扫描 git diff 选择器变更，Grep 测试文件引用，检测静默吞错与同 commit 提交 |
 | failure_classify | failure_rules, suggestions | 失败分类：按 rules 模式匹配错误消息，输出对应 suggestions 修复建议，auto_fix 时触发测试同步检查 |
 | service_manage | action (stop/start/status), required_ports | 服务管理：按 action 执行停止/启动/状态查询，处理端口冲突与日志重定向残留进程清理 |
+| playwright_wait_strategy_check | check_pages, forbidden_wait_strategy, recommended_wait_strategy, persistent_resource_patterns | Playwright 等待策略验证：检查测试代码是否使用禁用的等待策略，有持续加载资源时禁用 networkidle |
+| test_selector_priority_check | test_file_patterns, selector_priority_order, discouraged_selectors, required_stable_attributes | 测试选择器优先级验证：扫描测试文件选择器，优先使用 ID/data-testid，禁用 placeholder/text 匹配 |
+| vite_cache_cleanup_check | vite_cache_dirs, auto_cleanup_before_test, cleanup_command, stale_version_signals | Vite 缓存清理验证：检查缓存目录，可选自动清理，监控旧版本加载信号 |
 
 ## 持久化层测试（复盘提炼）
 
@@ -1063,6 +1101,7 @@ git diff 选择器变更 → Grep 测试文件引用 → 命中失效引用 → 
 | v1.7.0 | 2026-07-22 | 新增前置检查协议（Pre-flight Check Protocol）、测试用例同步协议（Test Case Sync Protocol）、失败分类协议（Failure Classification Protocol）、服务管理协议（Service Management Protocol）；追加 4 个动态引擎步骤类型（precheck / test_sync_check / failure_classify / service_manage）；追加 v2 导航栏改造测试复盘章节 |
 | v1.8.0 | 2026-07-13 | **目录结构验证测试复盘**：新增"目录结构验证测试（复盘提炼）"章节（含 .gitignore 规则验证、目录结构完整性、脚本引用完整性、类型检查回归 4 个子项）；新增"搜索结果交叉验证协议"章节；config.yaml 新增 structure_verification 和 search_cross_verification 配置块 |
 | v1.9.0 | 2026-07-22 | **文件夹上传批量编译 E2E 测试复盘**：新增"文件夹上传批量编译测试复盘"章节（含六阶段测试流程、4 个新配置块说明、阶段间 DAG 依赖关系）；defaults.yaml 新增 vite_proxy_check / port_conflict_resolution / compile_artifact_check / process_cleanup 配置块；基于 Vite proxy SSE 中断、端口冲突迁移、编译产物污染、日志重定向残留 4 类失败点的复盘提炼。 |
+| v1.1.0 | 2026-07-23 | **Skill 导入模块 E2E 测试复盘**：新增 3 个配置块（playwright_wait_strategy / test_selector_priority / vite_cache_cleanup）；新增 3 个子阶段（3.5 等待策略验证 / 3.6 选择器优先级验证 / 3.7 Vite 缓存清理验证）；新增 3 个动态引擎步骤类型；基于「Skill 导入模块 E2E 测试」任务四维度复盘（成功步骤/不确定性/可抽象流程/适用场景）。复盘核心问题：①背景图加载阻塞 networkidle 超时 ②placeholder 选择器误匹配 ③Vite 缓存旧版本 JS chunk。 |
 
 ## 文件夹上传批量编译测试复盘（2026-07-22）
 

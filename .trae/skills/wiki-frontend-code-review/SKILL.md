@@ -50,6 +50,7 @@ Scope and non-goals (backend code, build scripts, config files) are defined in [
 | Tauri invoke 命令三层声明缺失（build.rs/capabilities/lib.rs 任一层漏写 → 运行时 'Plugin not found' / 'not allowed'） | tauri-invoke-rule.md | FR-041 |
 | 透明窗口 CSS 仅覆盖 body（html/#app/通配符缺失 → 窗口边缘白边 / floating-active 状态背景残留） | tauri-transparent-css-rule.md | FR-042 |
 | drag+click 元素误用 data-tauri-drag-region（原生拦截 mousedown → click 永不触发 / 阈值硬编码 / start_dragging 重复调用） | tauri-drag-click-rule.md | FR-043 |
+| Playwright 选择器不精确（placeholder 匹配失败/多元素误匹配）+ networkidle 超时（背景图阻塞） | test-selector-priority-rule.md | FR-044 |
 ## Context Loading Strategy
 
 Follow the loading sequence in [skill-loader.md](skill-loader.md) to minimize context tokens.
@@ -208,6 +209,7 @@ No issues found.
 | v1.8.0 | 2026-07-22 | 新增 FR-033~FR-034 共 2 条目录结构复盘规则：前端构建产物目录结构分离（services/api/public/ 未 gitignore + 已跟踪文件未 git rm --cached）、测试截图与临时产物 .gitignore 完整性（test_screenshots/ 和 test_*.json 未登记）。SKILL.md Historical Incident Coverage 表追加 2 行（FR-033 / FR-034），Full-File Mode 第 5 步跨文件一致性检查追加 2 个子项。 |
 | v1.9.0 | 2026-07-22 | 新增 FR-035~FR-040 共 6 条主题色变量映射复盘规则：主题色变量映射合规性（硬编码 rgba()/#hex 未替换为 CSS 变量）、alpha 变体命名合规性（使用未定义的 a07 等值）、语义变量选择正确性（场景背景硬编码值映射为卡片背景变量）、编辑工具使用合规性（含中文 .vue 文件被 Write 重写而非 Edit 精准替换）、类型检查通过性（双重门禁 tsc+vue-tsc）、多主题视觉一致性（未切换主题验证对比度）。SKILL.md Historical Incident Coverage 表追加 6 行，Full-File Mode 第 5 步跨文件一致性检查追加 6 个子项，组装输出类别顺序追加 Theme Color Mapping。基于「仪表盘 .recent-log 与 FloatingChat 主题色适配」任务四维度复盘。 |
 | v2.0.0 | 2026-07-22 | 新增 FR-041~FR-043 共 3 条 Tauri 2.x 桌面应用集成复盘规则：Tauri invoke 命令三层声明审查（tauri-invoke-rule.md，build.rs/capabilities/lib.rs 三层缺失导致运行时 'Plugin not found'/'not allowed'/'command not found'）、透明窗口 CSS 覆盖审查（tauri-transparent-css-rule.md，仅覆盖 body 不够，须 html/body/#app/* 四层 + floating-active 通配符 + !important）、drag+click 冲突处理审查（tauri-drag-click-rule.md，data-tauri-drag-region 拦截 mousedown 致 click 永不触发，须 JS 三阶段处理 + 阈值从 config 读取 + start_dragging 防重复调用）。SKILL.md Historical Incident Coverage 表追加 3 行，Full-File Mode 第 5 步跨文件一致性检查追加 3 个子项，组装输出类别顺序追加 Tauri Integration。同步更新 config/review-config.md（追加 tauri_invoke_frontend / tauri_transparent_css_frontend / tauri_drag_click_frontend 三个参数段）、skill-loader.md（Rule Overview / Quick Routing Table / Keyword Scanning Guide 三表追加 FR-041~FR-043 行）。基于 Tauri 2.x 桌面应用集成历史问题复盘。 |
+| v2.1.0 | 2026-07-23 | 新增 FR-044 规则（测试选择器优先级）：FR-044-1 选择器优先级 #id > [data-testid] > [aria-label] > .class > [placeholder]/:has-text()；FR-044-2 关键交互元素必须提供稳定 id 或 data-testid；FR-044-3 networkidle 禁用于含持续加载资源页面；FR-044-4 DOM 变更同步更新测试选择器。新增 references/test-selector-priority-rule.md；更新 review-config.md 追加 test_selector_priority 参数章节；更新 Historical Incident Coverage 表格。基于「Skill 导入模块 E2E 测试」任务复盘（placeholder 选择器误匹配 + 背景图阻塞 networkidle 超时）。 |
 
 
 

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 wiki-auto-testing orchestrator.
 
@@ -21,7 +21,7 @@ sys.path.insert(0, _template_dir)
 
 from _shared import (
     load_config, TestResults, get_enabled_phases,
-    setup_browser, teardown_browser
+    setup_browser, teardown_browser, authenticate
 )
 
 
@@ -82,6 +82,16 @@ def run(config_path=None, quiet=False, use_engine=False):
 
     browser, ctx_obj, page, console_errors, shot_dir = setup_browser(cfg, quiet)
 
+    # 认证：在测试开始前通过 API 登录并注入 token 到浏览器 localStorage
+    # 为什么放在 setup_browser 之后：需要 page 对象访问 localStorage
+    # 为什么放在 run_traditional/run_dynamic 之前：所有 phase 的测试都假设已登录
+    try:
+        authenticate(page, ctx_obj, cfg, quiet)
+    except Exception as e:
+        print(f"Authentication failed: {e}")
+        results.log("Auth-Login", False, f"Error: {str(e)[:120]}")
+        # 认证失败时仍继续测试，让具体用例报告失败原因（便于定位是登录问题还是业务问题）
+
     try:
         if use_engine:
             # Dynamic engine mode: read steps from config
@@ -125,17 +135,25 @@ if __name__ == "__main__":
 
     if args.phase:
         import tempfile, yaml
+        # 无论是否传入 --config，都必须创建临时配置文件以注入 enabled_phases
+        # 为什么：不传 --config 时 cfg_path 为 None，若跳过临时文件创建，
+        #   run() 会用默认配置（所有 phase 启用），--phase 参数失效
         cfg_path = args.config
         temp_cfg_path = None
         if cfg_path:
             with open(cfg_path, "r", encoding="utf-8") as f:
                 actual_cfg = yaml.safe_load(f) or {}
-            actual_cfg["test_plan"] = {"enabled_phases": args.phase}
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml",
-                                            delete=False, encoding="utf-8") as f:
-                yaml.dump(actual_cfg, f)
-                temp_cfg_path = f.name
-            cfg_path = temp_cfg_path
+        else:
+            # 未传入 config 时，先用 load_config 的默认查找逻辑加载项目配置
+            from _shared import load_config
+            actual_cfg = load_config(None)
+            # load_config 返回的是合并后的 dict，直接用
+        actual_cfg["test_plan"] = {"enabled_phases": args.phase}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml",
+                                        delete=False, encoding="utf-8") as f:
+            yaml.dump(actual_cfg, f)
+            temp_cfg_path = f.name
+        cfg_path = temp_cfg_path
         success = run(cfg_path, quiet=args.quiet, use_engine=args.engine)
         if temp_cfg_path:
             os.unlink(temp_cfg_path)

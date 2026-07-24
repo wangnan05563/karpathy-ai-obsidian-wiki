@@ -251,6 +251,58 @@ def teardown_browser(browser, ctx):
     browser.close()
 
 
+def authenticate(page, ctx, cfg, quiet=False):
+    """通过 API 登录获取 token，注入浏览器 localStorage。
+
+    为什么需要：项目启用了认证（config.json auth.enabled=true），
+    若不登录直接访问 /，会被路由守卫重定向到登录页，后续所有导航测试都会失败。
+    通过 API 调用 /api/auth/login 获取 token，再用 page.evaluate 注入 localStorage，
+    避免依赖具体的登录表单 UI（选择器易变），且不阻塞测试流程。
+
+    失败时抛 RuntimeError，由调用方决定是否中止测试。
+    """
+    auth_cfg = cfg.get("auth", {})
+    if not auth_cfg.get("enabled", False):
+        return
+    api_url = cfg["service"]["api_url"]
+    login_endpoint = auth_cfg["login_endpoint"]
+    creds = auth_cfg["credentials"]
+    token_key = auth_cfg["token_storage_key"]
+    token_field = auth_cfg["token_field"]
+
+    # 必须先访问页面，让同源 localStorage 可用
+    # 用 domcontentloaded 避免被背景图等持续加载资源阻塞（与 playwright_wait_strategy 配置对齐）
+    page.goto(cfg["service"]["frontend_url"], wait_until="domcontentloaded")
+
+    login_url = f"{api_url}{login_endpoint}"
+    # Playwright APIRequestContext.post 不支持 json 参数，需用 data + headers 显式传 JSON
+    resp = ctx.request.post(
+        login_url,
+        data=json.dumps(creds),
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        data = resp.json()
+    except Exception as e:
+        raise RuntimeError(f"Login API returned non-JSON (HTTP {resp.status}): {e}")
+
+    if not data.get("ok", False):
+        raise RuntimeError(f"Login failed: {data.get('message', data)}")
+
+    token = data.get(token_field)
+    if not token:
+        raise RuntimeError(f"Login response missing '{token_field}': {data}")
+
+    # 注入 localStorage：前端 restoreSession() 会读取此 token 并调 /api/auth/me 验证
+    page.evaluate(
+        '(args) => localStorage.setItem(args[0], args[1])',
+        [token_key, token]
+    )
+
+    if not quiet:
+        print(f"Authenticated via API (token injected to localStorage['{token_key}'])")
+
+
 # ============================================================
 # 编码检测工具（系统清理模块复盘补充）
 # 通过 Unicode 码点匹配规避终端 GBK 编码对中文字符串的破坏

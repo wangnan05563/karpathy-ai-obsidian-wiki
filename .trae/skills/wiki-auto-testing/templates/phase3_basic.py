@@ -13,8 +13,11 @@ def test_homepage(page, cfg, results):
     """Test homepage loads successfully."""
     frontend_url = cfg["service"]["frontend_url"]
     timeout_cfg = cfg.get("timeout", {})
+    nav_cfg = cfg.get("navigation", {})
+    # 从配置读取等待策略：默认 domcontentloaded，避免 networkidle 被持续加载资源阻塞
+    wait_until = nav_cfg.get("page_load_wait_until", "domcontentloaded")
     try:
-        page.goto(frontend_url, wait_until="networkidle",
+        page.goto(frontend_url, wait_until=wait_until,
                   timeout=timeout_cfg.get("page_load_ms", 30000))
         title = page.title()
         results.log("Homepage-Load", bool(title), f"Title: {title[:50]}")

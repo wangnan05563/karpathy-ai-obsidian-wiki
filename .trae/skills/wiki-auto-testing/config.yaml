@@ -23,6 +23,19 @@ service:
     - 3000
     - 5173
 
+# --- 认证配置（项目特定） ---
+# 测试前通过 API 登录获取 token 并注入浏览器 localStorage，避免测试卡在登录页
+# token_storage_key 必须与前端 STORAGE_KEYS.AUTH_TOKEN（karpathy-wiki/frontend/src/constants/storageKeys.ts）保持一致
+# 修改前端 token storage key 时必须同步更新此处
+auth:
+  enabled: true
+  login_endpoint: "/api/auth/login"
+  credentials:
+    username: "admin"
+    password: "admin123"
+  token_storage_key: "authToken"
+  token_field: "token"
+
 # --- 页面导航配置（项目特定） ---
 navigation:
   pages:
@@ -95,6 +108,13 @@ navigation:
         - { selector: ".el-button", name: "检查更新按钮" }
 
 # --- 交互测试配置（项目特定） ---
+# Button Auto-Discovery 禁用：自动点击页面所有按钮的设计会触发 SSE/文件对话框/导航等副作用
+# 即使有排除列表和超时保护，某些按钮仍会在浏览器层面阻塞 Python 线程
+# 为什么不禁用 force_click 而是整个功能：force_click=true 是必要的（部分按钮被遮挡），
+# 但 force 点击会绕过 Playwright 的可操作性检查，点击不可见/不可交互元素触发未定义行为
+button_discovery:
+  enabled: false
+
 interactions:
   theme_switcher:
     trigger_selector: ".theme-switcher .trigger"
@@ -1086,3 +1106,85 @@ console_log:
     - "serialization error"
     - "panicked at"
     - "thread 'main' has overflowed its stack"
+
+# ============================================================
+# 以下为 Skill 导入模块 E2E 测试复盘补充配置（第十批次）
+# 覆盖 Playwright 等待策略、测试选择器优先级、Vite 缓存清理
+# 基于 networkidle 超时 / placeholder 误匹配 / Vite 缓存旧版本三类失败点复盘提炼
+# 所有参数可配置，避免硬编码
+# ============================================================
+
+# ===== Playwright 等待策略配置 =====
+# 复盘来源：登录页背景图 url(${bgImage}) 持续加载导致 networkidle 永远不触发
+# 规则：有持续加载资源的页面禁用 networkidle，改用 domcontentloaded + 显式 wait_for_selector
+playwright_wait_strategy:
+  enabled: true
+  # 禁用的等待策略（有持续加载资源时）
+  forbidden_wait_strategy: "networkidle"
+  # 推荐的等待策略
+  recommended_wait_strategy: "domcontentloaded"
+  # 持续加载资源模式（触发禁用 networkidle）
+  persistent_resource_patterns:
+    - "background-image"
+    - "event-stream"
+    - "video"
+    - "polling"
+    - "sse"
+  # 显式等待超时（毫秒）
+  explicit_wait_timeout_ms: 10000
+  # 显式等待状态
+  explicit_wait_state: "visible"
+  # 检测页面列表（可选，为空则全局应用）
+  check_pages: []
+
+# ===== 测试选择器优先级配置 =====
+# 复盘来源：input[placeholder*='用户'] 匹配失败，button:has-text('登录') 多元素误匹配
+# 规则：选择器优先级 ID > data-testid > aria-label > class > placeholder/text
+test_selector_priority:
+  enabled: true
+  # 选择器优先级顺序（从高到低）
+  selector_priority_order:
+    - "#id"
+    - "[data-testid]"
+    - "[aria-label]"
+    - ".class"
+    - "[placeholder]"
+    - ":has-text()"
+  # 关键交互元素必须提供的稳定属性
+  required_stable_attributes:
+    - "id"
+    - "data-testid"
+  # 禁用的选择器模式（在可避免的情况下）
+  discouraged_selectors:
+    - "[placeholder*='用户']"
+    - "[type='text']"
+    - "[type='password']"
+    - "button:has-text('登录')"
+    - "button[type='submit']"
+  # 检测测试文件模式
+  test_file_patterns:
+    - "test_*.py"
+    - "*_test.py"
+    - "*.spec.ts"
+    - "*.test.ts"
+
+# ===== Vite 缓存清理配置 =====
+# 复盘来源：Vite dev server 缓存旧版本 JS chunk，代码已更新但浏览器加载旧版本
+# 规则：测试前清理 Vite 缓存或硬刷新
+vite_cache_cleanup:
+  enabled: true
+  # Vite 缓存目录
+  vite_cache_dirs:
+    - "node_modules/.vite"
+    - ".vite"
+  # 浏览器硬刷新快捷键（用于手动测试）
+  hard_refresh_shortcut: "Ctrl+Shift+R"
+  # 是否在测试前自动清理缓存
+  auto_cleanup_before_test: false
+  # 清理命令
+  cleanup_command: "Remove-Item -Recurse -Force node_modules/.vite -ErrorAction SilentlyContinue"
+  # 检测旧版本加载的信号（控制台错误）
+  stale_version_signals:
+    - "Failed to fetch"
+    - "module parse error"
+    - "unexpected token"
