@@ -4,7 +4,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(__file__))
 from _shared import (
-    TestResults, click_nav_tab, get_enabled_phases,
+    TestResults, click_nav_tab, js_click, get_enabled_phases,
     setup_browser, teardown_browser
 )
 
@@ -69,6 +69,18 @@ def test_page_elements(page, cfg, results):
         if not clicked:
             # tab disabled 或不存在，跳过元素检查
             continue
+        # 元素检查前先点击 pre_open_selectors 列出的按钮，展开条件渲染的隐藏面板
+        # 为什么放在 page 级而不是 element 级：同一页面多个元素可能共享同一面板，
+        # 在面板外层 click 一次即可，比逐个 element.click 重复触发更稳定
+        for pre_sel in p.get("pre_open_selectors", []) or []:
+            try:
+                btn = page.locator(pre_sel)
+                if btn.count() > 0:
+                    js_click(page, pre_sel)
+                    page.wait_for_timeout(400)  # 等面板过渡动画完成
+            except Exception:
+                # 展开失败不阻塞元素检查（元素可能本就在面板外可见）
+                pass
         for elem in p.get("expected_elements", []):
             sel = elem["selector"]
             name = elem.get("name", sel)

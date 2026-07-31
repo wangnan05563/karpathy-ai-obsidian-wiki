@@ -225,6 +225,10 @@ class StepEngine:
 
     def _handle_theme_switch(self, step, ctx):
         tc = ctx["cfg"]["interactions"].get("theme_switcher", {})
+        # v3.1 需求：移除主题切换悬浮框后，theme_switcher.enabled=false 时直接跳过
+        if tc.get("enabled", True) is False:
+            ctx["results"].log("Theme-Switch", True, "Skipped (theme switcher disabled)")
+            return
         trigger = tc.get("trigger_selector")
         item = tc.get("item_selector")
         if not trigger or not item:

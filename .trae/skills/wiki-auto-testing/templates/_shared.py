@@ -137,6 +137,13 @@ class TestResults:
         if not self.quiet:
             print(f"[{status}] {name}: {details}")
 
+    def skip(self, name, reason=""):
+        """记录 SKIP 状态：不计入 failed，用于设计上禁用或良性限流的测试项"""
+        status = "SKIP"
+        self.items.append({"test": name, "status": status, "details": reason})
+        if not self.quiet:
+            print(f"[{status}] {name}: {reason}")
+
     @property
     def passed(self):
         return sum(1 for r in self.items if r["status"] == "PASS")
@@ -146,11 +153,15 @@ class TestResults:
         return sum(1 for r in self.items if r["status"] == "FAIL")
 
     @property
+    def skipped(self):
+        return sum(1 for r in self.items if r["status"] == "SKIP")
+
+    @property
     def total(self):
         return len(self.items)
 
     def summary(self):
-        return f"Total: {self.total} | Passed: {self.passed} | Failed: {self.failed}"
+        return f"Total: {self.total} | Passed: {self.passed} | Failed: {self.failed} | Skipped: {self.skipped}"
 
     def save(self, path, encoding="utf-8"):
         with open(path, "w", encoding=encoding) as f:
@@ -298,6 +309,19 @@ def authenticate(page, ctx, cfg, quiet=False):
         '(args) => localStorage.setItem(args[0], args[1])',
         [token_key, token]
     )
+
+    # 重置导航栏折叠状态：v2 导航栏将 navCollapsed 持久化到 localStorage，
+    # 若上轮测试遗留折叠态，本轮测试将找不到 .tab-btn（折叠态渲染为 .icon-btn）
+    # 为什么放在 token 注入之后：避免页面刷新后 token 丢失
+    page.evaluate('localStorage.setItem("navCollapsed", "false")')
+
+    # 重新加载页面：前端 restoreSession() 在页面加载时执行，
+    # 注入 token 后必须 reload 才能让前端读取新 token 并渲染主应用（而非登录页）
+    # 为什么用 domcontentloaded：避免背景图等持续加载资源阻塞（与 playwright_wait_strategy 对齐）
+    page.reload(wait_until="domcontentloaded")
+    # 等待前端 restoreSession 异步调用 /api/auth/me 完成并渲染主应用
+    # 为什么用 wait_for_selector：restoreSession 是异步的，reload 返回时主应用可能尚未渲染
+    page.wait_for_selector(".nav-tabs, .nav-collapsed", timeout=10000)
 
     if not quiet:
         print(f"Authenticated via API (token injected to localStorage['{token_key}'])")

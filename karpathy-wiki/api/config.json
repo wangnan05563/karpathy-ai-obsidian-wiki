@@ -5,12 +5,17 @@
     "provider": "deepseek",
     "baseUrl": "https://api.deepseek.com",
     "model": "deepseek-chat",
-    "apiKeyRef": "DEEPSEEK_KEY",
-    "apiKey": "sk-7c761b8645aa4721a3a9d1160816296b"
+    "apiKeyRef": "DEEPSEEK_API_KEY",
+    "stream": false,
+    "apiKey": "sk-7c761b8645aa4721a3a9d1160816296b",
+    "apiKeys": {
+      "agnes": "sk-5BGyB2vRsrjsG3qQuXCoYYXN2O98U1zVQTGeKCJchuKHjLgW",
+      "deepseek": "sk-7c761b8645aa4721a3a9d1160816296b"
+    }
   },
   "budget": {
-    "maxSteps": 20,
-    "tokenBudget": 200000
+    "maxSteps": 50,
+    "tokenBudget": 1000000
   },
   "server": {
     "host": "localhost",
@@ -26,6 +31,7 @@
     "cpolarAuthtoken": "",
     "binaryPath": "",
     "autoStart": true,
+    "pathPrefix": "/wiki/",
     "tunnelMode": "quick",
     "tunnelName": "",
     "tunnelId": "",
@@ -35,7 +41,8 @@
   },
   "logging": {
     "level": "info",
-    "enableRequestLog": true
+    "enableRequestLog": true,
+    "logFilePath": "../logs/api-dev.log"
   },
   "webSearch": {
     "provider": "tavily",
@@ -49,7 +56,19 @@
       "txt",
       "pdf",
       "html",
-      "json"
+      "json",
+      "docx",
+      "xlsx",
+      "pptx",
+      "doc",
+      "xls",
+      "mp3",
+      "wav",
+      "ogg",
+      "flac",
+      "m4a",
+      "aac",
+      "webm"
     ],
     "maxBatchSize": 200,
     "maxFileSizeMb": 10
@@ -81,15 +100,238 @@
     },
     "max_batch_size": 20,
     "chunk_threshold": 200,
-    "extract_model": "glm-4-plus",
+    "extract_model": "deepseek-chat",
     "extract_base_url": "",
     "extract_token_budget": 50000
   },
+  "urlCrawl": {
+    "maxHops": 3,
+    "timeoutMs": 10000,
+    "maxPages": 50,
+    "userAgent": "KarpathyWikiBot/1.0",
+    "allowedAttachmentTypes": [
+      "pdf",
+      "doc",
+      "docx",
+      "xls",
+      "xlsx",
+      "ppt",
+      "pptx",
+      "jpg",
+      "jpeg",
+      "png",
+      "gif",
+      "webp",
+      "svg",
+      "mp4",
+      "webm",
+      "mp3",
+      "wav",
+      "ogg"
+    ],
+    "followRobotsTxt": true,
+    "crawlDelayMs": 0,
+    "concurrency": 1,
+    "excludeTemplateElements": true,
+    "renderJs": false,
+    "contentAttachmentTypes": [
+      "pdf",
+      "doc",
+      "docx",
+      "xls",
+      "xlsx",
+      "ppt",
+      "pptx",
+      "mp4",
+      "webm",
+      "mp3",
+      "wav",
+      "ogg"
+    ],
+    "retryAttempts": 1,
+    "retryBackoffMs": 500,
+    "enableAttachmentDedup": true,
+    "logging": {
+      "enabled": false,
+      "logFilePath": "../data/url-crawl.log"
+    },
+    "connectTimeoutMs": 0,
+    "readTimeoutMs": 0,
+    "copyrightNotice": "本文内容来源于互联网公开资源，仅用于个人知识管理，如有侵权请联系删除",
+    "preserveOnCancel": true,
+    "incrementalCrawl": false,
+    "incrementalStatePath": "../data/url-crawl-state.json",
+    "resumeCrawl": false
+  },
+  "media": {
+    "agnes": {
+      "baseUrl": "https://apihub.agnes-ai.com/v1",
+      "apiKeyRef": "AGNES_API_KEY",
+      "imageModel": "agnes-image-2.1-flash",
+      "videoModel": "agnes-video-v2.0",
+      "defaultImageSize": "1024x768",
+      "defaultImageRatio": "16:9",
+      "defaultVideoSize": "1280x720",
+      "defaultVideoSeconds": 5
+    }
+  },
   "tools": {
-    "mcpServers": [],
-    "cliTools": [],
+    "mcpServers": [
+      {
+        "name": "Sequential Thinking",
+        "transport": "stdio",
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-sequential-thinking"
+        ],
+        "url": "",
+        "env": {},
+        "enabled": true,
+        "triggerKeywords": [
+          "推理",
+          "分析",
+          "思考",
+          "规划",
+          "步骤",
+          "原因",
+          "根因",
+          "原理",
+          "为什么",
+          "如何解决",
+          "设计思路",
+          "分步",
+          "逻辑"
+        ],
+        "placeholderTools": [
+          {
+            "name": "sequentialThinking",
+            "description": "对复杂问题进行结构化多步推理与深度分析，输出详细思考步骤和中间推理过程",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string",
+                  "description": "需要推理/分析的具体问题或任务描述"
+                }
+              },
+              "required": ["question"]
+            }
+          }
+        ]
+      },
+      {
+        "name": "Excel",
+        "transport": "stdio",
+        "command": "npx",
+        "args": [
+          "--yes",
+          "@negokaz/excel-mcp-server"
+        ],
+        "url": "",
+        "env": {},
+        "enabled": true,
+        "triggerKeywords": [
+          "excel",
+          "xls",
+          "xlsx",
+          "表格",
+          "电子表格",
+          "sheet",
+          "单元格",
+          "公式",
+          "报表",
+          "数据汇总",
+          "透视表",
+          "统计报表"
+        ],
+        "placeholderTools": [
+          {
+            "name": "readWorkbook",
+            "description": "读取 Excel 文件（.xlsx/.xls）的内容，支持按工作表、按单元格范围读取",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "filePath": {
+                  "type": "string",
+                  "description": "Excel 文件的本地绝对路径或可访问的 URL"
+                }
+              },
+              "required": ["filePath"]
+            }
+          },
+          {
+            "name": "writeWorkbook",
+            "description": "将数据写入 Excel 文件，支持创建新文件、追加到已有工作表、设置单元格样式和公式",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "filePath": {
+                  "type": "string",
+                  "description": "目标 Excel 文件路径"
+                },
+                "data": {
+                  "type": "object",
+                  "description": "要写入的数据（如 { sheet: 'Sheet1', rows: [...] }）"
+                }
+              },
+              "required": ["filePath", "data"]
+            }
+          }
+        ]
+      }
+    ],
+    "cliTools": [
+      {
+        "name": "cli-tool-1",
+        "command": "",
+        "argsTemplate": "",
+        "description": "",
+        "timeoutMs": 30000,
+        "enabled": true
+      }
+    ],
     "scenes": [],
     "routerMode": "auto",
     "mcpTimeoutMs": 30000
-  }
+  },
+  "skills": [
+    {
+      "id": "general-qa",
+      "name": "通用问答",
+      "description": "基于全库知识的通用问答模式",
+      "enabled": true,
+      "scope": "all",
+      "systemPrompt": "",
+      "outputFormat": "qa",
+      "tools": []
+    },
+    {
+      "id": "literature-review",
+      "name": "文献综述",
+      "description": "围绕主题进行系统性文献梳理与总结",
+      "enabled": true,
+      "scope": "all",
+      "systemPrompt": "请以文献综述的形式组织回答：先概述领域背景，再按主题分节梳理关键文献与观点，最后总结研究趋势与未解决问题。保持学术严谨性，引用时标注 [[页面名]]。",
+      "outputFormat": "qa",
+      "tools": [
+        "search_pages",
+        "read_page"
+      ]
+    },
+    {
+      "id": "learning-card",
+      "name": "学习卡片生成",
+      "description": "将知识提炼为问答卡片，适合记忆与复习",
+      "enabled": true,
+      "scope": "all",
+      "systemPrompt": "请将知识库中的内容整理为问答卡片格式。每个核心概念生成一个卡片，包含：概念名称、一句话定义、3个关键要点、1个相关概念对比。输出格式为 Markdown 列表。",
+      "outputFormat": "qa",
+      "tools": [
+        "search_pages",
+        "read_page"
+      ]
+    }
+  ],
+  "activeSkill": "learning-card"
 }

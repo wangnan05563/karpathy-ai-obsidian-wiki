@@ -381,3 +381,186 @@ console_log:
 | invoke 调用报 `URL: local` | remote.urls 未匹配测试 URL | 阶段 3.2 / 阶段 4 | 在 `remote.urls` 中添加 URL 模式 |
 | 后端健康检查超时 | 后端服务未在 Tauri 启动时初始化 | 阶段 2.4 | 增加 `health_check.retry_count` 或检查后端初始化逻辑 |
 | 编译报 `linker 'lld-link' not found` | 缺少 LLD 链接器 | 阶段 1.1 / 阶段 2.2 | 安装 LLVM 或在 `.cargo/config.toml` 改用 `msvc-link` |
+
+---
+
+## 13. 合并说明（2026-07-31）
+
+> 原 SKILL.md 中的"Tauri 2.x 桌面应用测试（复盘提炼）"概要章节（含适用场景、6 阶段测试流程、阶段间 DAG 依赖关系、invoke 权限三层验证、SPA 产物验证、新增配置块说明、测试编排示例、故障排查速查表）已合并到本文件。
+>
+> 本文件的第 1-12 章节为更完整版本，原概要章节的所有规则语义均已包含。SKILL.md 中保留指向本文件的引用链接，详情参见 [wiki-auto-testing SKILL.md](../SKILL.md) 的"测试模式与协议（按需加载）"章节。
+
+---
+
+## Tauri 2.x 桌面应用测试（复盘提炼）
+
+> 本节基于 Tauri 2.x 桌面应用集成测试过程复盘提炼，覆盖从环境预检到错误诊断的完整测试流程。
+> 所有参数从 `config.tauri` / `config.spa` / `config.health_check` / `config.invoke` / `config.disk_space` / `config.console_log` 读取，不在代码中硬编码。
+> 详见 [tauri-desktop-testing.md](references/tauri-desktop-testing.md)。
+
+### 适用场景
+
+- Tauri 2.x 桌面应用（含 SPA 前端 + Rust 后端）
+- 通过 `@tauri-apps/api` 的 `invoke` 调用 Rust 命令的 IPC 场景
+- 需要验证 SPA 产物与源码同步的场景
+- 需要验证 capabilities.json 权限声明完整性的场景
+- Windows / macOS / Linux 跨平台构建验证
+
+### 不适用场景
+
+- 纯 Web 项目（用 SKILL.md 主流程的标准 6 阶段测试）
+- Tauri 1.x 项目（配置结构不同，需另行适配）
+- 无 invoke 调用的简单 Tauri 项目（invoke 权限验证不适用）
+
+### 测试流程（6 阶段）
+
+仅在 `tauri.enabled: true` 时执行。与 SKILL.md 主流程的标准 6 阶段测试并行或串行。
+
+#### 阶段 1：测试前预检
+
+| 子阶段 | 验证内容 | 通过条件 |
+|--------|----------|----------|
+| 1.1 环境验证 | cargo / LLD / windres / 磁盘空间 | 全部工具可用且磁盘空间 ≥ 阈值 |
+| 1.2 SPA 产物时间戳验证 | 源码 mtime vs 产物 mtime | 产物 mtime ≥ 源码 mtime |
+| 1.3 SPA 产物特征验证（可选） | JS chunk 中含关键字符串 | 全部关键字符串命中（`spa.require_all_keys: true`） |
+| 1.4 端口占用检查 | required_ports 是否被占用 | 全部端口空闲（或已停止占用进程） |
+
+#### 阶段 2：构建与启动
+
+| 子阶段 | 验证内容 | 通过条件 |
+|--------|----------|----------|
+| 2.1 SPA 构建 | 执行构建脚本 + 验证 index.html | 构建退出码 0 且产物非空 |
+| 2.2 Rust 编译 | cargo build + 验证 exe 存在 | 编译退出码 0 且 exe 文件存在 |
+| 2.3 Tauri 应用启动 | 非阻塞启动 + 进程存活检查 | 进程在 startup_timeout_ms 内未退出 |
+| 2.4 后端健康检查 | 轮询 health_check.endpoint | HTTP 响应状态码 == expected_status |
+
+#### 阶段 3：功能验证
+
+| 子阶段 | 验证内容 | 通过条件 |
+|--------|----------|----------|
+| 3.1 窗口创建验证 | Get-Process + MainWindowTitle | 进程存活且窗口标题匹配 |
+| 3.2 invoke 权限验证 | 三层权限检查（插件依赖/权限声明/URL 白名单） | 三层验证全部通过 |
+| 3.3 交互功能验证（可选） | DevTools Protocol 连接 + 元素断言 | 全部用例断言通过 |
+
+#### 阶段 4：错误诊断
+
+| 子阶段 | 验证内容 | 通过条件 |
+|--------|----------|----------|
+| 4.1 Tauri stderr 日志采集 | 按 error_keywords 扫描 stderr 日志 | 不含任何错误关键词 |
+| 4.2 DevTools Console 日志采集 | 静态分析前端 invoke 调用与 Rust 命令注册 | 全部 invoke 命令已注册 |
+| 4.3 invoke 错误分类 | 按 failure_classification.rules 匹配错误消息 | 无规则匹配（即无错误） |
+
+> 阶段 4 在阶段 3 失败时仍需执行，用于诊断根因。
+
+#### 阶段 5：结果汇总
+
+输出 PASS/FAIL/SKIP 报告，每条失败项包含：
+- 失败的断言名称
+- 实际值 vs 期望值
+- 匹配的失败分类规则
+- 对应的修复建议
+
+#### 阶段 6：测试后清理
+
+- 停止 Tauri 进程（terminate → kill → Stop-Process 兜底）
+- 清理临时日志文件（_tauri_stdout.log / _tauri_stderr.log）
+
+### 阶段间 DAG 依赖关系
+
+| 阶段 | 依赖前置阶段 | 故障传播规则 |
+|------|-------------|-------------|
+| 阶段 1 预检 | 无（并行执行） | critical 故障中断后续所有阶段 |
+| 阶段 2 构建与启动 | 阶段 1 全过 | critical 故障仍执行阶段 4 诊断后中断 |
+| 阶段 3 功能验证 | 阶段 2 通过 | critical 故障仍执行阶段 4 诊断 |
+| 阶段 4 错误诊断 | 阶段 3 失败或 console_log.enabled | 必须执行（用于诊断根因） |
+| 阶段 5 结果汇总 | 阶段 1-4 完成 | 必须执行 |
+| 阶段 6 测试后清理 | 最后执行（无论前序成败） | 必须执行 |
+
+### invoke 权限三层验证
+
+> Tauri 2.x 的 invoke 权限模型与 1.x 不同，必须在 `capabilities/*.json` 中显式声明。详见 [invoke-permission-verification.md](references/invoke-permission-verification.md)。
+
+| 层级 | 验证内容 | 失败类型 | 修复建议 |
+|------|----------|----------|----------|
+| 第 1 层 | Cargo.toml 含 `tauri-plugin-{name}` 依赖 | `invoke_layer_1` | 添加插件依赖并重新编译 |
+| 第 2 层 | capabilities.json 的 permissions 数组含 `allow-xxx` | `invoke_layer_2` | 在 permissions 数组中添加 `allow-xxx` |
+| 第 3 层 | capabilities.json 的 remote.urls 匹配测试 URL | `invoke_layer_3` | 在 remote.urls 中添加 URL 模式 |
+
+错误关键词映射（运行时错误诊断）：
+
+| 错误消息关键词 | 失败层级 | 修复建议 |
+|----------------|----------|----------|
+| `Plugin not found` | 第 1 层 | 在 Cargo.toml 添加插件依赖 |
+| `not allowed` | 第 2 层 | 在 capabilities.json 添加 allow-xxx |
+| `URL: local` | 第 3 层 | 在 remote.urls 添加 URL 模式 |
+| `command not found` | 命令注册 | 在 lib.rs 的 invoke_handler 注册命令 |
+| `serialization error` | 类型不匹配 | 检查 Rust 命令参数与前端 invoke 参数类型 |
+
+### SPA 产物验证
+
+> 防止源码已修改但产物未重建导致 Tauri 加载旧版前端。详见 [spa-artifact-verification.md](references/spa-artifact-verification.md)。
+
+| 验证法 | 原理 | 适用场景 |
+|--------|------|----------|
+| 时间戳对比法 | 源码 mtime vs 产物 mtime | 主方法，日常构建验证 |
+| JS chunk 特征验证法 | 在产物 JS 中搜索关键字符串 | 辅助方法，CI 环境 mtime 重置时 |
+
+### 新增配置块说明
+
+#### tauri（Tauri 桌面应用配置）
+
+Tauri 2.x 桌面应用构建/启动/窗口验证参数。包含 exe_name、src_tauri_dir、build_script_path、expected_window_title、startup_timeout_ms、compile_timeout_sec。
+
+#### spa（SPA 产物验证配置）
+
+防止源码已修改但产物未重建。包含 source_dirs、output_dir、source_extensions、key_strings、force_rebuild。
+
+#### health_check（后端健康检查配置）
+
+Tauri 启动后轮询后端服务健康检查端点。包含 endpoint、retry_count、timeout、expected_status。
+
+#### invoke（invoke 权限验证配置）
+
+Tauri 2.x invoke 调用的三层权限验证。包含 commands、permissions、url_patterns、capabilities_glob、cargo_toml_path。
+
+#### disk_space（磁盘空间检查配置）
+
+Rust 编译产物与 node_modules 占用大，必须预检磁盘空间。包含 debug_min_gb、release_min_gb、cleanup_threshold_gb。
+
+#### console_log（Console 日志采集配置）
+
+Tauri stderr 与 DevTools Console 日志的关键词过滤与错误分类。包含 prefixes、error_keywords。
+
+### 测试编排示例
+
+在 `config.yaml` 的 `test_plan.phases` 中编排 Tauri 桌面测试步骤：
+
+```yaml
+test_plan:
+  enabled_phases:
+    - "build"
+    - "startup"
+    - "basic"
+    - "interactions"
+    - "supplementary"
+    - "summary"
+    - "tauri_desktop"  # 新增 Tauri 桌面测试阶段
+
+tauri:
+  enabled: true
+  exe_name: "karpathy-wiki"
+  src_tauri_dir: "karpathy-wiki/src-tauri"
+  build_script_path: "karpathy-wiki/scripts/前端构建.bat"
+```
+
+### 故障排查速查表
+
+| 现象 | 可能原因 | 验证阶段 | 修复步骤 |
+|------|----------|----------|----------|
+| Tauri 启动后立即退出 | Rust 编译错误或窗口配置错误 | 阶段 2 / 阶段 4 | 查看 stderr 日志中的 `panicked at` |
+| 窗口创建但白屏 | SPA 产物未构建或路径错误 | 阶段 1.2 / 阶段 4 | 重新构建 SPA，检查 `frontendDist` 配置 |
+| invoke 调用报 `Plugin not found` | Cargo.toml 缺少插件依赖 | 阶段 3.2 / 阶段 4 | 添加 `tauri-plugin-xxx` 依赖并重新编译 |
+| invoke 调用报 `not allowed` | capabilities.json 缺少权限声明 | 阶段 3.2 / 阶段 4 | 在 `permissions` 数组中添加 `allow-xxx` |
+| invoke 调用报 `URL: local` | remote.urls 未匹配测试 URL | 阶段 3.2 / 阶段 4 | 在 `remote.urls` 中添加 URL 模式 |
+| 后端健康检查超时 | 后端服务未在 Tauri 启动时初始化 | 阶段 2.4 | 增加 `health_check.retry_count` |
+| 编译报 `linker 'lld-link' not found` | 缺少 LLD 链接器 | 阶段 1.1 / 阶段 2.2 | 安装 LLVM 或改用 `msvc-link` |

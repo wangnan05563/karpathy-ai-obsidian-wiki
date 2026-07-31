@@ -5,17 +5,23 @@
 # ============================================================
 
 # --- 构建配置（项目特定） ---
+# 注意：脚本命名遵循 CODING-034 英文 kebab-case 规范
 build:
-  script_path: "karpathy-wiki/scripts/前端构建.bat"
+  enabled: false  # 服务已在运行，跳过构建阶段
+  script_path: "karpathy-wiki/scripts/build-web.bat"
   artifact_path: "karpathy-wiki/api/public/index.html"
 
 # --- 启动配置（项目特定） ---
+# 注意：脚本命名遵循 CODING-034 英文 kebab-case 规范
 startup:
-  script_path: "karpathy-wiki/scripts/启动服务.bat"
-  stop_script_path: "karpathy-wiki/scripts/停止服务.bat"
+  enabled: false  # 服务已在运行，跳过启动阶段
+  script_path: "karpathy-wiki/scripts/start-service.bat"
+  stop_script_path: "karpathy-wiki/scripts/stop-service.bat"
 
 # --- 服务配置（项目特定） ---
 service:
+  # 5173 是 vite.config.ts 默认端口，当前环境 5173 空闲可用
+  # 注意：若 5173 被其他项目占用，可改回 5174 并同步 vite.config.ts
   frontend_url: "http://localhost:5173"
   api_url: "http://localhost:3000"
   health_endpoint: "/health"
@@ -23,18 +29,26 @@ service:
     - 3000
     - 5173
 
-# --- 认证配置（项目特定） ---
+# --- 认证配置（项目特定，已合并 UI 与 API 两个块） ---
 # 测试前通过 API 登录获取 token 并注入浏览器 localStorage，避免测试卡在登录页
 # token_storage_key 必须与前端 STORAGE_KEYS.AUTH_TOKEN（karpathy-wiki/frontend/src/constants/storageKeys.ts）保持一致
 # 修改前端 token storage key 时必须同步更新此处
+# 注意：YAML 中重复 key 会被后者覆盖，login_endpoint 等 API 字段必须与 UI 字段合并到同一 auth 块
 auth:
   enabled: true
+  # API 登录字段（_shared.authenticate() 读取）
   login_endpoint: "/api/auth/login"
   credentials:
     username: "admin"
     password: "admin123"
   token_storage_key: "authToken"
   token_field: "token"
+  # 登录表单 UI 选择器（备用：API 注入失败时降级走表单登录）
+  username_selector: "input[type='text']"
+  password_selector: "input[type='password']"
+  submit_selector: ".login-btn"
+  # 登录后等待导航栏渲染的时间（毫秒）
+  post_login_wait_ms: 2000
 
 # --- 页面导航配置（项目特定） ---
 navigation:
@@ -49,12 +63,20 @@ navigation:
       label: "投递资料"
       expected_elements:
         - { selector: ".el-tabs__item", name: "Element Plus 标签页" }
+        # URL 爬取功能增强：提示横幅 + 步骤容器（默认在 URL tab 下渲染）
+        - { selector: ".url-tip-banner, .url-step", name: "URL 爬取提示与步骤" }
     - key: "browse"
       label: "知识浏览"
       expected_elements:
         - { selector: "[class*='browse'], [class*='tree']", name: "浏览树" }
+        # FR-11 视图切换器（目录/看板/日历）
+        - { selector: ".view-switcher, [class*='view-switcher']", name: "视图切换器" }
     - key: "query"
       label: "知识问答"
+      # v3.1 多模态输出选择器等控件收纳到高级设置面板（默认折叠），
+      # 检查 expected_elements 前先点击 .advanced-toggle 展开面板，让选择器可见
+      pre_open_selectors:
+        - ".advanced-toggle"
       expected_elements:
         - { selector: "input[type='text'], textarea", name: "问答输入框" }
         # F-3.4 输入工具栏 7 chip
@@ -63,6 +85,8 @@ navigation:
         - { selector: ".upload-btn, .attachment-uploader, [class*='attachment']", name: "图片上传按钮" }
         # F-3.9 模型切换选择器
         - { selector: ".model-selector, [class*='model-selector']", name: "模型切换器" }
+        # FR-09-2 多模态输出模式选择器（mindmap/faq/timeline）— v3.1 移入高级设置面板
+        - { selector: ".output-mode-select", name: "多模态输出选择器" }
     - key: "graph"
       label: "图谱"
       expected_elements:
@@ -95,6 +119,18 @@ navigation:
         - { selector: ".glass-card, [class*='cleanup']", name: "清理卡片" }
         - { selector: ".el-switch, [role='switch']", name: "dry_run 开关" }
         - { selector: ".el-button", name: "清理按钮" }
+    - key: "dataclean"
+      label: "数据清洗"
+      expected_elements:
+        # 头部标题（与 cleanup 共用 head-title 样式 token；head-tag 小字已精简移除）
+        - { selector: ".head-title.grad-text", name: "数据清洗标题" }
+        # 卡片装饰光晕（与 cleanup 一致）
+        - { selector: ".card-deco", name: "卡片装饰光晕" }
+        # 头部子标题（默认渲染，qualityStats 为 null 时常驻显示）
+        # 为什么不用 .status-block：.status-block 受 v-if="qualityStats" 控制，初始无数据时不渲染
+        - { selector: ".head-tip", name: "头部子标题" }
+        # 操作按钮（刷新/预检/去重）
+        - { selector: ".el-button", name: "操作按钮" }
     - key: "help"
       label: "帮助文档"
       expected_elements:
@@ -117,6 +153,8 @@ button_discovery:
 
 interactions:
   theme_switcher:
+    # v3.1 需求：取消主题切换悬浮框（避免遮挡视野），Theme-Switch 测试自动跳过
+    enabled: false
     trigger_selector: ".theme-switcher .trigger"
     panel_selector: ".theme-switcher .panel"
     item_selector: ".theme-switcher .theme-item"
@@ -162,6 +200,20 @@ api_tests:
     # F-3.10 联网搜索状态
     - path: "/api/cleanup/status"
       expected_status: 200
+    # URL 爬取配置端点（URL 上传功能增强）
+    - path: "/api/url-ingest/config"
+      expected_status: 200
+    # FR-10-1 AI 自动打标签：列出含 ai_tags 字段的待审核页面
+    - path: "/api/tags/pending"
+      expected_status: 200
+    # FR-16-1 Discover Sources：基于双链拓扑推荐"邻近但未连接"的相关笔记
+    # 必须传 pagePath 参数（vault 中存在 entities/Docker.md），无参数返回 400
+    - path: "/api/discover/recommend?pagePath=entities/Docker.md"
+      expected_status: 200
+      timeout_ms: 30000
+    # FR-11 看板/日历视图数据源：返回扁平化页面列表（含 frontmatter）
+    - path: "/api/files/pages"
+      expected_status: 200
 
 # ============================================================
 # 以下为系统清理模块前端验证复盘补充配置
@@ -173,7 +225,8 @@ api_tests:
 encoding_tests:
   enabled: true
   # 需要检测的页面 key（对应 navigation.pages 中的 key）
-  check_pages: ["dashboard", "cleanup"]
+  # dataclean 与 cleanup 共用 head-tag/head-title/status-block 样式 token，须验证中文显示一致
+  check_pages: ["dashboard", "cleanup", "dataclean"]
   # U+FFFD 替换字符的码点标识（统一用字符串配置，避免 YAML 解析歧义）
   fffd_codepoint: "0xFFFD"
   # 检测方法：dom_text_codepoints（dump DOM 文本并检查码点）
@@ -258,28 +311,6 @@ cleanup:
     - "."
     - "test_screenshots"
 
-# --- PowerShell 环境约束（项目特定） ---
-# Windows PowerShell 5.1 的语法限制和约束
-powershell_constraints:
-  # 命令分隔符（PowerShell 不支持 &&，用 ; 分隔顺序执行）
-  command_separator: ";"
-  # 被禁用的命令（容易引发编码或安全问题）
-  blocked_commands: ["cmd /c"]
-  # PowerShell 只读变量（不可重新赋值）
-  readonly_vars: ["$pid", "$PWD", "$HOME"]
-  # 是否使用 RunCommand 的 cwd 参数而非 cd 前缀
-  use_cwd_param: true
-  # 启动 bat 脚本时是否绕过 pause（避免卡住自动化流程）
-  bypass_bat_pause: true
-  # 绕过 pause 的输入内容
-  pause_bypass_input: '""'
-
-# ============================================================
-# 以下为历史问题复盘补充配置（第二批次）
-# 覆盖路由注册、类型同步、CORS 绕过、Headless 崩溃、PowerShell 兼容、编码增强
-# 所有参数可配置，避免硬编码
-# ============================================================
-
 # --- 路由注册验证配置 ---
 # 自动检测后端路由文件是否在入口文件中注册
 route_registration_check:
@@ -321,78 +352,6 @@ type_sync_check:
   ignore_interfaces:
     - "EngineAdapter"
     - "VaultService"
-
-# --- CORS 绕过策略配置 ---
-# API 测试使用 Playwright context.request 绕过浏览器 CORS 限制
-cors_bypass:
-  # 是否启用 CORS 绕过（API 测试默认使用 context.request）
-  enabled: true
-  # 绕过策略：context_request | backend_proxy | disabled
-  strategy: "context_request"
-  # 需绕过的 API 路径前缀列表
-  api_path_prefixes:
-    - "/api"
-    - "/health"
-
-# --- Headless 崩溃防护配置 ---
-# Chromium headless 模式崩溃防护
-headless_crash_guard:
-  # 是否启用崩溃防护
-  enabled: true
-  # 必须的启动参数列表（headless 模式下）
-  required_launch_args:
-    - "--disable-gpu"
-    - "--no-sandbox"
-    - "--disable-dev-shm-usage"
-    - "--disable-setuid-sandbox"
-  # 崩溃重试次数
-  max_retries: 2
-  # 崩溃重试间隔（毫秒）
-  retry_interval_ms: 2000
-
-# --- PowerShell 兼容性配置 ---
-# Windows PowerShell 环境的命令兼容性处理
-powershell_compatibility:
-  # 是否启用 PowerShell 兼容性检查
-  enabled: true
-  # 禁止使用的语法列表（PowerShell 不支持）
-  forbidden_syntaxes:
-    - "&&"
-    - "||"
-  # 替代语法映射
-  syntax_replacements:
-    "&&": ";"
-    "||": "; "
-  # 是否拆分长命令
-  split_long_commands: true
-  # 单条命令最大长度
-  max_command_length: 200
-  # 是否使用新终端执行命令
-  use_fresh_terminal: true
-
-# --- 编码安全增强配置 ---
-# 在现有 encoding_safety 段基础上增强
-encoding_safety_enhanced:
-  # 写入文件后是否验证编码
-  verify_after_write: true
-  # 检测 U+FFFD 替换字符（编码损坏标志）
-  check_replacement_char: true
-  # U+FFFD 允许出现的最大次数（0 = 不允许）
-  replacement_char_threshold: 0
-  # 检测的文件扩展名列表
-  check_extensions:
-    - ".ts"
-    - ".vue"
-    - ".py"
-    - ".md"
-    - ".json"
-    - ".yaml"
-
-# ============================================================
-# 以下为帮助文档与关于模块测试复盘补充配置（第三批次）
-# 覆盖滚动容器、SPA 内部跳转、检查更新状态机
-# 所有参数可配置，避免硬编码
-# ============================================================
 
 # --- 滚动容器测试配置（项目特定） ---
 # 验证 flex 布局的多卡片长内容页面是否存在双重滚动裁切问题
@@ -781,20 +740,6 @@ verification:
         simulate: "service_down"
         expected: "兜底提示"
 
-# --- 破坏性按钮白名单 ---
-# 测试中遇到这些按钮须先备份配置，测试后恢复
-destructive_buttons:
-  - "恢复初始配置"
-  - "删除"
-  - "清除"
-  - "重置"
-
-# ============================================================
-# 以下为 v2 导航栏改造复盘补充配置（第七批次）
-# 覆盖前置检查、测试用例同步、失败分类、服务管理四个协议
-# 针对本项目定制，所有参数可配置，避免硬编码
-# ============================================================
-
 # --- 前置检查协议配置（Pre-flight Check Protocol）---
 # 在阶段 1 构建之前执行，防止服务未就绪时全部用例误报失败
 precheck:
@@ -819,33 +764,9 @@ precheck:
   # 是否执行浏览器可启动检查（验证 Playwright 环境）
   browser_launch_check: true
   # 服务启动脚本（与 startup.script_path 对齐，bat 脚本需配合 bypass_bat_pause）
-  service_start_script: "karpathy-wiki/scripts/启动服务.bat"
+  service_start_script: "karpathy-wiki/scripts/start-service.bat"
   # 检查失败时是否自动启动服务
   auto_start_on_failure: true
-
-# --- 测试用例同步协议配置（Test Case Sync Protocol）---
-# 在阶段 5 补充测试中执行，防止代码变更影响 DOM 后测试引用已删除选择器
-test_sync:
-  # 是否启用测试用例同步协议
-  enabled: true
-  # 测试文件 glob 匹配模式列表
-  test_file_patterns:
-    - "**/test_*.py"
-    - "**/test_*.ts"
-    - "**/*.spec.ts"
-    - "**/*.test.ts"
-  # 选择器变更识别正则列表（class / id / 属性 / data-testid）
-  selector_patterns:
-    - '\.[-\w]+'
-    - '#[-\w]+'
-    - '[class="[^"]+"]'
-    - 'data-testid="[^"]+"'
-  # 是否要求代码与测试同 commit 提交
-  require_same_commit: true
-  # 是否禁止 except 分支静默吞错
-  silent_failure_forbidden: true
-  # 失效选择器容忍阈值（0 = 零容忍）
-  stale_selector_threshold: 0
 
 # --- 失败分类协议配置（Failure Classification Protocol）---
 # 在阶段 6 结果汇总中执行，标准化测试失败的分类与处理流程
@@ -858,7 +779,7 @@ failure_classification:
   rules:
     - type: "connection_refused"
       pattern: "ERR_CONNECTION_REFUSED|ECONNREFUSED"
-      suggestion: "运行 karpathy-wiki/scripts/启动服务.bat 启动服务"
+      suggestion: "运行 karpathy-wiki/scripts/start-service.bat 启动服务"
     - type: "selector_not_found"
       pattern: "TimeoutError.*waiting for selector|Element not found"
       suggestion: "检查代码是否删除了该选择器，同步更新测试用例"
@@ -879,7 +800,7 @@ failure_classification:
       suggestion: "检查 config.yaml 与 defaults.yaml 配置项"
   # 失败类型对应的修复建议映射
   suggestions:
-    connection_refused: "运行 karpathy-wiki/scripts/启动服务.bat 启动服务"
+    connection_refused: "运行 karpathy-wiki/scripts/start-service.bat 启动服务"
     selector_not_found: "检查代码是否删除了该选择器，同步更新测试用例"
     assertion_failed: "检查断言预期值是否与实际行为一致"
     timeout: "增加超时时间或优化等待策略"
@@ -951,38 +872,6 @@ structure_verification:
     backend: "services/api/"
     frontend: "packages/web/"
 
-# 搜索结果交叉验证参数
-search_cross_verification:
-  primary_tools: ["Glob", "Grep", "LS"]
-  fallback_tools: ["PowerShell Test-Path", "PowerShell Resolve-Path"]
-  ls_truncate_threshold: 40000
-  cross_verify_required: true
-  glob_escape_chars: ["+", "(", ")", "[", "]"]
-  grep_content_patterns:
-    - "export class {name}"
-    - "export.*{name}"
-  verification_matrix:
-    Glob:
-      applicable: "文件名模式匹配"
-      limitation: "路径含特殊字符时可能转义失败"
-    Grep:
-      applicable: "文件内容搜索"
-      limitation: "无法搜索未入库的文件"
-    LS:
-      applicable: "目录列表"
-      limitation: "输出超长时可能截断（>40000字符）"
-    Test-Path:
-      applicable: "精确路径存在性"
-      limitation: "需已知完整路径"
-
-# ============================================================
-# 以下为 Tauri 2.x 桌面应用集成测试复盘补充配置（第九批次）
-# 覆盖 Tauri 构建/启动/窗口/invoke 权限/错误诊断/磁盘空间/Console 日志
-# 所有参数可配置，避免硬编码项目特定路径、命令名、URL 模式或阈值
-# 适配不同 Tauri 项目时仅需修改本批次配置，无需改测试代码
-# 详见 references/tauri-desktop-testing.md
-# ============================================================
-
 # --- Tauri 桌面应用配置 ---
 # Tauri 2.x 桌面应用构建/启动/窗口验证参数
 # 与 SKILL.md 主流程的标准 6 阶段测试并行或串行执行
@@ -994,7 +883,7 @@ tauri:
   # src-tauri 目录路径（相对项目根目录，含 Cargo.toml 与 tauri.conf.json）
   src_tauri_dir: "karpathy-wiki/src-tauri"
   # SPA 构建脚本路径（相对项目根目录，通常为 npm run build 的封装 bat）
-  build_script_path: "karpathy-wiki/scripts/前端构建.bat"
+  build_script_path: "karpathy-wiki/scripts/build-web.bat"
   # 期望的窗口标题关键词（用于验证主窗口已创建并显示正确内容）
   expected_window_title: "Karpathy"
   # Tauri 应用启动超时（毫秒），超时后判定启动失败
@@ -1038,18 +927,6 @@ spa:
   # 是否强制重建（true 时跳过时间戳验证，直接执行构建）
   force_rebuild: false
 
-# --- 后端健康检查配置 ---
-# Tauri 启动后轮询后端服务健康检查端点
-health_check:
-  # 健康检查端点 URL（含协议、主机、端口、路径）
-  endpoint: "http://localhost:3000/health"
-  # 重试次数（每次间隔 timeout 毫秒）
-  retry_count: 30
-  # 每次重试间隔（毫秒）
-  timeout: 1000
-  # 期望的 HTTP 状态码
-  expected_status: 200
-
 # --- invoke 权限验证配置 ---
 # Tauri 2.x invoke 调用的三层权限验证
 # 详见 references/invoke-permission-verification.md
@@ -1075,46 +952,6 @@ invoke:
   capabilities_glob: "capabilities/*.json"
   # Cargo.toml 路径（相对 src_tauri_dir，用于第 1 层插件依赖检查）
   cargo_toml_path: "Cargo.toml"
-
-# --- 磁盘空间检查配置 ---
-# Rust 编译产物与 node_modules 占用大，必须预检磁盘空间
-disk_space:
-  # debug 模式编译所需最小磁盘空间（GB）
-  debug_min_gb: 5
-  # release 模式编译所需最小磁盘空间（GB）
-  release_min_gb: 10
-  # 编译产物目录大小阈值（GB），超过时告警清理
-  cleanup_threshold_gb: 20
-
-# --- Console 日志采集配置 ---
-# Tauri stderr 与 DevTools Console 日志的关键词过滤与错误分类
-console_log:
-  # 是否启用 Console 日志采集
-  enabled: true
-  # 日志前缀过滤列表（仅采集含这些前缀的日志行，为空时采集全部）
-  prefixes:
-    - "[Tauri]"
-    - "[IPC]"
-    - "[Plugin]"
-  # 错误关键词列表（命中即判定失败，并触发错误分类）
-  # 这些关键词与 failure_classification.rules 的 pattern 对齐
-  error_keywords:
-    - "Plugin not found"
-    - "not allowed"
-    - "URL: local"
-    - "command not found"
-    - "serialization error"
-    - "panicked at"
-    - "thread 'main' has overflowed its stack"
-
-# ============================================================
-# 以下为 Skill 导入模块 E2E 测试复盘补充配置（第十批次）
-# 覆盖 Playwright 等待策略、测试选择器优先级、Vite 缓存清理
-# 基于 networkidle 超时 / placeholder 误匹配 / Vite 缓存旧版本三类失败点复盘提炼
-# 所有参数可配置，避免硬编码
-# ============================================================
-
-# ===== Playwright 等待策略配置 =====
 # 复盘来源：登录页背景图 url(${bgImage}) 持续加载导致 networkidle 永远不触发
 # 规则：有持续加载资源的页面禁用 networkidle，改用 domcontentloaded + 显式 wait_for_selector
 playwright_wait_strategy:
@@ -1188,3 +1025,1006 @@ vite_cache_cleanup:
     - "Failed to fetch"
     - "module parse error"
     - "unexpected token"
+
+# ============================================================
+# 以下为 FR-11 看板/日历视图测试补充配置（第十一批次）
+# 验证 Browse.vue 三视图切换、看板分列、日历分组、视图状态持久化
+# 所有参数可配置，避免硬编码
+# ============================================================
+
+# --- FR-11 看板/日历视图测试配置 ---
+fr11_browse_views_tests:
+  # 是否启用 FR-11 测试
+  enabled: true
+  # 测试页面 key（对应 navigation.pages 中的 key）
+  test_page_key: "browse"
+  # 视图切换器选择器
+  view_switcher_selector: ".view-switcher"
+  # 三个视图按钮的 radio value
+  views:
+    tree:
+      label: "目录"
+      radio_value: "tree"
+      # 切换后应出现的特征元素
+      expected_selector: ".tree-area, [class*='tree']"
+    kanban:
+      label: "看板"
+      radio_value: "kanban"
+      # 看板视图特征：有数据时为 kanban-scroll/kanban-col；空态为 tree-empty
+      # 为什么包含 tree-empty：vault 为空或 API 限流时 allPages 为空，仍需确认视图已切换
+      expected_selector: ".kanban-scroll, .kanban-col, .tree-empty"
+    calendar:
+      label: "日历"
+      radio_value: "calendar"
+      # 日历视图特征：日期分组或空态提示
+      expected_selector: ".calendar-list, .calendar-group, .tree-empty"
+  # 看板列配置（与 Browse.vue KANBAN_COLUMNS 对齐）
+  kanban_columns:
+    - { key: "entity", label: "实体" }
+    - { key: "concept", label: "概念" }
+    - { key: "comparison", label: "对比" }
+    - { key: "query", label: "问答" }
+    - { key: "qa", label: "业务问答" }
+    - { key: "solution", label: "方案沉淀" }
+    - { key: "other", label: "未分类" }
+  # 视图状态持久化 localStorage key
+  state_persistence_key: "karpathy:browseView"
+  # 切换后等待视图渲染的最大时间（毫秒）
+  view_render_wait_ms: 1500
+  # API 端点：返回扁平化页面列表
+  pages_api_path: "/api/files/pages"
+  # 失败时是否截图取证
+  screenshot_on_fail: true
+
+# ============================================================
+# 以下为 FR-14-2 Prompt IDE 测试补充配置（第十二批次）
+# 验证 Config.vue Prompt IDE tab：prompt 列表/编辑器/预览/试运行
+# 所有参数可配置，避免硬编码
+# ============================================================
+
+# --- FR-14-2 Prompt IDE 测试配置 ---
+fr14_prompt_ide_tests:
+  # 是否启用 FR-14-2 测试
+  enabled: true
+  # 测试页面 key（对应 navigation.pages 中的 key）
+  test_page_key: "config"
+  # Prompt IDE tab 标签文本（与 Config.vue el-tab-pane label 对齐）
+  tab_label: "Prompt IDE"
+  # tab 的 name 属性（与 Config.vue activeTab 类型 'prompts' 对齐）
+  tab_name: "prompts"
+  # 切换 tab 后等待渲染的时间（毫秒）
+  tab_render_wait_ms: 1500
+  # API 端点配置
+  api:
+    # 列出所有可用 prompt 文件
+    list_endpoint: "/api/prompts"
+    # 读取指定 prompt 文件内容（{name} 占位符运行时替换）
+    read_endpoint: "/api/prompts/{name}"
+    # 保存指定 prompt 文件内容
+    save_endpoint: "/api/prompts/{name}"
+    # 试运行端点（SSE 流式返回）
+    test_run_endpoint: "/api/prompts/test-run"
+  # 默认测试用 prompt 文件名（compile.md 优先，便于试运行）
+  default_prompt_name: "compile.md"
+  # 主要 UI 选择器（与 Config.vue Prompt IDE 模板 class 对齐）
+  selectors:
+    # 左侧 prompt 文件列表容器
+    prompt_list_container: ".prompt-list-container"
+    # 单个 prompt 列表项
+    prompt_item: ".prompt-item"
+    # 选中的 prompt 列表项
+    prompt_item_active: ".prompt-item.active"
+    # 中间编辑器容器
+    prompt_editor_container: ".prompt-editor-container"
+    # 编辑器占位提示（未选择 prompt 时显示）
+    editor_placeholder: ".editor-placeholder"
+    # 右侧预览容器
+    prompt_preview_container: ".prompt-preview-container"
+    # 预览内容区
+    preview_content: ".preview-content"
+    # 底部试运行区域
+    test_run_section: ".test-run-section"
+    # 试运行输入框（el-input textarea）
+    test_input: ".test-input textarea"
+    # 试运行结果区
+    test_results: ".test-results"
+    # 试运行空态提示
+    test_empty: ".test-empty"
+    # 试运行按钮（"开始试运行" / "停止"）
+    test_run_button: ".test-run-section .neon-btn-primary"
+    # 清空结果按钮
+    clear_result_button: ".test-run-section .neon-btn"
+    # 保存按钮
+    save_button: ".prompt-editor-container .neon-btn"
+    # 脏指示器
+    dirty_indicator: ".prompt-editor-container .dirty-indicator"
+  # 失败时是否截图取证
+  screenshot_on_fail: true
+
+# ============================================================
+# 以下为 FR-15-3/4 类型筛选与 compile 推断 type 测试补充配置（第十三批次）
+# 验证 Browse.vue type 筛选 UI + 后端 search?type= 扩展 + compile 推断 type 字段
+# 所有参数可配置，避免硬编码
+# ============================================================
+
+# --- FR-15-3/4 类型筛选与推断测试配置 ---
+fr15_type_tests:
+  # 是否启用 FR-15-3/4 测试
+  enabled: true
+  # 测试页面 key（对应 navigation.pages 中的 key）
+  test_page_key: "browse"
+  # 合法的 page type 枚举（与 SCHEMA.md / compile.md / compile-workflow.ts VALID_PAGE_TYPES 对齐）
+  valid_types:
+    - "entity"
+    - "concept"
+    - "comparison"
+    - "query"
+    - "qa"
+    - "solution"
+  # FR-15-3：API 端点验证（GET /api/search?type=concept）
+  api:
+    search_endpoint: "/api/search"
+    # 测试用 type 值（concept 是 vault 中数量最多的类型，命中率高）
+    test_type: "concept"
+    # 期望返回的 hit 字段（必须包含 frontmatter.type）
+    expected_hit_fields:
+      - "path"
+      - "frontmatter"
+  # FR-15-3：前端 UI 验证
+  selectors:
+    # type 过滤下拉选择器（匹配 filter-bar 内所有 el-select，测试代码用 nth(2) 选第 3 个）
+    # 为什么用 nth(2) 在测试代码中定位：source/status/type filter 共 3 个 el-select，
+    # 无专属 class，placeholder 不在 input 上，按 DOM 顺序定位最稳定
+    type_filter_select: ".filter-bar .el-select"
+    # type 过滤下拉触发器（el-select__wrapper 是 Element Plus 内部稳定 class）
+    type_filter_trigger: ".filter-bar .el-select .el-select__wrapper"
+    # type 过滤下拉项（el-select-dropdown__item，全局渲染需配合 .visible 选择器）
+    type_filter_item: ".el-select-dropdown__item"
+    # 全部类型选项文本
+    all_types_label: "全部类型"
+    # 搜索按钮（el-input 的 clearable 后无独立搜索按钮，回车触发搜索）
+    # 这里改为验证搜索结果区的 search-header（搜索执行后渲染）
+    search_result_header: ".search-header"
+    # 搜索结果项
+    search_hit_item: ".search-hit-item"
+  # FR-15-4：compile 推断 type 字段验证
+  compile_inference:
+    # compile prompt 文件路径（用于验证 type 枚举已写入）
+    prompt_path: "/api/prompts/compile.md"
+    # compile prompt 中必须包含的 type 枚举字符串
+    required_type_strings:
+      - "entity"
+      - "concept"
+      - "comparison"
+      - "query"
+      - "qa"
+      - "solution"
+    # 后端 compile-workflow.ts 路径（用于代码静态检查 ensurePageTypeField 函数）
+    workflow_file: "karpathy-wiki/api/src/workflows/compile-workflow.ts"
+    # 必须包含的关键函数/常量名
+    required_symbols:
+      - "VALID_PAGE_TYPES"
+      - "DIR_TO_TYPE"
+      - "ensurePageTypeField"
+  # 切换后等待视图渲染的最大时间（毫秒）
+  ui_render_wait_ms: 1500
+  # 失败时是否截图取证
+  screenshot_on_fail: true
+
+# ============================================================
+# FR-15-5 实体图谱视图测试配置（第十四批次）
+# 验证 Graph.vue 类型过滤 + 实体子图模式 + 6 目录图例 + 节点右键跳转
+# ============================================================
+fr15_5_graph_tests:
+  enabled: true
+  # 测试页面 key（对应 navigation.pages 中的 key=graph）
+  test_page_key: "graph"
+  # 列表视图切换按钮文本（用于切换到图谱视图）
+  graph_view_label: "图谱视图"
+  # 6 目录图例期望文本（必须全部出现）
+  legend_labels:
+    - "实体"
+    - "概念"
+    - "对比"
+    - "问答"
+    - "业务问答"
+    - "方案沉淀"
+  # 类型筛选下拉期望选项（DIR_OPTIONS，7 项）
+  type_options:
+    - "全部类型"
+    - "实体"
+    - "概念"
+    - "对比"
+    - "问答"
+    - "业务问答"
+    - "方案沉淀"
+  # 实体子图按钮文本（两种状态）
+  entity_button_enable: "实体子图"
+  entity_button_disable: "退出实体子图"
+  selectors:
+    # 类型过滤工具条（仅图谱视图显示）
+    filter_bar: ".graph-filter-bar"
+    # 类型筛选 el-select
+    type_select: ".graph-filter-bar .graph-type-select"
+    # el-select 触发器（点击展开下拉）
+    type_select_trigger: ".graph-filter-bar .el-select__wrapper"
+    # 下拉选项
+    type_option_item: ".el-select-dropdown__item"
+    # 实体子图按钮（neon-btn 文本匹配）
+    entity_btn: ".graph-filter-bar .neon-btn"
+    # 图例条
+    legend_bar: ".legend-bar"
+    # 单个图例项
+    legend_item: ".legend-item"
+    # 图例色点
+    legend_dot: ".legend-dot"
+    # 右键菜单
+    ctx_menu: ".ctx-menu"
+    # 右键菜单"打开笔记"项
+    ctx_open_note: ".ctx-item:has-text('打开笔记')"
+  # /api/graph 端点（首次访问较慢，给 60s 超时）
+  api:
+    graph_endpoint: "/api/graph"
+    timeout_ms: 60000
+  ui_render_wait_ms: 2000
+
+# ============================================================
+# FR-15-6 实体关系抽取测试配置（第十五批次）
+# 验证 compile.md prompt 指示 LLM 抽取 entities 字段 + ensureEntitiesField 兜底
+# ============================================================
+fr15_6_entity_extraction_tests:
+  enabled: true
+  # FR-15-6：compile.md prompt 静态检查
+  compile_prompt:
+    prompt_path: "/api/prompts/compile.md"
+    # prompt 中必须包含的关键字符串（指示 LLM 抽取 entities 字段）
+    required_strings:
+      - "entities"
+      - "relation"
+      - "leader_of"
+      - "member_of"
+      - "name"
+      - "FR-15-6"
+    # 必须包含的步骤描述
+    required_steps:
+      - "抽取实体关系"
+      - "frontmatter"
+  # FR-15-6：SCHEMA.md 静态检查
+  schema_file:
+    # 相对项目根的路径
+    relative_path: "karpathy-wiki/data/vault/SCHEMA.md"
+    required_strings:
+      - "entities"
+      - "relation"
+      - "leader_of"
+      - "FR-15-6"
+  # FR-15-6：compile-workflow.ts 静态检查
+  workflow_file:
+    relative_path: "karpathy-wiki/api/src/workflows/compile-workflow.ts"
+    # 必须包含的关键函数/符号
+    required_symbols:
+      - "ensureEntitiesField"
+      - "entities"
+      - "FR-15-6"
+      - "wikilinkNames"
+      - "validEntities"
+  # FR-15-6：write_file handler 调用 ensureEntitiesField 验证
+  write_handler_check:
+    # 验证 write_file handler 中调用了 ensureEntitiesField
+    required_call_pattern: "ensureEntitiesField"
+
+# ============================================================
+# FR-13-1 PDF 解析入库测试配置（第十六批次）
+# 验证 pdf-convert.ts 转换工具 + compile-workflow.ts 集成 + pdf-parse 依赖
+# ============================================================
+fr13_1_pdf_ingest_tests:
+  enabled: true
+  # FR-13-1：pdf-convert.ts 静态检查
+  convert_file:
+    relative_path: "karpathy-wiki/api/src/utils/pdf-convert.ts"
+    required_strings:
+      - "convertPdfToMarkdown"
+      - "pdf-parse"
+      - "createRequire"
+      - "FR-13-1"
+      - "SCAN_THRESHOLD"
+    required_exports:
+      - "export async function convertPdfToMarkdown"
+  # FR-13-1：compile-workflow.ts 集成检查
+  workflow_file:
+    relative_path: "karpathy-wiki/api/src/workflows/compile-workflow.ts"
+    required_strings:
+      - "convertPdfToMarkdown"
+      - "pdf-convert"
+      - "ext === 'pdf'"
+      - "FR-13-1"
+  # FR-13-1：package.json 依赖检查
+  package_json:
+    relative_path: "karpathy-wiki/api/package.json"
+    required_strings:
+      - "pdf-parse"
+  # FR-13-1：单元测试文件检查
+  test_file:
+    relative_path: "karpathy-wiki/api/test/pdf-convert.test.ts"
+    required_strings:
+      - "convertPdfToMarkdown"
+      - "describe"
+      - "vitest"
+
+# ============================================================
+# FR-13-2 OCR 入库测试配置（第十七批次）
+# 验证 ocr-convert.ts OCR 工具 + compile-workflow.ts 图片分支 + types.ts OcrConfig 接口
+# ============================================================
+fr13_2_ocr_ingest_tests:
+  enabled: true
+  # FR-13-2：ocr-convert.ts 静态检查
+  ocr_convert_file:
+    relative_path: "karpathy-wiki/api/src/utils/ocr-convert.ts"
+    required_strings:
+      - "ocrImageToMarkdown"
+      - "resolveOcrConfig"
+      - "OCR_SUPPORTED_MIME"
+      - "FR-13-2"
+      - "image_url"
+      - "OcrConfig"
+    required_exports:
+      - "export async function ocrImageToMarkdown"
+      - "export function resolveOcrConfig"
+      - "export const OCR_SUPPORTED_MIME"
+  # FR-13-2：types.ts OcrConfig 接口检查
+  types_file:
+    relative_path: "karpathy-wiki/api/src/types.ts"
+    required_strings:
+      - "ocr?: OcrConfig"
+      - "export interface OcrConfig"
+      - "FR-13-2"
+  # FR-13-2：config.ts 合并逻辑检查
+  config_file:
+    relative_path: "karpathy-wiki/api/src/config.ts"
+    required_strings:
+      - "ocr: parsed.ocr"
+      - "defaults.ocr"
+      - "FR-13-2"
+  # FR-13-2：compile-workflow.ts 图片分支检查
+  workflow_file:
+    relative_path: "karpathy-wiki/api/src/workflows/compile-workflow.ts"
+    required_strings:
+      - "ocrImageToMarkdown"
+      - "resolveOcrConfig"
+      - "OCR_SUPPORTED_MIME"
+      - "FR-13-2"
+  # FR-13-2：单元测试文件检查
+  test_file:
+    relative_path: "karpathy-wiki/api/test/ocr-convert.test.ts"
+    required_strings:
+      - "ocrImageToMarkdown"
+      - "resolveOcrConfig"
+      - "describe"
+      - "vitest"
+
+# ============================================================
+# FR-09-3 Podcast (Audio Overview) 测试配置（第十八批次）
+# 验证 podcast-workflow.ts + routes/podcast.ts + types.ts 接口 + config.ts 合并 + index.ts 注册
+# ============================================================
+fr09_3_podcast_tests:
+  enabled: true
+  # FR-09-3：podcast-workflow.ts 静态检查
+  podcast_workflow_file:
+    relative_path: "karpathy-wiki/api/src/workflows/podcast-workflow.ts"
+    required_strings:
+      - "generatePodcast"
+      - "parseScriptSegments"
+      - "PodcastConfig"
+      - "PodcastResult"
+      - "FR-09-3"
+      - "synthesizeSegment"
+      - "Host A"
+      - "Host B"
+    required_exports:
+      - "export async function generatePodcast"
+      - "export function parseScriptSegments"
+  # FR-09-3：podcast.md prompt 文件检查
+  podcast_prompt_file:
+    relative_path: "karpathy-wiki/api/src/prompts/podcast.md"
+    required_strings:
+      - "Host A"
+      - "Host B"
+      - "podcast"
+      - "TTS"
+  # FR-09-3：types.ts PodcastConfig/PodcastResult 接口检查
+  types_file:
+    relative_path: "karpathy-wiki/api/src/types.ts"
+    required_strings:
+      - "podcast?: PodcastConfig"
+      - "export interface PodcastConfig"
+      - "export interface PodcastResult"
+      - "FR-09-3"
+      - "ttsProvider"
+      - "ttsApiKey"
+      - "audioFiles"
+      - "archivePath"
+  # FR-09-3：config.ts 合并逻辑检查
+  config_file:
+    relative_path: "karpathy-wiki/api/src/config.ts"
+    required_strings:
+      - "podcast: parsed.podcast"
+      - "defaults.podcast"
+      - "FR-09-3"
+  # FR-09-3：routes/podcast.ts 路由文件检查
+  route_file:
+    relative_path: "karpathy-wiki/api/src/routes/podcast.ts"
+    required_strings:
+      - "registerPodcastRoute"
+      - "/api/podcast"
+      - "adapter.podcast"
+      - "scopeFilter"
+      - "FR-09-3"
+    required_exports:
+      - "export function registerPodcastRoute"
+  # FR-09-3：index.ts 注册检查
+  index_file:
+    relative_path: "karpathy-wiki/api/src/index.ts"
+    required_strings:
+      - "registerPodcastRoute"
+      - "routes/podcast.js"
+  # FR-09-3：harness-adapter.ts podcast 方法检查
+  adapter_file:
+    relative_path: "karpathy-wiki/api/src/engine/harness-adapter.ts"
+    required_strings:
+      - "generatePodcast"
+      - "async podcast"
+      - "PodcastResult"
+  # FR-09-3：prompts.ts 白名单检查
+  prompts_whitelist_file:
+    relative_path: "karpathy-wiki/api/src/routes/prompts.ts"
+    required_strings:
+      - "podcast.md"
+  # FR-09-3：单元测试文件检查
+  test_file:
+    relative_path: "karpathy-wiki/api/test/podcast-workflow.test.ts"
+    required_strings:
+      - "parseScriptSegments"
+      - "generatePodcast"
+      - "describe"
+      - "vitest"
+      - "scopeFilter"
+
+# ============================================================
+# 以下为 v3 媒体生成工具测试补充配置（第十九批次）
+# 验证 media-generation-workflow.ts + routes/media.ts + types.ts 接口
+# + harness-adapter.ts generateVideo/pollVideoTask + index.ts 注册
+# + 前端 MultimodalOutputCard.vue image/ppt 渲染 + Query.vue 视频对话框
+# 覆盖 PPT 生成（Marp Markdown）/ 图像生成（Agnes Image）/ 视频生成（Agnes Video 异步任务）
+# ============================================================
+
+v3_media_tests:
+  # 是否启用 v3 媒体生成工具测试
+  enabled: true
+  # v3：media-generation-workflow.ts 静态检查
+  media_workflow_file:
+    relative_path: "karpathy-wiki/api/src/workflows/media-generation-workflow.ts"
+    required_strings:
+      - "generateImage"
+      - "generatePpt"
+      - "generateVideo"
+      - "pollVideoTask"
+      - "MediaConfig"
+      - "VideoTaskResult"
+      - "v3"
+    required_exports:
+      - "export async function generateImage"
+      - "export async function generatePpt"
+      - "export async function generateVideo"
+      - "export async function pollVideoTask"
+  # v3：types.ts MediaConfig/VideoTaskResult 接口检查
+  types_file:
+    relative_path: "karpathy-wiki/api/src/types.ts"
+    required_strings:
+      - "media?: MediaConfig"
+      - "export interface MediaConfig"
+      - "export interface VideoTaskResult"
+      - "v3"
+      - "agnes"
+  # v3：config.ts 合并逻辑检查
+  config_file:
+    relative_path: "karpathy-wiki/api/src/config.ts"
+    required_strings:
+      - "media: parsed.media"
+      - "defaults.media"
+  # v3：routes/media.ts 路由文件检查
+  route_file:
+    relative_path: "karpathy-wiki/api/src/routes/media.ts"
+    required_strings:
+      - "registerMediaRoute"
+      - "/api/media/video"
+      - "POST"
+      - "GET"
+      - "taskId"
+    required_exports:
+      - "export function registerMediaRoute"
+  # v3：index.ts 注册检查
+  index_file:
+    relative_path: "karpathy-wiki/api/src/index.ts"
+    required_strings:
+      - "registerMediaRoute"
+      - "routes/media.js"
+  # v3：harness-adapter.ts generateVideo/pollVideoTask 方法检查
+  adapter_file:
+    relative_path: "karpathy-wiki/api/src/engine/harness-adapter.ts"
+    required_strings:
+      - "generateVideo"
+      - "pollVideoTask"
+      - "VideoTaskResult"
+  # v3：前端 MultimodalOutputCard.vue image/ppt 渲染检查
+  multimodal_card_file:
+    relative_path: "karpathy-wiki/frontend/src/components/MultimodalOutputCard.vue"
+    required_strings:
+      - "image"
+      - "ppt"
+      - "marp-core"
+      - "Marp"
+      - "Picture"
+      - "Document"
+  # v3：前端 Query.vue 视频对话框检查
+  query_view_file:
+    relative_path: "karpathy-wiki/frontend/src/views/Query.vue"
+    required_strings:
+      - "videoDialogVisible"
+      - "submitVideoTask"
+      - "startVideoPolling"
+      - "stopVideoPolling"
+      - "closeVideoDialog"
+      - "resetVideoDialog"
+      - "/media/video"
+      - "video-player"
+  # v3：前端 types.ts ChatMessage image/ppt 字段检查
+  frontend_types_file:
+    relative_path: "karpathy-wiki/frontend/src/types.ts"
+    required_strings:
+      - "image?:"
+      - "ppt?:"
+      - "VideoTaskResult"
+      - "'image'"
+      - "'ppt'"
+  # v3：前端 package.json marp-core 依赖检查
+  frontend_package_json:
+    relative_path: "karpathy-wiki/frontend/package.json"
+    required_strings:
+      - "@marp-team/marp-core"
+  # v3：前端 stores/query.ts currentImage/currentPpt 状态检查
+  frontend_store_file:
+    relative_path: "karpathy-wiki/frontend/src/stores/query.ts"
+    required_strings:
+      - "currentImage"
+      - "currentPpt"
+      - "setImage"
+      - "setPpt"
+  # v3：前端 utils/sse.ts image/ppt 事件处理检查
+  frontend_sse_file:
+    relative_path: "karpathy-wiki/frontend/src/utils/sse.ts"
+    required_strings:
+      - "image"
+      - "ppt"
+      - "setImage"
+      - "setPpt"
+  # v3：API 端点验证（视频任务创建需鉴权，仅验证路由可达性）
+  api:
+    # 视频任务创建端点（POST，无 prompt 参数返回 400，验证路由已注册）
+    video_create_endpoint: "/api/media/video"
+    # 视频任务查询端点（GET，无效 taskId 返回 404，验证路由已注册）
+    video_status_endpoint: "/api/media/video/test-invalid-task-id"
+    # 期望的状态码（路由存在但参数校验失败）
+    expected_status_create: 400
+    expected_status_query: 404
+
+# ============================================================
+# 以下为编码规范测试补充配置（第二十批次）
+# 覆盖控件分层、第三方库错误防护、多资源并行加载、超时阈值链式匹配、折叠面板事件冲突
+# 基于编码规范提炼，所有参数可配置，避免硬编码
+# ============================================================
+
+# --- 控件分层测试配置 ---
+# 验证工具栏控件 > 5 时分层，折叠面板展开/收起动画与触发按钮激活状态
+# 复盘来源：工具栏控件过多导致布局拥挤，需折叠面板收纳次要控件
+control_layering_tests:
+  # 是否启用控件分层测试
+  enabled: true
+  # 需要测试的页面 key（对应 navigation.pages 中的 key）
+  test_pages: ["query"]
+  # 折叠/展开触发按钮选择器
+  toggle_selector: ".advanced-toggle"
+  # 折叠面板容器选择器
+  panel_selector: ".advanced-panel"
+  # Transition 动画持续时间（毫秒），等待动画完成后再验证状态
+  animation_duration_ms: 300
+  # 触发按钮展开状态下的激活 CSS 类名
+  trigger_active_class: "active"
+  # 失败时是否截图取证
+  screenshot_on_fail: true
+
+# --- 第三方库错误防护测试配置 ---
+# 验证 mermaid/katex 等库的三层防护：库级配置 + LLM 内容预校验 + CSS 兜底
+# 复盘来源：LLM 输出错误语法导致 mermaid 渲染崩溃，显示 Syntax error in text
+third_party_error_guard_tests:
+  # 是否启用第三方库错误防护测试
+  enabled: true
+  # 需要测试的第三方库列表（库名 + 配置项）
+  test_libraries:
+    - name: "mermaid"
+      # 库级错误抑制配置键名（如 suppressErrors）
+      suppress_config_key: "suppressErrors"
+      # 解析方法名（用于验证 try/catch 包裹）
+      parse_method_name: "mermaid.render"
+      # 错误时应用的 CSS 兜底类名
+      error_css_class: "mermaid-error-fallback"
+    - name: "katex"
+      suppress_config_key: "throwOnError"
+      parse_method_name: "katex.renderToString"
+      error_css_class: "katex-error-fallback"
+  # 注入的错误输入（用于验证预校验拦截）
+  # 使用单引号避免 YAML 双引号转义问题（\i 等非合法转义序列）
+  invalid_inputs:
+    - 'graph TD
+  A --|invalid|> B'
+    - '$$\invalid syntax$$'
+    - '```mermaid
+broken syntax
+```'
+  # 库级抑制配置键名列表（验证已设置）
+  suppress_config_keys:
+    - "suppressErrors"
+    - "throwOnError"
+  # 解析方法名列表（验证被 try/catch 包裹）
+  parse_method_names:
+    - "mermaid.render"
+    - "katex.renderToString"
+  # 错误兜底 CSS 类名列表
+  error_css_classes:
+    - "mermaid-error-fallback"
+    - "katex-error-fallback"
+  # 是否要求错误容器在下次渲染时被清空
+  require_container_clear: true
+  # 失败时是否截图取证
+  screenshot_on_fail: true
+
+# --- 多资源并行加载测试配置 ---
+# 验证 MCP 工具 Promise.allSettled 并行加载与单失败降级
+# 复盘来源：单个 MCP 工具加载失败导致整个 AI 回复阻塞
+parallel_loading_tests:
+  # 是否启用并行加载测试
+  enabled: true
+  # 资源加载模式列表（用于识别并行加载场景）
+  resource_patterns:
+    - "Promise.allSettled"
+    - "Promise.all"
+    - "loadMcpTools"
+    - "loadResources"
+  # 必须使用的并行加载包装器（allSettled 不会因单个失败而中断）
+  required_wrapper: "Promise.allSettled"
+  # 是否要求错误被收集（而非中断流程）
+  error_collection_required: true
+  # 是否要求有降级路径（如使用兜底数据）
+  degradation_path_required: true
+  # 总超时（毫秒），所有资源加载的总时限
+  total_timeout_ms: 30000
+  # 模拟单个资源加载失败的测试用例
+  failure_simulation:
+    - name: "单个 MCP 工具加载失败"
+      simulate: "reject_one_resource"
+      expected: "其他资源正常加载，错误被收集"
+    - name: "全部资源加载失败"
+      simulate: "reject_all_resources"
+      expected: "降级为兜底数据，不崩溃"
+  # 失败时是否截图取证
+  screenshot_on_fail: true
+
+# --- 超时阈值链式匹配测试配置 ---
+# 验证前端 120s > 后端 MCP 30s 的递增覆盖关系
+# 复盘来源：前后端超时阈值不匹配导致 AI 回复被丢弃
+timeout_chain_tests:
+  # 是否启用超时阈值链式测试
+  enabled: true
+  # 超时层级顺序（从前端到后端，每层超时应递增覆盖下层）
+  layer_order:
+    - name: "frontend"
+      timeout_ms: 120000
+      description: "前端用户感知超时（120s，最长）"
+    - name: "backend_api"
+      timeout_ms: 60000
+      description: "后端 API 网关超时（60s）"
+    - name: "backend_mcp"
+      timeout_ms: 30000
+      description: "后端 MCP 工具调用超时（30s，最短）"
+  # 覆盖倍数（上层超时 >= 下层超时 × margin_multiplier）
+  margin_multiplier: 1.5
+  # 是否要求部分结果被保留（而非全部丢弃）
+  partial_result_required: true
+  # 是否要求有降级路径
+  degradation_path_required: true
+  # 模拟下层超时的时间（毫秒），用于验证上层不中断
+  simulate_timeout_ms: 30000
+  # 超时链路验证报告输出路径（可选）
+  report_output_path: ""
+  # 失败时是否截图取证
+  screenshot_on_fail: true
+
+# --- 折叠面板事件冲突测试配置 ---
+# 验证 click outside 与 el-dropdown teleport 的事件传播处理
+# 复盘来源：折叠面板内 dropdown 点击后面板误关闭
+folding_panel_event_tests:
+  # 是否启用折叠面板事件冲突测试
+  enabled: true
+  # 需要测试的页面 key（对应 navigation.pages 中的 key）
+  test_pages: ["query", "config"]
+  # 折叠面板容器选择器
+  panel_selector: ".advanced-panel"
+  # click outside 排除的选择器列表（这些元素点击不应触发面板关闭）
+  click_outside_exclude_selectors:
+    - ".el-dropdown"
+    - ".el-dropdown-menu"
+    - ".el-popper"
+    - ".el-select-dropdown"
+  # teleport 组件选择器列表（teleport 到 body 的组件不应触发面板 click outside）
+  teleport_selectors:
+    - ".el-dropdown__popper"
+    - ".el-popper"
+    - ".el-select__popper"
+  # el-dropdown 必须配置的 props 列表
+  required_dropdown_props:
+    - "teleported"
+    - "append-to-body"
+  # 必须应用的事件修饰符列表
+  required_event_modifiers:
+    - "@mousedown.stop"
+    - "@click.stop"
+  # 失败时是否截图取证
+  screenshot_on_fail: true
+
+# ============================================================
+# 以下为 v3 媒体生成工具复盘测试补充配置（第二十一批次）
+# 覆盖外部 API 集成契约、超时分级、归档 frontmatter、长任务状态机、外部 API 不可达降级
+# 基于 CODING-056~067 编码规范提炼，所有参数可配置，避免硬编码
+# 对应 wiki-code-dev 的 CODING-056/057/059/060/061/063/064/065 规则
+# ============================================================
+
+# --- v3 媒体生成工具测试配置（复盘提炼）---
+# 默认启用，覆盖媒体生成（图像/PPT/视频）全链路测试
+# 与已存在的 v3_media_tests 互补：v3_media_tests 侧重 API 路由可达性，
+# 本配置块侧重编码规范层面的契约/超时/归档/状态机/降级验证
+media_generation_tests:
+  # 是否启用媒体生成工具测试
+  enabled: true
+
+  # --- 外部 API 集成契约测试（对应 CODING-056）---
+  # 验证 fetchWithDiagnostics 包装 + 字段双重路径兼容 + 类型显式转换
+  external_api_contract:
+    enabled: true
+    # 测试端点列表（每个端点验证契约）
+    test_endpoints:
+      - name: "image_generation"
+        method: "POST"
+        path: "/api/query"
+        # 请求体模板（在 test_payloads 中定义，避免硬编码到端点配置）
+        body_template: "media_image_query"
+        # 期望的 SSE 事件类型（验证事件分发契约）
+        expected_sse_events: ["image"]
+        # 字段双重路径兼容验证（data.url || data.metadata?.url）
+        dual_path_fields:
+          - "url"
+          - "metadata.url"
+      - name: "ppt_generation"
+        method: "POST"
+        path: "/api/query"
+        body_template: "media_ppt_query"
+        expected_sse_events: ["ppt"]
+        dual_path_fields:
+          - "url"
+          - "metadata.url"
+      - name: "video_creation"
+        method: "POST"
+        path: "/api/media/video"
+        # 长任务走独立 JSON 端点（不走 SSE），对应 CODING-059 长短任务架构分离
+        expected_status: [200, 202]
+        # 期望返回字段（taskId 用于后续轮询）
+        required_response_fields: ["taskId"]
+      - name: "video_polling"
+        method: "GET"
+        # 路径模板（{taskId} 运行时替换为创建阶段返回的 taskId）
+        path_template: "/api/media/video/{taskId}"
+        expected_status: [200]
+        # 轮询参数（对应 CODING-065 长任务轮询 UI）
+        poll_interval_ms: 5000
+        poll_timeout_ms: 300000
+        # 轮询期间期望的状态码序列（5 状态机：idle/queued/processing/completed/failed）
+        expected_state_transitions: ["queued", "processing", "completed"]
+    # 请求体模板字典（集中管理，避免在端点配置中硬编码 payload）
+    test_payloads:
+      media_image_query:
+        outputMode: "image"
+        query: "生成一张测试用图"
+      media_ppt_query:
+        outputMode: "ppt"
+        query: "生成一份测试用 PPT"
+      media_video_query:
+        outputMode: "video"
+        prompt: "生成一段测试视频"
+        # Go 后端要求 string 类型，必须显式转换（对应 CODING-056-3）
+        seconds: "30"
+    # fetchWithDiagnostics 必须导出（便于单元测试验证错误转换）
+    require_fetch_wrapper: true
+    # 错误码到诊断文案的映射（对应 CODING-056 external_api.diagnostic_error_codes）
+    diagnostic_error_codes:
+      ENOTFOUND: "DNS 解析失败，请检查网络或代理配置"
+      ECONNREFUSED: "连接被拒绝，目标服务未启动或端口错误"
+      ECONNRESET: "连接被重置，可能是代理超时或目标服务崩溃"
+      CERT_HAS_EXPIRED: "证书已过期，请更新 CA 证书或检查系统时间"
+      UND_ERR_CONNECT_TIMEOUT: "连接超时，目标服务响应过慢或不可达"
+
+  # --- 超时分级验证（对应 CODING-057）---
+  # 验证不同任务类型使用不同超时阈值，禁止所有调用用同一超时
+  timeout_tier_verification:
+    enabled: true
+    # 期望的超时分级（任务类型 → 超时毫秒数）
+    # 与 wiki-code-dev CODING-057 external_api.timeout_tiers 参数对齐
+    expected_tiers:
+      task_creation: 30000        # 任务创建应秒级返回，30s 兜底
+      task_polling: 30000         # 轮询应秒级返回，代理场景 30s 兜底
+      image_generation: 60000     # 图像生成 10-30s 常见，60s 兜底
+      video_download: 120000      # 视频大文件下载 120s
+      llm_short_context: 60000    # LLM 4k token 60s
+      llm_long_context: 180000    # LLM 16k token 180s
+    # 验证方法：grep 源码中的 AbortSignal.timeout 调用，比对超时值与任务类型
+    verify_method: "grep_abort_signal_timeout"
+    # 源码扫描目录（相对于项目根）
+    scan_directories:
+      - "karpathy-wiki/api/src/workflows"
+      - "karpathy-wiki/api/src/routes"
+    # 禁止的超时模式（所有调用用同一超时值即违规）
+    forbidden_uniform_timeout: true
+
+  # --- 归档 Markdown frontmatter 验证（对应 CODING-060）---
+  # 验证 LLM 生成产物归档到 vault 时 frontmatter 字段完整
+  archive_frontmatter_check:
+    enabled: true
+    # 归档目录（与 CODING-060 media_archive.archive_dir 对齐）
+    archive_dir: "karpathy-wiki/data/vault/queries"
+    # 必需的 frontmatter 字段（缺失任一即失败）
+    required_fields:
+      - "type"           # 必须为 query
+      - "output_mode"    # 必须为 image/ppt/video/podcast 之一
+      - "generated_at"   # 必须为 ISO8601 格式
+    # 期望的 output_mode 枚举值（归档文件必须匹配其中之一）
+    expected_output_modes:
+      - "image"
+      - "ppt"
+      - "video"
+      - "podcast"
+    # 文件名正则模式（与 CODING-060 media_archive.filename_pattern 对齐）
+    # 格式：<output_mode>-YYYYMMDD-HHmmss.<ext>
+    filename_pattern: "^(image|ppt|video|podcast)-\\d{8}-\\d{6}\\.(md|png|mp4|marp\\.md)$"
+    # type 字段期望值
+    expected_type_value: "query"
+    # generated_at 字段格式（ISO8601 正则）
+    generated_at_pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}"
+    # 业务字段验证（按 output_mode 分类，至少含一个对应字段）
+    business_fields_by_mode:
+      image: ["image_file", "source_url"]
+      ppt: ["ppt_file", "source_url"]
+      video: ["video_file", "task_id", "source_url"]
+      podcast: ["podcast_file", "task_id"]
+    # 是否验证文件名与 frontmatter output_mode 一致
+    validate_filename_mode_consistency: true
+
+  # --- 长任务状态机覆盖验证（对应 CODING-065）---
+  # 验证前端长任务 5 状态机完整覆盖 + 定时器清理 + abortReason 三态
+  long_task_state_machine:
+    enabled: true
+    # 必需的状态枚举（与 CODING-065 long_task.state_machine_values 对齐）
+    required_states:
+      - "idle"
+      - "queued"
+      - "processing"
+      - "completed"
+      - "failed"
+    # 测试视图（在哪些页面执行长任务 UI 验证）
+    test_views: ["query"]
+    # 视频生成对话框选择器（用于触发长任务流程）
+    video_dialog_selector: ".video-dialog"
+    # 状态切换元素选择器（每个状态对应的 UI 元素）
+    state_ui_selectors:
+      idle: ".state-idle, [data-state='idle']"
+      queued: ".state-queued, [data-state='queued']"
+      processing: ".state-processing, [data-state='processing']"
+      completed: ".state-completed, [data-state='completed']"
+      failed: ".state-failed, [data-state='failed']"
+    # abortReason 三态验证（对应 CODING-065-4）
+    # 用户停止/超时/正常完成必须用不同 abortReason 区分
+    required_abort_reasons: ["user", "timeout", "null"]
+    # 验证 setInterval 在 onBeforeUnmount 中清理
+    require_timer_cleanup: true
+    # 验证"关闭对话框"与"重置状态"拆为两个函数（对应 CODING-065-6）
+    require_close_reset_split: true
+    # 轮询单次失败不终止验证（对应 CODING-065-2）
+    single_failure_no_abort: true
+    # 超时用 setTimeout 而非 AbortSignal.timeout（对应 CODING-065-5）
+    require_settimeout_for_abort: true
+    # 失败时是否截图取证
+    screenshot_on_fail: true
+
+  # --- 外部 API 不可达降级测试（对应 CODING-056 + CODING-064）---
+  # 验证外部 API 不可达时前端不崩溃，错误消息分类正确
+  external_api_unavailable:
+    enabled: true
+    # 模拟方法：intercept_request（拦截请求返回指定状态码）
+    simulate_method: "intercept_request"
+    # 拦截的端点列表（这些端点的请求被拦截返回 response_status）
+    intercepted_endpoints:
+      - "/api/media/video"
+      - "/api/query"
+    # 拦截响应状态码（503 表示服务不可用）
+    response_status: 503
+    # 期望行为：no_crash（前端 body 仍可见，不白屏）
+    expected_behavior: "no_crash"
+    # 期望的错误消息分类（对应 CODING-056 错误码翻译）
+    # 禁止硬编码"后端服务未运行"统一提示
+    expected_error_classification:
+      - "网络超时"
+      - "DNS 失败"
+      - "连接拒绝"
+      - "证书错误"
+    # 禁止的错误提示模式（命中即失败）
+    forbidden_error_messages:
+      - "后端服务未运行"
+      - "未知错误"
+      - "请稍后重试"
+    # SSE 流消费函数必须吞掉 AbortError（对应 CODING-064-1）
+    require_abort_error_swallow: true
+    # 验证 errorMessage 状态未被 AbortError 污染（对应 CODING-064-2）
+    require_no_abort_pollution: true
+    # finally 中 reader.cancel 兜底验证（对应 CODING-064-3）
+    require_reader_cancel_finally: true
+    # 拦截后等待时间（毫秒），让前端处理完错误
+    wait_after_intercept_ms: 2000
+    # 失败时是否截图取证
+    screenshot_on_fail: true
+
+# ============================================================
+# 以下为 PowerShell 长时进程管道陷阱测试配置（第二十二批次）
+# 覆盖 EPIPE 管道断裂退出码 -1、vue-tsc 缓存清理、长时进程直接运行
+# 基于 CODING-059 编码规范提炼，所有参数可配置，避免硬编码
+# ============================================================
+
+# --- PowerShell 长时进程管道测试配置 ---
+# 验证长时进程不通过管道运行，退出码 -1 正确重试
+powershell_long_process:
+  # 是否启用 PowerShell 长时进程管道测试
+  enabled: true
+  # 已知的长时进程命令列表（测试脚本中检测这些命令是否通过管道运行）
+  long_running_commands:
+    - "npx vue-tsc --noEmit"
+    - "python orchestrator.py"
+    - "npx tsx src/index.ts"
+  # 长时进程阈值（毫秒），超过此阈值的进程禁止管道
+  long_process_threshold_ms: 30000
+  # 禁止与长时进程联用的管道命令
+  forbidden_pipe_commands:
+    - "Select-String"
+    - "Out-String"
+    - "Where-Object"
+  # 推荐的输出捕获方式（重定向到文件）
+  redirect_method: "> file 2>&1"
+  # EPIPE 管道断裂退出码（PowerShell 中为 -1，非 0 也非 1）
+  epipe_exit_code: -1
+  # 增量缓存清理目标（vue-tsc 耗时过长时清理）
+  cache_cleanup_targets:
+    - "node_modules/.tmp"
+    - "tsconfig.tsbuildinfo"
+    - "tsconfig.app.tsbuildinfo"
+    - "node_modules/.vite"
+    - "src/**/*.js"
+  # vue-tsc 超时阈值（毫秒），超过则清理增量缓存后重跑
+  vue_tsc_timeout_ms: 120000
+  # 测试页面 key（在哪些页面的测试中验证 EPIPE 检测）
+  test_pages: []
+  # 失败时是否截图取证
+  screenshot_on_fail: true

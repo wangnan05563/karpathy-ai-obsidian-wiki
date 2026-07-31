@@ -1034,3 +1034,275 @@ Grep 测试脚本中是否引用了这些选择器
 - React / Svelte / Angular 项目（CODING-029 不适用，但其他规则可适配）
 - 无自动化测试的项目（CODING-030 / 031 不适用，但建议补充）
 - 移动端 App（CODING-032 阅读视野规则需独立设计）
+
+---
+
+## v3 媒体生成工具复盘（2026-07-31）
+
+> 本复盘基于 v3 媒体生成工具（PPT/图像/视频）开发过程，提炼 CODING-056~067 共 12 条编码规范，覆盖外部 API 集成、超时分级、密钥解析、长任务架构、归档 frontmatter、会话存储、prompt 存储、SSE 事件分发、SSE 流错误处理、长任务轮询 UI、事件委托、重库加载十二大主题。
+
+### 一、成功执行任务的完整步骤
+
+| 步骤 | 动作 | 产出物 |
+|------|------|--------|
+| 1. 需求确认 | 明确三种输出模式（PPT/图像/视频）+ 输出归档路径 + SSE/独立端点选择 | 功能边界清单 |
+| 2. 架构选型 | 秒级任务（PPT/图像）走 SSE 流，分钟级任务（视频）走独立 JSON 端点 + 轮询 | 架构决策文档 |
+| 3. 后端工作流 | 实现 media-generation-workflow.ts，含 fetchWithDiagnostics 包装 + 超时分级 + 密钥三级回退 | 后端工作流代码 |
+| 4. 路由层 | routes/media.ts 含限流分级（破坏性 5/min，轮询 60/min）+ 错误码区分 + 双日志 + 顶部注释 | 后端路由代码 |
+| 5. 前端 store | query.ts 用对象映射表处理 SSE 事件，5 状态机驱动长任务 UI | 前端状态管理 |
+| 6. SSE handler | consumeSSEStream 吞掉 AbortError + finally reader.cancel + signal 可空 | SSE 消费函数 |
+| 7. 视图组件 | Query.vue 用 setInterval 轮询 + 三态区分 + 函数拆分 + onBeforeUnmount 清理 | 前端视图代码 |
+| 8. 归档实现 | 媒体产物归档到 vault/queries/，统一 frontmatter（type/output_mode/generated_at）+ 文件名时间戳 | 归档代码 |
+| 9. 重库加载 | mermaid/marp 动态 import + 模块级加载标志 + 实例缓存 + 五层错误防护 | 重库加载服务 |
+| 10. 验证 | tsc + vue-tsc 双重门禁 + 端到端 API 验证（PPT/图像/视频三模式） | 验证证明 |
+
+**详细操作要点**：
+
+- **步骤 2 - 架构选型**：任务预估耗时 > `long_task.sse_threshold_ms`（默认 30s）必须走独立端点 + 轮询，禁止走 SSE 流（视频生成需 5 分钟，SSE 60s 超时会中断）
+- **步骤 3 - 后端工作流**：所有外部 API 调用必须用 fetchWithDiagnostics 包装（禁止原生 fetch），按 err.cause.code 分类翻译为可读诊断信息；响应字段双重路径兼容（`data.url || data.metadata?.url`）
+- **步骤 4 - 路由层**：破坏性端点限流 ≤ `long_task.destructive_rate_limit`（默认 5/min），轮询端点限流 = `long_task.poll_rate_limit`（默认 60/min）；错误码区分配置缺失（400）与 API 失败（500）
+- **步骤 5 - 前端 store**：SSE 事件处理器用 `Record<string, Handler>` 对象映射表替代 if/else 链，控制 SonarQube S3776 认知复杂度 < 15
+- **步骤 7 - 视图组件**：长任务用 5 状态机（`idle | queued | processing | completed | failed`），轮询单次失败不终止（连续 3 次才终止）；超时用 setTimeout 而非 AbortSignal.timeout（因需同步设 abortReason 标记）
+- **步骤 9 - 重库加载**：体积 > 200KB 的库必须动态 import；mermaid 11.x 错误 SVG 注入需五层防护（库选项抑制 + parse 预验证 + 渲染前清空 + catch 清空 + CSS 隐藏错误元素）
+
+### 二、不确定性与失败点
+
+#### 1. Node.js fetch 无法访问外网（critical）
+
+**现象**：Node.js 原生 fetch 调用 Agnes API 报 `TypeError("fetch failed")`，真因藏在 `err.cause.code` 里。
+
+**根因**：Node.js 原生 fetch 不自动读取 HTTPS_PROXY 环境变量，需显式配置 undici ProxyAgent。
+
+**解决方案**：参见 [external-api-contract-rule.md](external-api-contract-rule.md) CODING-056
+- 在 api/src/index.ts 中设置 `setGlobalDispatcher(new ProxyAgent(process.env.HTTPS_PROXY))`
+- 用 fetchWithDiagnostics 包装 fetch，按 `err.cause.code` 分类翻译错误
+- 生产环境必须在 api/.env 中设置 HTTPS_PROXY
+
+#### 2. /api/files 返回 JSON 而非二进制（critical）
+
+**现象**：图像/视频归档后，前端通过 /api/files 下载时收到 JSON 而非二进制流。
+
+**根因**：VaultService 缺少二进制读取方法，files.ts 路由用 readFile（返回字符串）而非 readFileBuffer。
+
+**解决方案**：参见 [media-archive-frontmatter-rule.md](media-archive-frontmatter-rule.md) CODING-060
+- VaultService 新增 `readFileBuffer()` 方法返回 Buffer
+- files.ts 路由按文件扩展名判断返回类型（.png/.mp4 用 Buffer，.md 用字符串）
+
+#### 3. 视频创建 400 错误 - seconds 字段类型（critical）
+
+**现象**：调用 Agnes Video API 创建任务返回 400，错误提示 seconds 字段类型错误。
+
+**根因**：Agnes Video API 的 Go 后端要求 seconds 字段为 string 类型，但前端传的是 number。
+
+**解决方案**：参见 [external-api-contract-rule.md](external-api-contract-rule.md) CODING-056
+- 调用方后端语言要求的字段类型必须显式转换：`seconds: String(mediaConfig.agnes.defaultVideoSeconds)`
+- 禁止假设 JSON 序列化会自动适配
+
+#### 4. 视频轮询 URL 字段路径变更（critical）
+
+**现象**：视频生成完成后，轮询接口返回的 URL 字段有时在 `data.url`，有时在 `data.metadata.url`。
+
+**根因**：Agnes API 版本升级时字段路径变更，未向后兼容。
+
+**解决方案**：参见 [external-api-contract-rule.md](external-api-contract-rule.md) CODING-056
+- 响应字段双重路径兼容：`const videoUrl = data.url || data.metadata?.url`
+- 关键业务字段必须用双重路径兼容，避免 API 升级导致字段消失时业务失败
+
+#### 5. 视频轮询 fetch 超时（critical）
+
+**现象**：视频轮询接口偶发超时，导致轮询中断。
+
+**根因**：所有调用用同一超时值（30s），但视频下载需 120s，导致正常请求被误判超时。
+
+**解决方案**：参见 [timeout-tier-rule.md](timeout-tier-rule.md) CODING-057
+- 按预估耗时分级设置 AbortSignal.timeout：
+  - 任务创建：30s（应秒级返回）
+  - 任务轮询：30s（应秒级返回，代理场景兜底）
+  - 图像生成：60s（10-30s 常见，60s 兜底）
+  - 视频下载：120s（大文件下载）
+  - LLM 单轮调用：按 tokenBudget 分级（4k→60s, 16k→180s）
+
+#### 6. query.ts outputMode 类型缺失 image/ppt（suggestion）
+
+**现象**：前端类型检查报错，outputMode 类型不包含 'image' / 'ppt'。
+
+**根因**：新增媒体生成功能时，未同步更新 outputMode 联合字面量类型。
+
+**解决方案**：参见 [sse-event-dispatch-rule.md](sse-event-dispatch-rule.md) CODING-063
+- outputMode 用 TypeScript 联合字面量类型：`type OutputMode = 'normal' | 'mindmap' | 'image' | 'ppt' | 'video'`
+- 新增模式追加字面量不破坏旧客户端
+- outputMode（结构模式）与 outputModes（事件可见性）正交分离
+
+#### 7. SSE 流 AbortError 污染 errorMessage（suggestion）
+
+**现象**：用户主动停止生成时，AbortController 触发 AbortError，错误处理逻辑把 AbortError 当作真实错误显示给用户。
+
+**根因**：SSE 流消费函数未区分主动停止与真实错误。
+
+**解决方案**：参见 [sse-stream-error-rule.md](sse-stream-error-rule.md) CODING-064
+- SSE 流消费函数吞掉 AbortError（`err.name === 'AbortError'` 直接 return）
+- 调用方用 `abortReason: 'user' | 'timeout' | null` 区分停止原因
+- finally 中再次 `reader.cancel()` 兜底释放
+
+#### 8. mermaid 11.x 错误 SVG 注入（suggestion）
+
+**现象**：mermaid 解析失败时注入 .error-icon / .error-text SVG 元素，污染 UI 显示"Syntax error in text"。
+
+**根因**：mermaid 11.x 默认错误渲染行为不可控，解析失败时自动注入错误 SVG。
+
+**解决方案**：参见 [heavy-library-rule.md](heavy-library-rule.md) CODING-067
+- 五层防护：①`suppressErrorRendering: true` ②`parse()` 预验证 ③渲染前清空容器 ④catch 清空容器 ⑤CSS 全局隐藏 `.error-icon / .error-text`
+- 渲染失败降级显示原始内容（`<pre>{{ raw }}</pre>`）
+
+### 三、可抽象的固定流程
+
+#### 1. 外部 API 集成流程
+
+```
+调用外部 API
+   ↓
+1. fetchWithDiagnostics 包装（禁止原生 fetch）
+   ↓
+2. 超时分级（task_creation/task_polling/image_generation/video_download/llm_small/llm_large）
+   ↓
+3. 密钥三级回退（专用段→共享段→环境变量）
+   ↓
+4. 字段类型显式转换（Go/Rust 后端要求 string 等）
+   ↓
+5. 响应字段双重路径兼容（data.x || data.y?.x）
+   ↓
+6. 错误码分类翻译（UND_ERR_CONNECT_TIMEOUT/ENOTFOUND/ECONNREFUSED 等）
+```
+
+详见 [external-api-contract-rule.md](external-api-contract-rule.md)、[timeout-tier-rule.md](timeout-tier-rule.md)、[api-key-resolution-rule.md](api-key-resolution-rule.md)。
+
+#### 2. 长任务架构选择流程
+
+```
+新增异步任务
+   ↓
+预估任务耗时
+   ↓
+≤ 30s（秒级）→ SSE 同步流（复用 query 通道）
+   ↓
+> 30s（分钟级）→ 独立 JSON 端点 + 前端轮询
+   ↓
+破坏性端点限流 ≤ 5/min（触发外部 API 成本）
+   ↓
+轮询端点限流 = 60/min（与前端 5s 间隔匹配）
+   ↓
+错误码区分：配置缺失 400 / API 失败 500
+   ↓
+双日志通道：JSON 响应 + request.log.error
+   ↓
+路由文件顶部"设计要点"块注释
+```
+
+详见 [long-task-architecture-rule.md](long-task-architecture-rule.md)。
+
+#### 3. 媒体归档流程
+
+```
+LLM 生成产物（图像/PPT/视频）
+   ↓
+归档到 vault/queries/（WRITE_ALLOWED_DIRS 白名单）
+   ↓
+frontmatter 必备字段：type / output_mode / generated_at
+   ↓
+业务字段同 frontmatter（image_file / video_file / task_id / source_url）
+   ↓
+文件名格式：<output_mode>-YYYYMMDD-HHmmss.<ext>
+   ↓
+Marp 类归档：marp 字段合并到归档 frontmatter（禁止双重 frontmatter）
+```
+
+详见 [media-archive-frontmatter-rule.md](media-archive-frontmatter-rule.md)。
+
+#### 4. SSE 事件分发流程
+
+```
+后端 SSE 流写入
+   ↓
+按 chunk 字段独立 if 分发（新增类型追加 if 分支）
+   ↓
+前端事件处理器
+   ↓
+事件类型 ≥ 3 → Record<string, Handler> 对象映射表
+   ↓
+outputMode 联合字面量类型（新增模式追加字面量）
+   ↓
+outputMode（结构模式）与 outputModes（事件可见性）正交分离
+   ↓
+未知事件默认 handler（console.warn，禁止静默吞掉）
+```
+
+详见 [sse-event-dispatch-rule.md](sse-event-dispatch-rule.md)。
+
+#### 5. 长任务轮询 UI 流程
+
+```
+长任务启动
+   ↓
+5 状态机：idle → queued → processing → completed/failed
+   ↓
+setInterval(poll_interval_ms) 轮询
+   ↓
+单次失败不终止（仅更新 error 文案，连续 3 次才终止）
+   ↓
+完成/失败显式 stopPolling()
+   ↓
+超时用 setTimeout（非 AbortSignal.timeout）以同步设 abortReason
+   ↓
+"关闭对话框"与"重置状态保持对话框"拆为两个函数
+   ↓
+onBeforeUnmount 清理 abortController + addEventListener + setInterval
+```
+
+详见 [long-task-polling-ui-rule.md](long-task-polling-ui-rule.md)。
+
+#### 6. 重库加载流程
+
+```
+引入第三方库
+   ↓
+体积 > 200KB → 动态 import() 加载
+   ↓
+模块级 xxxLoaded 标志避免重复加载
+   ↓
+实例缓存复用（marpInstance 等）
+   ↓
+CJS 命名导出兼容：mod.X ?? mod.default?.X
+   ↓
+不可控库错误行为 → 五层防护
+   ↓
+渲染失败降级显示 <pre>{{ raw }}</pre>
+   ↓
+动态 import + watch 回调中 await nextTick()
+```
+
+详见 [heavy-library-rule.md](heavy-library-rule.md)。
+
+### 四、适用场景与不适用场景
+
+#### 适用场景
+
+- v3 媒体生成工具（PPT/图像/视频）开发与维护
+- 调用第三方/外部 API 的全栈项目（fetchWithDiagnostics + 超时分级 + 密钥三级回退）
+- 长任务异步处理（视频生成、批量处理、文件转码等）
+- LLM 多模态生成产物归档（统一 frontmatter + 文件名时间戳）
+- SSE 流式响应（对象映射表事件分发 + AbortError 处理）
+- 前端长任务 UI（5 状态机 + 容错轮询 + 三态区分）
+- v-html 渲染内容的事件绑定（事件委托 + 生命周期清理）
+- 重库动态加载（mermaid/marp/monaco 等，五层错误防护）
+
+#### 不适用场景
+
+- 内部微服务调用（同源、同语言、字段路径稳定，CODING-056 部分不适用）
+- 浏览器端 fetch（错误语义不同，CODING-056 针对Node.js undici fetch）
+- 同步函数调用（无网络 IO，CODING-057 超时分级不适用）
+- 短小的格式化字符串（可直接内联，CODING-062 prompt 存储不适用）
+- 单事件类型的简单 SSE（无需对象映射表，CODING-063 部分不适用）
+- 一次性 JSON 请求（无流消费，CODING-064 不适用）
+- 秒级任务（直接用 SSE 流或单次请求，CODING-065 轮询 UI 不适用）
+- Vue 模板中的原生事件绑定（用 @click 等指令，CODING-066 事件委托不适用）
+- 体积小的工具库（< 50KB，可静态 import，CODING-067 不适用）

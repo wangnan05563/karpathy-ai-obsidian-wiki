@@ -11,6 +11,10 @@ from _shared import (
 def test_theme_switcher(page, cfg, results):
     """Test theme switcher interaction."""
     tc = cfg["interactions"].get("theme_switcher", {})
+    # enabled 默认 True；显式 false 时跳过（业务主动移除主题切换器后避免误报失败）
+    if tc.get("enabled", True) is False:
+        results.log("Theme-Switch", True, "Skipped (theme switcher disabled)")
+        return
     trigger_sel = tc.get("trigger_selector")
     item_sel = tc.get("item_selector")
     wait_ms = tc.get("transition_wait_ms", 1000)
@@ -18,6 +22,14 @@ def test_theme_switcher(page, cfg, results):
 
     if not trigger_sel or not item_sel:
         results.log("Theme-Switch", True, "Skipped (no config)")
+        return
+
+    # 先检查 trigger 是否存在：浮动 ThemeSwitcher 在登录态渲染可能有时序延迟
+    # 为什么用 locator.count 而非直接 js_click：js_click 内部用 querySelector，
+    # 元素不存在时 evaluate 会抛 "Cannot read properties of null"，导致整个 phase 中断
+    trigger = page.locator(trigger_sel)
+    if trigger.count() == 0:
+        results.log("Theme-Switch", False, f"Trigger not found: {trigger_sel}")
         return
 
     if use_js:

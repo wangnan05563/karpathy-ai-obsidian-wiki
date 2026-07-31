@@ -104,6 +104,17 @@ interactions:
     transition_wait_ms: 1000
     use_js_click: true
 
+# --- 认证配置默认值 ---
+# 项目有登录守卫时在 config.yaml 中覆盖 enabled: true
+auth:
+  enabled: false
+  username: ""
+  password: ""
+  username_selector: "input[type='text']"
+  password_selector: "input[type='password']"
+  submit_selector: "button[type='submit']"
+  post_login_wait_ms: 2000
+
 # --- API 测试配置 ---
 api_tests:
   use_playwright_request: true
@@ -119,6 +130,12 @@ console_error_filter:
   - "cors"
   - "err_failed"
   - "access-control"
+  # ERR_CONNECTION_CLOSED: 测试过程中 Vite HMR websocket / SSE 长连接正常关闭，
+  # 或浏览器导航/关闭时正在进行的请求被中断，均为良性网络事件，非代码错误
+  - "err_connection_closed"
+  # 429 Too Many Requests: 外部 API（如 GitHub 检查更新）速率限制，
+  # 测试连续运行易触发，非功能性问题，后端已有缓存兜底（CODING-018）
+  - "429"
 
 # --- 超时配置（毫秒）---
 timeout:
@@ -1148,3 +1165,297 @@ vite_cache_cleanup:
   stale_version_signals:
     - "Failed to fetch"
 
+
+# ============================================================
+# 以下为编码规范测试默认配置（第二十批次）
+# 项目特定值请在 config.yaml 中覆盖
+# 默认值比 config.yaml 更保守（如 enabled 默认 false）
+# ============================================================
+
+# --- 控件分层测试默认配置 ---
+# 默认关闭，项目在 config.yaml 中按需开启
+control_layering_tests:
+  # 默认关闭（保守策略），项目按需开启
+  enabled: false
+  # 默认无测试页面（项目应覆盖为实际页面 key）
+  test_pages: []
+  # 默认折叠/展开触发按钮选择器（项目应覆盖）
+  toggle_selector: ".toggle-btn"
+  # 默认折叠面板容器选择器
+  panel_selector: ".collapsible-panel"
+  # 默认动画持续时间 300ms（与 Vue Transition 默认一致）
+  animation_duration_ms: 300
+  # 默认激活 CSS 类名
+  trigger_active_class: "active"
+  # 默认失败时截图取证
+  screenshot_on_fail: true
+
+# --- 第三方库错误防护测试默认配置 ---
+# 默认关闭，项目在 config.yaml 中按实际使用的库开启
+third_party_error_guard_tests:
+  # 默认关闭（保守策略），项目按需开启
+  enabled: false
+  # 默认无测试库（项目应覆盖为实际使用的第三方库）
+  test_libraries: []
+  # 默认无注入错误输入（项目应覆盖）
+  invalid_inputs: []
+  # 默认无抑制配置键
+  suppress_config_keys: []
+  # 默认无解析方法名
+  parse_method_names: []
+  # 默认无错误兜底 CSS 类
+  error_css_classes: []
+  # 默认要求错误容器清空
+  require_container_clear: true
+  # 默认失败时截图取证
+  screenshot_on_fail: true
+
+# --- 多资源并行加载测试默认配置 ---
+# 默认关闭，项目在 config.yaml 中按需开启
+parallel_loading_tests:
+  # 默认关闭（保守策略），项目按需开启
+  enabled: false
+  # 默认资源加载模式
+  resource_patterns:
+    - "Promise.allSettled"
+    - "Promise.all"
+  # 默认必须使用 allSettled（不会因单个失败而中断）
+  required_wrapper: "Promise.allSettled"
+  # 默认要求错误收集
+  error_collection_required: true
+  # 默认要求降级路径
+  degradation_path_required: true
+  # 默认总超时 30s
+  total_timeout_ms: 30000
+  # 默认无失败模拟用例
+  failure_simulation: []
+  # 默认失败时截图取证
+  screenshot_on_fail: true
+
+# --- 超时阈值链式匹配测试默认配置 ---
+# 默认关闭，项目在 config.yaml 中按实际超时链路开启
+timeout_chain_tests:
+  # 默认关闭（保守策略），项目按需开启
+  enabled: false
+  # 默认无超时层级（项目应覆盖为实际层级顺序）
+  layer_order: []
+  # 默认覆盖倍数 1.5（上层超时 >= 下层 × 1.5）
+  margin_multiplier: 1.5
+  # 默认要求部分结果保留
+  partial_result_required: true
+  # 默认要求降级路径
+  degradation_path_required: true
+  # 默认模拟超时 30s
+  simulate_timeout_ms: 30000
+  # 默认无报告输出路径（空字符串表示不输出）
+  report_output_path: ""
+  # 默认失败时截图取证
+  screenshot_on_fail: true
+
+# --- 折叠面板事件冲突测试默认配置 ---
+# 默认关闭，项目在 config.yaml 中按需开启
+folding_panel_event_tests:
+  # 默认关闭（保守策略），项目按需开启
+  enabled: false
+  # 默认无测试页面
+  test_pages: []
+  # 默认折叠面板容器选择器
+  panel_selector: ".collapsible-panel"
+  # 默认 click outside 排除选择器（Element Plus 常见组件）
+  click_outside_exclude_selectors:
+    - ".el-dropdown"
+    - ".el-dropdown-menu"
+    - ".el-popper"
+  # 默认 teleport 组件选择器
+  teleport_selectors:
+    - ".el-dropdown__popper"
+    - ".el-popper"
+  # 默认 el-dropdown 必须配置的 props
+  required_dropdown_props:
+    - "teleported"
+  # 默认必须应用的事件修饰符
+  required_event_modifiers:
+    - "@mousedown.stop"
+  # 默认失败时截图取证
+  screenshot_on_fail: true
+
+# ============================================================
+# 以下为 v3 媒体生成工具复盘测试默认配置（第二十一批次）
+# 项目特定值请在 config.yaml 中覆盖
+# 默认值比 config.yaml 更保守（多数 enabled 默认 false）
+# 对应 wiki-code-dev 的 CODING-056/057/059/060/061/063/064/065 规则
+# ============================================================
+
+# --- v3 媒体生成工具测试默认配置 ---
+# 默认关闭（保守策略），项目在 config.yaml 中按需开启
+# 与 v3_media_tests 互补：v3_media_tests 侧重 API 路由可达性，
+# 本配置块侧重编码规范层面的契约/超时/归档/状态机/降级验证
+media_generation_tests:
+  # 默认关闭（保守策略），项目按需开启
+  enabled: false
+
+  # --- 外部 API 集成契约测试默认配置（对应 CODING-056）---
+  external_api_contract:
+    enabled: false
+    # 默认无测试端点（项目应在 config.yaml 中按实际端点配置）
+    test_endpoints: []
+    # 默认无请求体模板（项目应覆盖）
+    test_payloads: {}
+    # 默认要求 fetchWithDiagnostics 包装
+    require_fetch_wrapper: true
+    # 默认错误码到诊断文案的映射（项目可按实际外部 API 扩展）
+    diagnostic_error_codes:
+      ENOTFOUND: "DNS 解析失败"
+      ECONNREFUSED: "连接被拒绝"
+      ECONNRESET: "连接被重置"
+      CERT_HAS_EXPIRED: "证书已过期"
+      UND_ERR_CONNECT_TIMEOUT: "连接超时"
+
+  # --- 超时分级验证默认配置（对应 CODING-057）---
+  timeout_tier_verification:
+    enabled: false
+    # 默认超时分级（项目应按实际任务类型覆盖）
+    expected_tiers:
+      task_creation: 30000
+      task_polling: 30000
+      image_generation: 60000
+      video_download: 120000
+    # 默认验证方法
+    verify_method: "grep_abort_signal_timeout"
+    # 默认扫描源码目录（项目应覆盖为实际目录）
+    scan_directories: []
+    # 默认禁止所有调用用同一超时
+    forbidden_uniform_timeout: true
+
+  # --- 归档 Markdown frontmatter 验证默认配置（对应 CODING-060）---
+  archive_frontmatter_check:
+    enabled: false
+    # 默认归档目录（项目应覆盖为实际 vault 路径）
+    archive_dir: "data/vault/queries"
+    # 默认必需字段
+    required_fields:
+      - "type"
+      - "output_mode"
+      - "generated_at"
+    # 默认 output_mode 枚举
+    expected_output_modes:
+      - "image"
+      - "ppt"
+      - "video"
+      - "podcast"
+    # 默认文件名正则
+    filename_pattern: "^(image|ppt|video|podcast)-\\d{8}-\\d{6}\\.(md|png|mp4|marp\\.md)$"
+    # 默认 type 字段期望值
+    expected_type_value: "query"
+    # 默认 generated_at 格式（ISO8601）
+    generated_at_pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}"
+    # 默认业务字段映射（项目应按实际业务字段覆盖）
+    business_fields_by_mode: {}
+    # 默认验证文件名与 output_mode 一致
+    validate_filename_mode_consistency: true
+
+  # --- 长任务状态机覆盖验证默认配置（对应 CODING-065）---
+  long_task_state_machine:
+    enabled: false
+    # 默认 5 状态机（与 CODING-065 long_task.state_machine_values 对齐）
+    required_states:
+      - "idle"
+      - "queued"
+      - "processing"
+      - "completed"
+      - "failed"
+    # 默认无测试视图（项目应覆盖为实际页面 key）
+    test_views: []
+    # 默认视频对话框选择器
+    video_dialog_selector: ".video-dialog"
+    # 默认状态 UI 选择器
+    state_ui_selectors:
+      idle: ".state-idle, [data-state='idle']"
+      queued: ".state-queued, [data-state='queued']"
+      processing: ".state-processing, [data-state='processing']"
+      completed: ".state-completed, [data-state='completed']"
+      failed: ".state-failed, [data-state='failed']"
+    # 默认 abortReason 三态
+    required_abort_reasons: ["user", "timeout", "null"]
+    # 默认要求定时器清理
+    require_timer_cleanup: true
+    # 默认要求关闭/重置函数拆分
+    require_close_reset_split: true
+    # 默认轮询单次失败不终止
+    single_failure_no_abort: true
+    # 默认要求 setTimeout 而非 AbortSignal.timeout
+    require_settimeout_for_abort: true
+    # 默认失败时截图取证
+    screenshot_on_fail: true
+
+  # --- 外部 API 不可达降级测试默认配置（对应 CODING-056 + CODING-064）---
+  external_api_unavailable:
+    enabled: false
+    # 默认模拟方法
+    simulate_method: "intercept_request"
+    # 默认无拦截端点（项目应覆盖为实际需拦截的端点）
+    intercepted_endpoints: []
+    # 默认拦截响应状态码
+    response_status: 503
+    # 默认期望行为
+    expected_behavior: "no_crash"
+    # 默认期望的错误消息分类
+    expected_error_classification:
+      - "网络超时"
+      - "DNS 失败"
+      - "连接拒绝"
+      - "证书错误"
+    # 默认禁止的错误提示模式
+    forbidden_error_messages:
+      - "后端服务未运行"
+      - "未知错误"
+      - "请稍后重试"
+    # 默认要求吞掉 AbortError
+    require_abort_error_swallow: true
+    # 默认要求 errorMessage 不被污染
+    require_no_abort_pollution: true
+    # 默认要求 finally reader.cancel 兜底
+    require_reader_cancel_finally: true
+    # 默认拦截后等待时间
+    wait_after_intercept_ms: 2000
+    # 默认失败时截图取证
+    screenshot_on_fail: true
+
+# ============================================================
+# 以下为 PowerShell 长时进程管道陷阱默认配置（第二十二批次）
+# 项目特定值请在 config.yaml 中覆盖
+# 默认值比 config.yaml 更保守（如 enabled 默认 false）
+# 对应 wiki-code-dev 的 CODING-059 规则
+# ============================================================
+
+# --- PowerShell 长时进程管道测试默认配置 ---
+# 默认关闭（保守策略），项目在 config.yaml 中按需开启
+powershell_long_process:
+  # 默认关闭（保守策略），项目按需开启
+  enabled: false
+  # 默认无已知长时进程（项目应覆盖为实际命令）
+  long_running_commands: []
+  # 默认长时进程阈值 30s
+  long_process_threshold_ms: 30000
+  # 默认禁止的管道命令
+  forbidden_pipe_commands:
+    - "Select-String"
+    - "Out-String"
+    - "Where-Object"
+  # 默认推荐重定向方式
+  redirect_method: "> file 2>&1"
+  # 默认 EPIPE 退出码
+  epipe_exit_code: -1
+  # 默认增量缓存清理目标
+  cache_cleanup_targets:
+    - "node_modules/.tmp"
+    - "tsconfig.tsbuildinfo"
+    - "tsconfig.app.tsbuildinfo"
+    - "node_modules/.vite"
+    - "src/**/*.js"
+  # 默认 vue-tsc 超时阈值 120s
+  vue_tsc_timeout_ms: 120000
+  # 默认无测试页面
+  test_pages: []
+  # 默认失败时截图取证
+  screenshot_on_fail: true

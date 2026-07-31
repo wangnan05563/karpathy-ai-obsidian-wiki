@@ -392,3 +392,204 @@ open('script.py', 'w', encoding='utf-8').write(content)
    $r.Content.Contains("keyword")  # 始终返回正确的布尔值
    ```
 3. `Invoke-WebRequest` 返回的 `.Content` 属性始终是单一字符串
+
+## 30. 折叠面板展开后立即收起
+
+**症状**：点击折叠面板触发按钮展开后，面板立即自动收起，无法保持展开状态；或展开/收起动画闪烁，状态不稳定。
+
+**根因**：Transition 动画未完成即读取状态，或触发按钮激活状态类未正确应用：
+- Transition 组件未设 `mode="out-in"`，展开/收起动画冲突
+- 动画完成前提前判定面板可见性，状态读取错误
+- 触发按钮激活 CSS 类（如 `.active`）未绑定到展开状态
+- 连续快速点击导致状态机紊乱
+
+**解决**：
+1. 启用 `control_layering_tests.enabled: true` 自动验证控件分层逻辑
+2. 验证 `<Transition name="..." mode="out-in">` 正确包裹折叠面板
+3. 等待 `animation_duration_ms`（默认 300ms）后再验证面板可见性
+4. 验证触发按钮在展开状态下带 `trigger_active_class` 激活样式
+5. 连续点击切换 5 次，验证状态稳定无闪烁
+
+## 31. 第三方库渲染显示 Syntax error in text
+
+**症状**：页面中 mermaid 图表或 katex 公式渲染失败，显示 "Syntax error in text" 或原始 Markdown 文本，控制台报解析错误。
+
+**根因**：第三方库缺少三层防护，LLM 输出的错误语法直接传到渲染层：
+- 缺少库级错误抑制配置（如 mermaid 未设 `suppressErrors: true`，katex 未设 `throwOnError: false`）
+- 缺少 LLM 内容预校验，错误语法直接传入解析器
+- 缺少 CSS 兜底样式，错误容器显示原始文本而非友好提示
+- 错误容器未在下次渲染时清空，残留旧错误
+
+**解决**：
+1. 启用 `third_party_error_guard_tests.enabled: true` 自动验证三层防护
+2. **第一层：库级配置** - 验证 `suppress_config_keys`（如 `suppressErrors: true` / `throwOnError: false`）已设置
+3. **第二层：预校验** - 注入 `invalid_inputs` 中的错误语法，验证 LLM 输出在渲染前被预校验拦截
+4. **第三层：CSS 兜底** - 验证 `error_css_classes` 中的兜底类已应用到错误容器
+5. `require_container_clear: true` 时验证错误容器在下次渲染时被清空
+
+## 32. MCP 工具加载导致 AI 未回复
+
+**症状**：用户提问后 AI 长时间无响应，控制台显示某个 MCP 工具加载超时或失败，整个回复流程被阻塞。
+
+**根因**：多资源加载未使用 `Promise.allSettled`，单个失败导致整体中断：
+- 使用 `Promise.all` 而非 `Promise.allSettled`，单个 MCP 工具加载失败导致全部中断
+- 缺少错误收集机制，失败信息被丢弃
+- 缺少降级路径，加载失败后无兜底数据
+- 缺少总超时配置，单个资源加载超时无限等待
+
+**解决**：
+1. 启用 `parallel_loading_tests.enabled: true` 自动验证并行加载逻辑
+2. 验证代码使用 `required_wrapper`（`Promise.allSettled`）包裹并行加载
+3. 模拟单个资源加载失败，验证其他资源不受影响（`error_collection_required: true`）
+4. 验证有降级路径（`degradation_path_required: true`），如使用兜底数据
+5. 验证总超时 `total_timeout_ms`（默认 30000ms）配置生效
+
+## 33. 超时阈值不匹配导致 AI 回复被丢弃
+
+**症状**：AI 已生成完整回复，但前端因超时丢弃了回复，用户看到"请求超时"提示；或后端 MCP 工具超时导致前端连锁超时。
+
+**根因**：前后端超时阈值未呈递增覆盖关系：
+- 前端超时（如 30s）< 后端 MCP 超时（如 60s），后端还在处理时前端已超时
+- 超时层级未递增覆盖，下层超时导致上层连锁失败
+- 超时后未保留部分结果，全部丢弃
+- 缺少降级路径，超时后无兜底提示
+
+**解决**：
+1. 启用 `timeout_chain_tests.enabled: true` 自动验证超时链式匹配
+2. 验证 `layer_order` 中各层超时呈递增关系（前端 120s > 后端 API 60s > 后端 MCP 30s）
+3. 验证每层超时 >= 下层超时 × `margin_multiplier`（默认 1.5 倍）
+4. 模拟下层超时（`simulate_timeout_ms`），验证上层不中断
+5. `partial_result_required: true` 时验证部分结果被保留而非全部丢弃
+6. `degradation_path_required: true` 时验证有降级路径（如兜底数据或提示用户）
+
+## 34. 折叠面板内下拉菜单点击后关闭
+
+**症状**：在折叠面板内点击 el-dropdown 下拉菜单选项时，面板误关闭，导致用户需要重新展开面板才能继续操作。
+
+**根因**：click outside 事件传播未正确处理 teleport 组件：
+- click outside 监听器未排除 el-dropdown 的 teleport 到 body 的 popper 元素
+- el-dropdown 未配置 `teleported` / `append-to-body` props
+- 缺少 `@mousedown.stop` / `@click.stop` 事件修饰符
+- teleport 到 body 的 dropdown 被判定为"面板外元素"触发关闭
+
+**解决**：
+1. 启用 `folding_panel_event_tests.enabled: true` 自动验证事件冲突处理
+2. 验证 `click_outside_exclude_selectors` 中的选择器（如 `.el-dropdown` / `.el-popper`）被排除
+3. 验证 `teleport_selectors` 中的 teleport 组件不触发面板关闭
+4. 验证 el-dropdown 配置了 `required_dropdown_props`（如 `teleported` / `append-to-body`）
+5. 验证 `required_event_modifiers`（如 `@mousedown.stop`）已应用到 dropdown 事件
+6. 点击 dropdown 选项后验证 dropdown 关闭但面板保持展开
+
+## 35. 视频生成卡在 processing 不返回
+
+**症状**：用户提交视频生成请求后，UI 一直显示"处理中"（processing），既不进入 completed 也不进入 failed；关闭对话框后定时器仍在执行，控制台出现"组件已卸载仍更新状态"警告。
+
+**根因**：长任务状态机不完整或定时器未正确清理（对应 CODING-065）：
+- 状态机缺少 `failed` 状态，请求失败时无法恢复（卡在 processing）
+- 轮询单次失败即终止，未容忍网络抖动（`single_failure_no_abort` 未生效）
+- 完成/失败时未显式 `stopXxxPolling()`，依赖 GC 回收定时器
+- `setInterval` 未在 `onBeforeUnmount` 中 `clearInterval`，组件卸载后定时器仍执行
+- 超时用 `AbortSignal.timeout` 而非 `setTimeout`，无法同步设 `abortReason` 标记
+- "关闭对话框"与"重置状态"合为一个函数，关闭后无法保持对话框重新生成
+
+**解决**：
+1. 启用 `media_generation_tests.long_task_state_machine.enabled: true` 自动验证状态机
+2. 验证状态机覆盖 `required_states` 全部 5 态（idle/queued/processing/completed/failed）
+3. `single_failure_no_abort: true` 时验证轮询单次失败仅更新 error 文案，不终止轮询
+4. `require_timer_cleanup: true` 时验证 `setInterval` 与 `clearInterval` 在 `onMounted` / `onBeforeUnmount` 配对
+5. `require_settimeout_for_abort: true` 时验证超时用 `setTimeout` 而非 `AbortSignal.timeout`（因需同步设 `abortReason`）
+6. `require_close_reset_split: true` 时验证"关闭对话框"（停轮询+关对话框+重置全部）与"重置状态保持对话框"（停轮询+清状态）拆为两个函数
+7. 验证 `required_abort_reasons` 三态（user/timeout/null）区分用户停止/超时/正常完成
+
+**预防**：所有长任务（视频生成、批量处理等）前端必须用 5 状态机驱动 UI，禁止用单一 `isLoading: boolean` 表达全生命周期；超时用 `setTimeout` 同步设 `abortReason`；关闭/重置拆为两个函数；`onBeforeUnmount` 必须清理 `abortController` + 所有 `addEventListener` + `setInterval` timer。
+
+## 36. 归档 Markdown frontmatter 字段缺失
+
+**症状**：LLM 生成的图像/PPT/视频归档到 vault 后，文件无法被知识浏览/检索功能正确识别，或在 queries 目录下显示为普通 markdown 而非媒体归档；文件名格式混乱，无法按时间排序。
+
+**根因**：归档 Markdown frontmatter 未标准化（对应 CODING-060）：
+- 缺少 `type: query` 字段，归档文件被识别为普通笔记
+- 缺少 `output_mode` 字段，无法区分图像/PPT/视频/播客类型
+- 缺少 `generated_at` 字段或格式非 ISO8601，无法按生成时间排序
+- 文件名不符合 `<output_mode>-YYYYMMDD-HHmmss.<ext>` 模式，排序混乱
+- 业务字段（如 `image_file` / `video_file` / `task_id` / `source_url`）缺失，无法溯源
+- 文件名前缀与 frontmatter `output_mode` 不一致（如文件名 `image-xxx.png` 但 frontmatter `output_mode: video`）
+
+**解决**：
+1. 启用 `media_generation_tests.archive_frontmatter_check.enabled: true` 自动验证归档 frontmatter
+2. 验证 `required_fields`（type/output_mode/generated_at）齐全，缺失任一即失败
+3. 验证 `type` 字段值为 `expected_type_value`（默认 `query`）
+4. 验证 `output_mode` 字段值在 `expected_output_modes` 枚举内（image/ppt/video/podcast）
+5. 验证 `generated_at` 字段匹配 `generated_at_pattern`（ISO8601 格式：`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}`）
+6. 验证文件名匹配 `filename_pattern`（`^(image|ppt|video|podcast)-\d{8}-\d{6}\.(md|png|mp4|marp\.md)$`）
+7. `validate_filename_mode_consistency: true` 时验证文件名前缀与 frontmatter `output_mode` 一致
+8. 按 `business_fields_by_mode` 验证业务字段（如 video 必须含 `video_file` / `task_id` / `source_url` 之一）
+
+**预防**：所有 LLM 生成产物归档到 `vault/queries/` 目录时，frontmatter 必须含 `type: query` + `output_mode: <image|ppt|video|podcast>` + `generated_at: ISO8601`；文件名格式 `<output_mode>-YYYYMMDD-HHmmss.<ext>`（与 podcast-workflow 一致，排序友好）；业务字段（`image_file` / `video_file` / `task_id` / `source_url`）放同 frontmatter；Marp 类归档文件 frontmatter 可合并 marp 字段（`marp: true` + 归档字段），避免双重 frontmatter。
+
+## 37. 外部 API 类型契约不匹配（seconds 字段）
+
+**症状**：调用外部视频生成 API 时返回 400 错误，提示字段类型不匹配；或响应字段路径变更后前端无法获取 url，导致下载失败；或网络错误时前端统一显示"后端服务未运行"，无法区分 DNS 失败/连接拒绝/证书错误。
+
+**根因**：外部 API 集成契约不完整（对应 CODING-056）：
+- 调用方后端语言要求的字段类型未显式转换（如 Go 后端 string 类型，前端传 number 导致 400）
+- 响应字段未做双重路径兼容（`data.url || data.metadata?.url`），外部 API 字段路径变更后失效
+- 未用 `fetchWithDiagnostics` 包装原生 fetch，错误码未翻译为可读诊断信息
+- 错误消息硬编码"后端服务未运行"，无法区分网络超时/DNS 失败/连接拒绝/证书错误
+- `fetchWithDiagnostics` 未 export，无法单元测试验证错误转换逻辑
+
+**解决**：
+1. 启用 `media_generation_tests.external_api_contract.enabled: true` 自动验证外部 API 契约
+2. 验证 `require_fetch_wrapper: true` 时源码中使用了 `fetchWithDiagnostics` 包装（便于单元测试）
+3. 验证响应字段双重路径兼容（`data.url || data.metadata?.url`），应对外部 API 字段路径变更
+4. 验证调用方后端语言要求的字段类型已显式转换（如 Go 后端 string 类型用 `String(value)`）
+5. 按 `diagnostic_error_codes` 映射验证错误码翻译：
+   - `ENOTFOUND` → "DNS 解析失败，请检查网络或代理配置"
+   - `ECONNREFUSED` → "连接被拒绝，目标服务未启动或端口错误"
+   - `ECONNRESET` → "连接被重置，可能是代理超时或目标服务崩溃"
+   - `CERT_HAS_EXPIRED` → "证书已过期，请更新 CA 证书或检查系统时间"
+   - `UND_ERR_CONNECT_TIMEOUT` → "连接超时，目标服务响应过慢或不可达"
+6. 验证 `fetchWithDiagnostics` 已 export，便于单元测试直接验证错误转换逻辑
+
+**预防**：调用第三方/外部 API 必须用 `fetchWithDiagnostics` 包装原生 fetch，按 `err.cause.code` 分类翻译为可读诊断信息；响应字段必须做双重路径兼容（`data.url || data.metadata?.url`）；调用方后端语言要求的字段类型必须显式转换（如 Go 后端 string 类型用 `String(value)`）；`fetchWithDiagnostics` 必须 export，便于单元测试直接验证错误转换逻辑。
+
+## 38. 长任务轮询定时器未清理
+
+**症状**：用户关闭视频生成对话框后，控制台持续出现"组件已卸载仍更新状态"警告；或切换页面后定时器仍在执行网络请求，消耗带宽；或同一组件多次打开关闭后，多个定时器叠加导致请求频率异常增高。
+
+**根因**：长任务轮询定时器未在组件卸载时清理（对应 CODING-065）：
+- `setInterval` 未在 `onBeforeUnmount` 中 `clearInterval`，组件卸载后定时器仍执行
+- "关闭对话框"与"重置状态"合为一个函数，关闭时未显式停止轮询
+- 完成/失败时未显式 `stopXxxPolling()`，依赖 GC 回收定时器（GC 无法回收 setInterval）
+- `addEventListener` 注册的监听器未在 `onBeforeUnmount` 中 `removeEventListener`（函数引用未保存）
+- 第三方库实例（mermaid/marp）未在 `onBeforeUnmount` 调用其 `destroy` / `dispose` 方法
+
+**解决**：
+1. 启用 `media_generation_tests.long_task_state_machine.require_timer_cleanup: true` 自动验证定时器清理
+2. 验证 `setInterval` 在 `onMounted` 启动，`clearInterval` 在 `onBeforeUnmount` 配对清理
+3. `require_close_reset_split: true` 时验证"关闭对话框"（停轮询+关对话框+重置全部）与"重置状态保持对话框"（停轮询+清状态）拆为两个函数
+4. 验证完成/失败显式 `stopXxxPolling()` 停止定时器，不依赖 GC 回收
+5. 验证 `addEventListener` 注册的监听器在 `onBeforeUnmount` 中 `removeEventListener`（函数引用需保存，用具名函数非匿名箭头函数）
+6. 验证全局事件（`globalThis.addEventListener`）配对 `globalThis.removeEventListener`
+7. 验证第三方库实例（mermaid/marp）在 `onBeforeUnmount` 调用其 `destroy` / `dispose` 方法（若存在）
+
+**预防**：长任务轮询必须用 `setInterval(poll_interval_ms)` 定时查询状态，并用 5 状态机驱动 UI 模板切换；`onBeforeUnmount` 必须清理 `abortController` + 所有 `addEventListener` + `setInterval` timer；"关闭对话框"（停轮询+关对话框+重置全部）与"重置状态保持对话框"（停轮询+清状态，允许重新生成）拆为两个函数；完成/失败显式 `stopXxxPolling()` 停止定时器，不依赖 GC 回收。
+
+## 39. PowerShell 管道导致 EPIPE 断裂（退出码 -1）
+
+**症状**：运行 `python orchestrator.py | Out-String` 或 `npx vue-tsc --noEmit | Select-String` 时，命令以退出码 -1 异常终止，输出被截断；或测试流程因退出码 -1 被误判为失败。
+
+**根因**：PowerShell 对长时进程（≥30s）的管道输出处理存在 EPIPE 风险（对应 CODING-059）：
+- 管道右侧命令（Select-String/Out-String/Where-Object）提前关闭读取端时，左侧写入端收到 SIGPIPE 信号
+- PowerShell 将 EPIPE 映射为退出码 -1（非 0 也非 1），与真实失败混淆
+- 长时进程（vue-tsc 编译 1-10 分钟、orchestrator.py 1-5 分钟）更容易触发 EPIPE
+- 增量缓存未清理时 vue-tsc 耗时更长（>2 分钟），EPIPE 概率更高
+
+**解决**：
+1. 启用 `powershell_long_process.enabled: true` 自动检测长时进程管道使用
+2. 移除管道，直接运行长时进程：`python orchestrator.py`（而非 `python orchestrator.py | Out-String`）
+3. 需过滤输出时重定向到文件后读取：`npx vue-tsc --noEmit > tsc-output.txt 2>&1`，然后用 Grep 工具搜索
+4. 退出码 -1 视为管道断裂，重新直接运行验证真实退出码
+5. vue-tsc > 2 分钟时先清理增量缓存：`Remove-Item -Recurse -Force node_modules/.tmp, tsconfig.tsbuildinfo, tsconfig.app.tsbuildinfo, node_modules/.vite -ErrorAction SilentlyContinue`；同时清理 src 下 .ts 对应的 .js 编译产物
+
+**预防**：所有运行时间 ≥ 30s 的进程必须在 PowerShell 中直接运行（不用管道）；需过滤输出时重定向到文件后用 Grep 工具读取；vue-tsc 运行前清理增量缓存确保运行时间 < 2 分钟。
