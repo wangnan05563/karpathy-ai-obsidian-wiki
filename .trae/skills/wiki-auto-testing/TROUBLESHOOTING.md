@@ -593,3 +593,20 @@ open('script.py', 'w', encoding='utf-8').write(content)
 5. vue-tsc > 2 分钟时先清理增量缓存：`Remove-Item -Recurse -Force node_modules/.tmp, tsconfig.tsbuildinfo, tsconfig.app.tsbuildinfo, node_modules/.vite -ErrorAction SilentlyContinue`；同时清理 src 下 .ts 对应的 .js 编译产物
 
 **预防**：所有运行时间 ≥ 30s 的进程必须在 PowerShell 中直接运行（不用管道）；需过滤输出时重定向到文件后用 Grep 工具读取；vue-tsc 运行前清理增量缓存确保运行时间 < 2 分钟。
+
+## 40. 沙箱无浏览器 / 无 PyYAML 导致 E2E 与部分脚本无法运行
+
+**症状**：运行 Playwright 浏览器 E2E 时报 Chromium 未安装（`Executable doesn't exist`）；或依赖 PyYAML 的 Python 测试脚本报 `ModuleNotFoundError: No module named 'yaml'`；或 Git Bash 下 `seq` / `sleep` / `nohup` / `ps` 命令找不到。
+
+**根因**：
+1. 沙箱环境未安装 Chromium 浏览器，完整浏览器 E2E 无法启动。
+2. 沙箱 Python 环境未安装 PyYAML，部分测试脚本（`import yaml`）直接失败。
+3. Git Bash（Windows）是精简 shell，缺 GNU coreutils 的 `seq` / `sleep` / `nohup` / `ps`，常用 shell 写法不兼容。
+
+**解决**：
+1. 浏览器 E2E 回退：用 Fastify `app.inject` 做真实路由层测试 + 真实 HTTP API 集成测试（vitest + `fetch`），无需浏览器；浏览器 E2E 明确降级为"未验证"项，不伪造通过。
+2. PyYAML 缺失：将测试数据改为 JSON 或内联 dict，避免 `import yaml`；或仅在环境具备 PyYAML 时启用对应测试（配置项开关）。
+3. Git Bash 兼容：用工具 `run_in_background` 启动长时进程（替代 `nohup ... &`）；循环用 C 风格 `for ((i=1;i<=N;i++))` 替代 `seq`；用 `taskkill /F /PID` 替代 `ps` + `kill` 清理端口占用进程。
+4. 端口冲突先清理占用进程再启动：启用 `service_lifecycle.stop_old_process: true` 或 `service_manage` 步骤。
+
+**预防**：在沙箱/CI 环境运行测试前，先探测可用能力（浏览器是否安装、PyYAML 是否可用、shell 类型），据此选择测试策略；浏览器 E2E 与依赖第三方库的脚本须有**可降级**的替代验证路径（unit + app.inject + HTTP 集成），而非硬依赖单一环境。

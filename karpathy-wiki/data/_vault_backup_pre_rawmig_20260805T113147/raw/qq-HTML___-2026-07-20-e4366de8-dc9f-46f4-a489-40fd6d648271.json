@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "source": "qq-chat",
+    "chatName": "HTML测试群",
+    "dateRange": "2026-07-20",
+    "originalCount": 2,
+    "filteredCount": 2,
+    "redactedCount": 0,
+    "rawId": "e4366de8-dc9f-46f4-a489-40fd6d648271"
+  },
+  "chunks": [
+    [
+      {
+        "ts": "2026-07-20T14:30:15Z",
+        "speaker": "unknown",
+        "content": "张三\n如何部署？",
+        "type": "text"
+      },
+      {
+        "ts": "2026-07-20T14:30:20Z",
+        "speaker": "unknown",
+        "content": "李四\n用 docker compose up",
+        "type": "text"
+      }
+    ]
+  ]
+}

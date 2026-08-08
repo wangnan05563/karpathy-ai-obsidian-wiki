@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "source": "qq-chat",
+    "chatName": "JSON测试群",
+    "dateRange": "2026-07-20",
+    "originalCount": 2,
+    "filteredCount": 2,
+    "redactedCount": 0,
+    "rawId": "12c5b4cc-35b7-4cc4-b3d9-578240329076"
+  },
+  "chunks": [
+    [
+      {
+        "ts": "2026-07-20T15:00:00Z",
+        "speaker": "开发者",
+        "content": "如何实现快速排序算法？",
+        "type": "text"
+      },
+      {
+        "ts": "2026-07-20T15:00:30Z",
+        "speaker": "算法专家",
+        "content": "选择基准元素，分区后递归排序左右子数组。",
+        "type": "text"
+      }
+    ]
+  ]
+}

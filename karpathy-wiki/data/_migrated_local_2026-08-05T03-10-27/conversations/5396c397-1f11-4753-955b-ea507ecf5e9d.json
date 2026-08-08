@@ -1,0 +1,143 @@
+{
+  "id": "5396c397-1f11-4753-955b-ea507ecf5e9d",
+  "title": "什么是知识图谱？",
+  "createdAt": "2026-07-27T16:29:12.904Z",
+  "updatedAt": "2026-07-27T16:29:12.904Z",
+  "messageCount": 2,
+  "isPinned": false,
+  "preview": "知识库中没有专门介绍\"知识图谱\"概念的单篇页面，但多个页面提到了知识图谱相关内容。让我综合这些信息来回答。\n\n---\n\n",
+  "messages": [
+    {
+      "id": "b39d20d1-97be-4dbf-89c1-581e609cf427",
+      "role": "user",
+      "content": "什么是知识图谱？",
+      "createdAt": "2026-07-27T16:29:02.039Z"
+    },
+    {
+      "id": "78c2af3e-55a6-4597-b8cd-e542d59325df",
+      "role": "assistant",
+      "content": "知识库中没有专门介绍\"知识图谱\"概念的单篇页面，但多个页面提到了知识图谱相关内容。让我综合这些信息来回答。\n\n---\n\n## 什么是知识图谱？\n\n### 广义定义\n\n**知识图谱（Knowledge Graph）** 是一种用**图结构**来组织和表示知识的技术。它以**节点**表示实体（如人、事、物、概念），以**边**表示实体之间的关系，形成一个相互连接的知识网络。\n\n### 在本知识库中的体现\n\n在 [[LLM Wiki]] 知识库（即当前 Vault）中，知识图谱的概念主要体现为以下形式：\n\n#### 1. 双向链接机制\n\n在 [[vault]] 页面中明确指出，页面间通过 `[[页面名]]` 语法互相引用，**形成知识图谱**。例如：\n- `[[harness]]` 指向 concepts/harness.md\n- `[[llm-wiki]]` 指向 concepts/llm-wiki.md\n\n这种机制使得所有页面不再是孤立的文档，而是通过链接相互关联，构成一个可导航的知识网络。\n\n#### 2. 实体抽取与知识图谱构建\n\n在 [[LLM 实体抽取]] 页面中，**知识图谱构建**被列为实体抽取的相关技术之一。流程如下：\n- 利用大语言模型（LLM）从非结构化文本中自动识别命名实体（如人物、组织、概念等）\n- 进一步进行关系抽取，识别实体之间的关联\n- 最终形成结构化的知识图谱\n\n#### 3. 自动化的知识图谱建设\n\n在 [[传统 Wiki vs LLM Wiki 对比]] 页面中，对比了两者在**知识图谱构建**上的差异：\n\n| 维度 | 传统 Wiki | LLM Wiki |\n|------|-----------|----------|\n| **知识图谱** | 依赖人工手动建立链接 | 自动建立 [[双向链接]] |\n\n- **传统 Wiki**：知识图谱依赖人工编写者手动添加链接，工作量大且风格不统一\n- **LLM Wiki**：由 AI 驱动，自动从原始资料中提取实体和关系，自动生成双向链接，大幅降低维护成本\n\n### 知识图谱的核心要素\n\n从本知识库的内容可以归纳出知识图谱的几个核心要素：\n\n| 要素 | 说明 |\n|------|------|\n| **实体（Entity）** | 知识图谱中的节点，如人物、组织、概念、项目等 |\n| **关系（Relation）** | 实体之间的连接，如\"属于\"、\"引用\"、\"相关\"等 |\n| **属性（Attribute）** | 实体的特征描述，如名称、创建时间、标签等 |\n| **链接（Link）** | 实体间的导航路径，支持知识的发现和推理 |\n\n### 应用价值\n\n在本知识库的语境下，知识图谱的价值在于：\n- **知识发现**：通过双向链接从一个概念导航到相关概念\n- **自动化构建**：利用 LLM 和实体抽取技术，从大量原始资料中自动生成结构化的知识网络\n- **低维护成本**：更新原始资料后，知识图谱可以自动重新编译更新\n\n---\n\n> **总结**：知识图谱是一种以图结构组织和表示知识的方法，实体为节点、关系为边。在本知识库（[[LLM Wiki]]）中，通过 `[[双向链接]]` 机制、[[LLM 实体抽取]] 技术以及自动编译流程，实现了从原始资料到结构化知识网络的自动化构建。",
+      "refs": [
+        {
+          "path": "concepts/llm-wiki.md",
+          "title": "llm-wiki.md",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 1
+        },
+        {
+          "path": "concepts/vault.md",
+          "title": "vault.md",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 2
+        },
+        {
+          "path": "页面名",
+          "title": "页面名",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 3
+        },
+        {
+          "path": "concepts/harness.md",
+          "title": "harness.md",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 4
+        },
+        {
+          "path": "LLM 实体抽取",
+          "title": "LLM 实体抽取",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 5
+        },
+        {
+          "path": "传统 Wiki vs LLM Wiki 对比",
+          "title": "传统 Wiki vs LLM Wiki 对比",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 6
+        },
+        {
+          "path": "双向链接",
+          "title": "双向链接",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 7
+        }
+      ],
+      "followups": [
+        "详细解释一下「llm-wiki」的概念",
+        "「llm-wiki」和「vault」有什么区别？",
+        "知识图谱有哪些实际应用场景？"
+      ],
+      "thinking": [
+        {
+          "phase": "thinking",
+          "message": "正在思考...",
+          "ts": "2026-07-27T16:29:02.061Z"
+        },
+        {
+          "phase": "thinking",
+          "message": "扩展工具加载失败 [mcp:Sequential Thinking]: MCP process error: spawn npx ENOENT",
+          "ts": "2026-07-27T16:29:12.820Z"
+        },
+        {
+          "phase": "thinking",
+          "message": "扩展工具加载失败 [mcp:Excel]: MCP process error: spawn npx ENOENT",
+          "ts": "2026-07-27T16:29:12.821Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "正在调用：search_pages",
+          "tool": "search_pages",
+          "args": {
+            "keywords": "知识图谱"
+          },
+          "ts": "2026-07-27T16:29:12.821Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "正在调用：read_page",
+          "tool": "read_page",
+          "args": {
+            "path": "concepts/llm-entity-extraction.md"
+          },
+          "ts": "2026-07-27T16:29:12.821Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "正在调用：read_page",
+          "tool": "read_page",
+          "args": {
+            "path": "concepts/vault.md"
+          },
+          "ts": "2026-07-27T16:29:12.821Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "正在调用：read_page",
+          "tool": "read_page",
+          "args": {
+            "path": "comparisons/wiki-comparison.md"
+          },
+          "ts": "2026-07-27T16:29:12.821Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "正在调用：search_pages",
+          "tool": "search_pages",
+          "args": {
+            "keywords": "知识图谱 概念 定义"
+          },
+          "ts": "2026-07-27T16:29:12.821Z"
+        }
+      ],
+      "createdAt": "2026-07-27T16:29:12.881Z",
+      "sessionId": "f1a0e215-8dff-452e-9171-4cc461ee7e1b",
+      "messageIndex": 0
+    }
+  ]
+}

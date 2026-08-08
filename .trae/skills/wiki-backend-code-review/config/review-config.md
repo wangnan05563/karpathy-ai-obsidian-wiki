@@ -202,6 +202,16 @@ HTTP 请求参数用作路径时须用上表校验。正则视为配置项，禁
 | `spa_static_hosting.api_path_exclusion` | `/api/, /assets/` | 不触发 fallback 前缀 |
 | `spa_static_hosting.watch_reload_required` | `true` | watch 后须重启 |
 | `spa_static_hosting.health_check_endpoint` | `/api/ai/config` | 健康检查端点 |
+| `spa_live_deploy.enabled` | `true` | 启用实时部署解析审查（BR-071） |
+| `spa_live_deploy.public_base_dir` | `api` | 部署目录基准父目录（相对 cwd） |
+| `spa_live_deploy.live_dir_pattern` | `public_live_` | 时间戳部署目录前缀（后接数值时间戳） |
+| `spa_live_deploy.legacy_dir` | `public` | 兜底固定目录（新目录完整性失败时回退） |
+| `spa_live_deploy.quarantine_keyword` | `quarantine` | 排除关键字（隔离目录不参与候选） |
+| `spa_live_deploy.complete_marker` | `.deploy-complete` | 完整性门禁标记文件名（最后写） |
+| `spa_live_deploy.sort_order` | `desc` | 候选按数值时间戳降序（最新在前） |
+| `spa_live_deploy.asset_prefix` | `/wiki/` | 需 within-root 防穿越的静态资源前缀 |
+| `spa_live_deploy.require_within_root` | `true` | 资源解析须 normalize + path.relative 逃逸拦截 |
+| `spa_live_deploy.require_restart` | `true` | 部署新目录后必须重启后端才生效 |
 | `severity_critical` | `🔴 严重` | 必须修复，阻止合并 |
 | `severity_warning` | `🟡 警告` | 建议修复 |
 | `severity_suggestion` | `🟢 建议` | 可选优化 |
@@ -558,3 +568,361 @@ Tauri 1.x 不适用，设 `enabled` 为 `false`。
 | `sse_event_dispatch.cognitive_complexity_limit` | `15` | 认知复杂度 |
 | `sse_event_dispatch.unknown_event_strategy` | `warn` | 未知事件策略 |
 | `sse_event_dispatch.allowed_output_modes` | `normal,mindmap,image,ppt,video` | 允许的模式 |
+
+## 限流韧性审查参数（BR-063）
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `rate_limit_resilience.enabled` | `true` | 启用（BR-063） |
+| `rate_limit_resilience.severity_br063_1` | `critical` | 限流键错误违规级别 |
+| `rate_limit_resilience.severity_br063_2` | `critical` | 无界 Map 违规级别 |
+| `rate_limit_resilience.severity_br063_3` | `critical` | 可变时间比较违规级别 |
+| `rate_limit_resilience.severity_br063_4` | `suggestion` | 时钟无关测试违规级别 |
+| `rate_limit_resilience.trusted_proxy_hop` | `1` | 可信代理跳数（从右剔除） |
+| `rate_limit_resilience.window_ms` | `60000` | 滑动窗口长度 |
+| `rate_limit_resilience.max_per_window` | `60` | 每窗口最大命中数 |
+| `rate_limit_resilience.max_buckets` | `10000` | 桶数上限（LRU 兜底） |
+| `rate_limit_resilience.timing_safe_equal_required` | `true` | 令牌比较须常量时间 |
+
+## 确定性文本处理审查参数（BR-064）
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `deterministic_text_processing.enabled` | `true` | 启用（BR-064） |
+| `deterministic_text_processing.severity_br064_1` | `critical` | 宽泛 Unicode 区间违规级别 |
+| `deterministic_text_processing.severity_br064_2` | `critical` | 非实体感知去重违规级别 |
+| `deterministic_text_processing.severity_br064_3` | `critical` | 仅按短删违规级别 |
+| `deterministic_text_processing.severity_br064_4` | `critical` | 预算不保证净下降违规级别 |
+| `deterministic_text_processing.severity_br064_5` | `critical` | 跌破连贯性地板违规级别 |
+| `deterministic_text_processing.ideograph_regex` | `[㐀-鿿㐀-䶿]` | 仅表意文字区间（不含标点） |
+| `deterministic_text_processing.jaccard_threshold` | `0.9` | 去重 Jaccard 阈值 |
+| `deterministic_text_processing.greeting_blacklist` | `你好,谢谢,hi,hello` | 问候黑名单 |
+| `deterministic_text_processing.compression_ratio` | `0.3` | 压缩比例 |
+| `deterministic_text_processing.min_floor` | `200` | 压缩最小地板（token） |
+| `deterministic_text_processing.cjk_token_ratio` | `1` | CJK token 估算（1/字） |
+| `deterministic_text_processing.latin_token_ratio` | `4` | Latin token 估算（4/词） |
+| `deterministic_text_processing.recency_window` | `8` | 连贯性最近窗口 |
+| `deterministic_text_processing.coherence_k` | `12` | 连贯性地板 K |
+
+## 运行时数据隐私审查参数（BR-065）
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `runtime_data_privacy.enabled` | `true` | 启用（BR-065） |
+| `runtime_data_privacy.severity_br065_1` | `critical` | 新目录未 gitignore 违规级别 |
+| `runtime_data_privacy.severity_br065_2` | `critical` | 默认服务端存会话违规级别 |
+| `runtime_data_privacy.runtime_data_dirs` | `data/,cache/,index/,userData/` | 运行期数据目录清单（须被 gitignore） |
+| `runtime_data_privacy.gitignore_file_path` | `.gitignore` | gitignore 路径 |
+| `runtime_data_privacy.verification_command` | `git check-ignore -v <path>` | 验证命令 |
+| `runtime_data_privacy.server_side_sessions` | `false` | 服务端存会话默认开关 |
+| `runtime_data_privacy.server_side_sessions_config_field` | `persistSessions` | 显式开关字段名 |
+
+## 配置可移植默认审查参数（BR-066）
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `config_portable_defaults.enabled` | `true` | 启用（BR-066） |
+| `config_portable_defaults.severity_br066_1` | `critical` | 依赖 vaultPath 推导违规级别 |
+| `config_portable_defaults.severity_br066_2` | `critical` | 写机器绝对路径违规级别 |
+| `config_portable_defaults.user_data_dir_anchor` | `%LOCALAPPDATA%\KarpathyWiki` | 用户数据目录锚点（SEA 模式真实实现；回退 APPDATA → HOME，应用名目录） |
+| `config_portable_defaults.forbidden_absolute_prefixes` | `C:\Users\,/home/,/Users/,/root/` | 禁止写入的绝对路径前缀 |
+| `config_portable_defaults.portable_token` | `${userDataDir}` | 可重派生锚点占位符 |
+
+> 注意：`user_data_dir_anchor` 须与 `runtime.ts` 真实实现保持一致——SEA 模式解析为 `%LOCALAPPDATA%\KarpathyWiki`（回退 `APPDATA` → `os.homedir()`），开发模式沿用 `api/` 目录。旧值 `os.homedir()/.karpathy-wiki` 与实现不符，已校正。
+
+## 安装器与用户数据审查参数（BR-068）
+
+> 对应后端打包 / 安装器 / 用户数据目录解析与防覆盖规则（CODING-PACKAGING-USERDATA，wiki-code-dev references/packaging-userdata-rule.md）。
+> 聚焦三类事故：安装器覆盖用户配置 / 路径解析错基准（SEA import.meta.url 失效）/ 机器绝对路径固化进配置。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `packaging_user_data.enabled` | `true` | 启用（BR-068） |
+| `packaging_user_data.severity_br068_1` | `critical` | 安装器覆盖用户数据违规级别 |
+| `packaging_user_data.severity_br068_2` | `critical` | 资源路径/用户数据路径混用违规级别 |
+| `packaging_user_data.severity_br068_3` | `critical` | 固化机器绝对路径违规级别 |
+| `packaging_user_data.severity_br068_4` | `suggestion` | 用户数据目录未首次自建违规级别 |
+| `packaging_user_data.app_name` | `KarpathyWiki` | 用户数据目录名（贴 LOCALAPPDATA 之下） |
+| `packaging_user_data.user_data_dir_anchor` | `LOCALAPPDATA` | 用户数据根首选锚点 |
+| `packaging_user_data.user_data_dir_fallback` | `APPDATA, HOME` | 回退锚点顺序 |
+| `packaging_user_data.user_data_dir_pattern` | `{anchor}/{app_name}` | 用户数据目录解析模板 |
+| `packaging_user_data.installer_program_files_flags` | `ignoreversion` | 程序文件安装 Flags（升级即覆盖） |
+| `packaging_user_data.installer_exclude_user_data` | `true` | 用户数据（config.json/.env/vault/data）禁止打包到 {app} |
+| `packaging_user_data.sea_detection_symbol` | `IS_SEA` | 打包模式检测标志 |
+| `packaging_user_data.resource_path_funcs` | `getApiDir, getResourcePath, getPromptsDir` | 资源路径派生函数（随版本更新，随 exe 走） |
+| `packaging_user_data.user_data_path_funcs` | `getUserDataDir, getDataDir, getUserDataPath` | 用户数据路径派生函数（跨版本持久，随用户走） |
+| `packaging_user_data.forbidden_data_dir_sources` | `vaultPath, process.execPath, {app}` | 禁止作为用户数据目录来源的基准 |
+| `packaging_user_data.rebase_relative_only` | `true` | 仅相对路径字段被归一化到用户数据目录，尊重用户显式绝对路径 |
+| `packaging_user_data.clean_default_fields` | `vaultPath, auth.usersFilePath, auth.auditLogPath, urlCrawl.*, logging.logFilePath` | 首次落盘须回退为相对默认值的字段清单 |
+| `packaging_user_data.script_glob_pattern` | `**/*.ps1, **/*.iss` | 安装器/构建脚本扫描范围 |
+
+## 严格路径穿越审查参数（BR-067）
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `path_traversal_strict.enabled` | `true` | 启用（BR-067，扩展 security-rule） |
+| `path_traversal_strict.severity_br067_1` | `critical` | 缺 `..` 段二次校验违规级别 |
+| `path_traversal_strict.severity_br067_2` | `critical` | 缺 `isAbsolute` 检查违规级别 |
+| `path_traversal_strict.name_whitelist_regex` | `^[A-Za-z0-9_][A-Za-z0-9._-]*$` | 文件名白名单（与 security-rule 一致） |
+| `path_traversal_strict.traversal_regex` | `(^\|\/)\.\.(\/\|$)` | `..` 段负向匹配 |
+| `path_traversal_strict.require_isabsolute_check` | `true` | 拼接前须 isAbsolute 检查 |
+
+## 用户上传文件名管线审查参数（BR-069）
+
+> 对应"用户输入作文件名"的 Unicode 感知清洗 + 内部前缀剥离 + `..`/`isAbsolute` 二次校验（CODING-USER-UPLOAD-FILENAME，wiki-code-dev references/user-upload-filename-rule.md）。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `user_upload_filename.enabled` | `true` | 启用（BR-069） |
+| `user_upload_filename.severity_br069_1` | `critical` | ASCII 导向清洗把中文变下划线违规级别 |
+| `user_upload_filename.severity_br069_2` | `critical` | 内部前缀泄漏到展示名违规级别 |
+| `user_upload_filename.severity_br069_3` | `critical` | 缺 `..`/`isAbsolute` 二次校验违规级别 |
+| `user_upload_filename.severity_br069_4` | `suggestion` | originalName 缺 `??` 兜底违规级别 |
+| `user_upload_filename.sanitize_regex` | `/[^\p{L}\p{N}._-]/gu` | Unicode 感知清洗正则（保留 CJK/字母/数字/点/下划线/短横线） |
+| `user_upload_filename.internal_prefix_patterns` | `wiki-batch-\d+-\d+-, wiki-compile-\d+-` | 须剥离的系统内部前缀（落盘/展示前） |
+| `user_upload_filename.traversal_regex` | `(^\|\/)\.\.(\/\|$)` | `..` 段负向匹配（复用 BR-067） |
+| `user_upload_filename.require_isabsolute_check` | `true` | 拼接前须 isAbsolute 检查（复用 BR-067） |
+| `user_upload_filename.original_name_field` | `originalName` | 透传原始文件名的契约字段（optional + `??` 兜底） |
+
+## 数据迁移 / 修复脚本安全审查参数（BR-070）
+
+> 对应数据迁移/修复脚本的安全范式（CODING-MIGRATION-SAFETY，wiki-code-dev references/data-repair-script-safety-rule.md）。聚焦三类事故：迁移覆盖原文件无备份 / `$1` 字符串拼接污染引用 / 边读边写导致重复处理。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `migration_script_safety.enabled` | `true` | 启用（BR-070） |
+| `migration_script_safety.severity_br070_1` | `critical` | 默认非 dry-run 违规级别 |
+| `migration_script_safety.severity_br070_2` | `critical` | 无备份/覆盖原文件违规级别 |
+| `migration_script_safety.severity_br070_3` | `critical` | `$1` 字符串拼接污染违规级别 |
+| `migration_script_safety.severity_br070_4` | `best-practice` | 边读边写 / 无缓存违规级别 |
+| `migration_script_safety.dry_run_default` | `true` | 默认 dry-run，显式 `--apply` 才写盘 |
+| `migration_script_safety.apply_flag` | `--apply` | 显式执行写盘的标志 |
+| `migration_script_safety.conflict_suffix_pattern` | `-{n}` | 冲突文件名递增后缀（禁止覆盖） |
+| `migration_script_safety.reference_replace_style` | `function` | 引用改写须函数式替换（非 `"$1" + x`） |
+| `migration_script_safety.require_two_phase` | `true` | 先全量扫描再批量改写 |
+| `migration_script_safety.pagecache_required` | `true` | 同文件重复读取须缓存 |
+
+## BYOK 多用户配置代理审查参数（BR-072）
+
+> 对应 BYOK 多用户密钥代理（前端本地命名空间 + 密钥仅经请求体下发 + 覆盖纯函数 + 缺密钥不回落服务端共享）。CODING-BYOK（wiki-code-dev references/byok-per-user-override-rule.md）。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `byok_per_user_override.enabled` | `true` | 启用（BR-072） |
+| `byok_per_user_override.severity_no_persist` | `critical` | 密钥落盘 / 回显 GET / 记日志违规级别 |
+| `byok_per_user_override.severity_require_key` | `critical` | 缺必需密钥回落服务端共享违规级别 |
+| `byok_per_user_override.severity_pure_override` | `critical` | 覆盖非纯函数 / 空覆盖清空服务端共享违规级别 |
+| `byok_per_user_override.require_key_fields` | `apiKey,provider,baseUrl,model` | 缺任一即 400 的必需字段 |
+| `byok_per_user_override.override_func` | `applyPerRequestOverride` | 覆盖纯函数名（运行时零依赖） |
+| `byok_per_user_override.empty_override_falls_back` | `true` | 空 / 默认工具配置须回退服务端共享配置 |
+
+## 审查流程优化（Review Process Optimization）
+
+> 以下判定步骤适用于每次评审，旨在降低误报与漏报。规则文件与脚本不硬编码阈值，所有参数从本文件读取。
+
+### 1. Flake 隔离（Flake Isolation）
+
+当某条测试在完整测试套件中失败，但在单独运行时通过，先**单独运行该测试文件**再决定是否归咎于本次变更。预存在的时序 / 状态 flake 很常见（例如固定窗口限流跨过 60s 边界偶发触发 429，见 BR-063-4）。流程：
+
+1. 复现：单独运行失败测试文件（如 `vitest run rate-limit.test.ts` / `pytest tests/test_x.py::test_y`）。
+2. 若单独通过 → 判定为 flake，不计入本次变更问题；记录为预存在 issue。
+3. 若单独也失败 → 才进入变更内容排查。
+
+### 2. 变更内容范围（Modified-content Scope）
+
+评审时聚焦**实际变更的文件**，不扩大扫描面：
+
+- 优先用 `git diff` / `git diff --cached` 取得变更文件清单与行号。
+- 对新增 / 修改的**路由**（routes/*.ts），必须运行 `route_registration_check`（确认注册）+ `type_sync_check`（确认前后端 types.ts 同步，见 BR-026 / type-sync 规则）。
+- 仅对变更行及其直接上下文应用规则；未变更代码标记为"已验证，跳过"。
+
+### 3. 配置驱动（Config-driven）
+
+所有阈值 / 参数 / 严重级别均从本文件读取，**禁止在审查逻辑（规则文件、脚本、prompt）中硬编码**。新增规则须同步在对应"审查参数"段落追加参数表，并默认从 config 引用。若某判定需要新阈值，先加到本文件再在规则中引用。
+
+## 隔离测试纪律（Test Isolation — BR-073）
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `test_isolation_backend.namespaces_prefixes` | `usercfg::`,`tts-config::` | 隔离测试须唯一化的命名空间前缀（每用例用唯一 userId / 线程 id 拼接） |
+| `test_isolation_backend.forbidden_patterns` | `indexedDB.deleteDatabase`,`deleteDatabase` | `beforeEach` 中禁止的删库模式（fake-indexeddb + 已开连接会 onblocked / 泄漏） |
+| `test_isolation_backend.flush_rounds` | `3` | 异步落盘断言前 `await new Promise(r => setTimeout(r, 0))` 的轮数 |
+| `test_isolation_backend.severity_namespace` | `critical` | BR-073-1 未用唯一命名空间 / 用 beforeEach 删库的违规级别 |
+| `test_isolation_backend.severity_flush` | `suggestion` | BR-073-2 异步断言未多轮 flush 的违规级别 |
+| `test_isolation_backend.severity_module_state` | `suggestion` | BR-073-3 后端用例未重置模块态 / mock 的违规级别 |
+
+> 参数与 wiki-auto-testing `indexeddb_test_isolation_check`（`namespace_prefixes` / `forbidden_patterns` / `flush_rounds`）对齐；规则正文见 wiki-code-dev references/indexeddb-test-isolation-rule.md。
+
+## SSML / TTS Prosody 注入防护审查参数（BR-074）
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `ssml_injection.enabled` | `true` | 是否启用本规则 |
+| `ssml_injection.rate_regex` | `^(default\|\d{1,3}%\...)$` | 语速白名单正则（绝对百分比 / 相对倍数 / default） |
+| `ssml_injection.volume_regex` | `^(default\|\d{1,3}%\...)$` | 音量白名单正则 |
+| `ssml_injection.pitch_regex` | `^(default\|\d{1,3}Hz\...)$` | 语调白名单正则 |
+| `ssml_injection.default_value` | `default` | 校验失败回退值 |
+| `ssml_injection.escape_chars` | `<>&` | 用户文本拼入 SSML 前须转义的字符 |
+| `ssml_injection.forbidden_tags_regex` | `<mstts:express-as` | 免费端点不支持标签（命中即剥离/拒绝） |
+| `ssml_injection.unsupported_endpoint_code` | `1007` | 免费端点拒绝 SSML 的 WebSocket 关闭码 |
+
+## 子进程异步/同步正确性审查参数（BR-075）
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `child_process_sync.enabled` | `true` | 是否启用本规则 |
+| `child_process_sync.sync_calls` | `ffmpeg` | 须同步拿结果的子进程命令清单 |
+| `child_process_sync.timeout_ms` | `30000` | 子进程同步调用超时（毫秒，从配置读取） |
+| `child_process_sync.require_await_pattern` | `await \| execFileSync` | 结果被使用前的必要同步标志 |
+| `child_process_sync.severity_fake_sync` | `critical` | 异步 API 当同步用违规级别 |
+
+## 关键写不静默吞错审查参数（BR-076）
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `critical_write_no_swallow.enabled` | `true` | 是否启用本规则 |
+| `critical_write_no_swallow.critical_functions` | `saveUsers,saveConfig,persistConversation` | 关键写函数清单（命中即须错误传播） |
+| `critical_write_no_swallow.severity` | `critical` | 关键写静默吞错违规级别 |
+| `critical_write_no_swallow.silent_catch_pattern` | `catch\s*\([^)]*\)\s*\{\s*\}` | 空 catch（无 throw/log）匹配模式 |
+
+## 关键数据文件损坏防护审查参数（BR-077）
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `file_corruption_guard.enabled` | `true` | 是否启用本规则 |
+| `file_corruption_guard.critical_files` | `users.json,config.json` | 关键 JSON 文件清单 |
+| `file_corruption_guard.backup_on_corruption` | `true` | 损坏时备份为 `.corrupt-<ts>.bak` |
+| `file_corruption_guard.backup_suffix` | `.corrupt` | 坏文件备份名标记 |
+| `file_corruption_guard.severity` | `critical` | 损坏当 not-found 静默清零违规级别 |
+
+## 类型安全禁用 as any 审查参数（BR-078）
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `type_safe_no_any.enabled` | `true` | 是否启用本规则 |
+| `type_safe_no_any.forbidden_patterns` | `as any, as unknown as, as any as` | 禁止的绕过写法 |
+| `type_safe_no_any.allowed_in` | `@migration` | 允许放行的标注 |
+| `type_safe_no_any.proper_type_ref` | `InjectOptions['method']` | 推荐的类型提取示例 |
+| `type_safe_no_any.severity` | `critical` | 常驻业务路径 `as any` 绕过违规级别 |
+
+## 超时/阈值可配置化审查参数（BR-079）
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `config_timeout.enabled` | `true` | 是否启用本规则 |
+| `config_timeout.timeout_keys` | `edgeTtsTimeoutMs` | 须配置化的超时键清单 |
+| `config_timeout.default_ms` | `30000` | 超时默认毫秒 |
+| `config_timeout.forbidden_literal_ms` | `30000,30_000,60000` | 禁止直接在代码出现硬编码毫秒字面量 |
+| `config_timeout.margin_multiplier` | `1.5` | 多层超时递增倍数（与 BR-053 对齐） |
+
+## 去除冗余探测/探针审查参数（BR-080）
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `no_redundant_probe.enabled` | `true` | 是否启用本规则 |
+| `no_redundant_probe.capability_check` | `ffmpeg -version` | 工具可用性能力检测命令 |
+| `no_redundant_probe.redundant_probe_regex` | `ffprobe` | 冗余探针命令（命中即告警） |
+| `no_redundant_probe.forbidden_commands` | `ffprobe` | 禁止用于可用性探测的命令清单 |
+| `no_redundant_probe.severity` | `suggestion` | 冗余探测违规级别 |
+
+## 归档落盘文件名唯一性审查参数（BR-081）
+
+> 对应"归档落盘文件名碰撞 → 静默丢数据"复盘（CODING-GENERATED-FILENAME-UNIQUENESS，wiki-code-dev references/generated-filename-uniqueness-rule.md）。落盘文件名由派生分组键（日期+shortId）构成时非全局唯一，须追加随机后缀。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `generated_filename.enabled` | `true` | 是否启用本规则 |
+| `generated_filename.derived_group_key` | `date+shortId` | 派生分组键组成（非全局唯一，仅分组） |
+| `generated_filename.collision_suffix_len` | `4` | 追加随机后缀长度（hex 字符数） |
+| `generated_filename.collision_suffix_charset` | `hex` | 随机后缀字符集（hex/base36/uuid） |
+| `generated_filename.reject_on_collision` | `true` | 仍哈希碰撞即拒绝/重生成，禁止覆盖已存在文件 |
+| `generated_filename.severity` | `critical` | 派生键直接落盘覆盖他人数据违规级别 |
+
+## 服务端解析客户端日期串安全审查参数（BR-082）
+
+> 对应"非法 ts → RangeError → 500"复盘（CODING-SAFE-CLIENT-DATE-PARSE，wiki-code-dev references/safe-client-date-parse-rule.md）。禁止 `new Date(str).toISOString()` 对非法串抛错。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `safe_date_parse.enabled` | `true` | 是否启用本规则 |
+| `safe_date_parse.forbidden_pattern` | `new Date(str).toISOString()` | 命中即告警的非法写法 |
+| `safe_date_parse.default_value` | `null` | 解析失败回退值（或 ISO 当前时间，按业务定） |
+| `safe_date_parse.accept_undefined` | `true` | 未定义字段允许回退默认而非抛错 |
+| `safe_date_parse.coerce_nonstring` | `true` | 非字符串先规范化再校验，不直接 toISOString |
+| `safe_date_parse.severity` | `critical` | 非法日期串导致 500 的违规级别 |
+
+## 客户端整数序号校验审查参数（BR-083）
+
+> 对应"非整数 messageIndex → undefined 访问 → 500"复盘（CODING-INTEGER-INDEX-VALIDATION，wiki-code-dev references/integer-index-validation-rule.md）。客户端传下标访问数组前须 `Number.isInteger` 校验。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `integer_index.enabled` | `true` | 是否启用本规则 |
+| `integer_index.reject_status` | `400` | 非法/非整数的拒绝状态码 |
+| `integer_index.validate_before_access` | `true` | 校验须在数组访问前短路 |
+| `integer_index.severity` | `critical` | 非整数当下标导致 undefined 访问 500 的违规级别 |
+
+## Wikilink 注入清洗审查参数（BR-084）
+
+> 对应"refs 含换行破坏 wikilink / 空串脏链接"复盘（CODING-WIKILINK-SANITIZATION，wiki-code-dev references/wikilink-sanitization-rule.md）。注入 `[[wikilink]]` 前去换行+trim+去空。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `wikilink.enabled` | `true` | 是否启用本规则 |
+| `wikilink.sanitize_regex` | `[\r\n]` | 须清除的换行字符集 |
+| `wikilink.replace_with` | ` ` | 换行替换字符（空格） |
+| `wikilink.trim` | `true` | 注入前 trim |
+| `wikilink.filter_empty` | `true` | 去空串（`filter(Boolean)`） |
+| `wikilink.extra_clean_regex` | `[\]\|]` | 额外清洗的破坏性字符（`]`/`\|`） |
+| `wikilink.severity` | `suggestion` | 脏链接/跨行断裂违规级别 |
+
+## 创建型写入空内容拒绝审查参数（BR-085）
+
+> 对应"空内容仍创建空节点"复盘（CODING-EMPTY-CONTENT-REJECTION，wiki-code-dev references/empty-content-rejection-rule.md）。必填字段缺失或空串即拒绝。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `empty_content.enabled` | `true` | 是否启用本规则 |
+| `empty_content.reject_status` | `400` | 空内容拒绝状态码 |
+| `empty_content.required_fields` | `question,answer` | 必填字段清单（从配置读取，缺失即拒） |
+| `empty_content.treat_whitespace_as_empty` | `true` | 纯空白视为空串 |
+| `empty_content.severity` | `critical` | 空内容落盘污染知识的违规级别 |
+
+## 归档内容取源解耦审查参数（BR-086）
+
+> 对应"依赖服务端会话 → 默认部署 100% 误报过期"复盘（CODING-PERSISTENCE-CLIENT-CONTENT-DECOUPLING / CODING-CAPABILITY-GATING-SYNC，wiki-code-dev references/persistence-client-content-decoupling-rule.md · references/capability-gating-sync-rule.md）。内容优先请求体取，仅缺失回退会话。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `persistence_client_content.enabled` | `true` | 是否启用本规则 |
+| `persistence_client_content.prefer_request_body` | `true` | 内容优先从请求体取 |
+| `persistence_client_content.fallback_to_session` | `false` | 仅请求体缺失才回退会话（默认关） |
+| `persistence_client_content.default_threads_persist` | `false` | 默认会话持久化开关 |
+| `persistence_client_content.forbid_auto_persist` | `true` | 不得擅自开启 persist 以绕过解耦 |
+| `persistence_client_content.severity` | `critical` | 依赖服务端会话导致误报过期的违规级别 |
+
+## 编辑重发后端会话落盘契约审查参数（BR-087）
+
+> 对应"编辑后重新发送"复盘（CODING-EDIT-RESEND，wiki-code-dev references/edit-resend-rule.md）。前端 trim 尾随 AI 答案 + 重新插入用户消息后整体重发（FR-077），后端会话 upsert（PUT /api/conversations/:id）须将 `body.messages` 视为权威全量替换（幂等），禁止与服务端既有 messages 做 merge/append，否则被裁悬空答案复活。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `conversation_upsert_contract.enabled` | `true` | 是否启用本规则 |
+| `conversation_upsert_contract.messages_authoritative_replace` | `true` | `body.messages` 须为权威全量替换（幂等），禁止服务端 `existing.messages` merge/append |
+| `conversation_upsert_contract.missing_messages_fallback` | `[]` | `body.messages` 缺失时回退空数组而非 `existing.messages`（防脏数据/被裁答案复活） |
+| `conversation_upsert_contract.preserve_server_metadata` | `createdAt,threadId` | upsert 仅保留的服务端特有元数据键（消息体以请求体为唯一来源） |
+| `conversation_upsert_contract.last_write_wins` | `true` | 并发/重试以请求体 messages 为最终态（最后写覆盖），禁止中间态产生重复 |
+| `conversation_upsert_contract.severity` | `critical` | 服务端 append/merge 导致悬空答案复活的违规级别 |
+
+## 审查范围判定审查参数（BR-088）
+
+> 后端审查技能的适用范围是 Fastify/TS 后端（routes / services / 引擎 / 配置 / 文件系统 / SSE）。跨端规则前后端各有对应 BR-/FR- 编号，须按文件位置选对应技能核，避免范围误配与双重复核。对齐 wiki-code-dev 复盘维度④（适用 / 不适用边界）。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `review_scope.enabled` | `true` | 是否启用范围判定（待审变更完全前端时声明不匹配并建议切前端技能） |
+| `review_scope.frontend_dir_glob` | `frontend/` | 命中即判为前端主导的目录 glob |
+| `review_scope.frontend_file_patterns` | `*.vue,frontend/src/stores/*.ts,frontend/src/services/*UserConfig*.ts` | 纯前端文件特征（客户端 IndexedDB 写入 / Pinia reactive 代理剥离属此） |
+| `review_scope.route_to_frontend_skill` | `wiki-frontend-code-review` | 范围不匹配时建议切换的前端评审技能名 |
+| `review_scope.cross_edge_rules` | `BYOK,SESSION-ISOLATION,STREAMING-RESUME,TEST-ISOLATION,EDIT-RESEND,IDB-REACTIVE-CLONE` | 前后端各有对应编号的跨端规则；按文件位置选其一核，不双重复核 |
+| `review_scope.severity_misroute` | `suggestion` | 纯前端改动硬套后端规则的违规级别（如把前端 reactive-proxy-in-IDB 误当后端关键写问题，归属应为前端 FR-081 / CODING-IDB-REACTIVE-CLONE） |

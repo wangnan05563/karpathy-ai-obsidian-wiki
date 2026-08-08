@@ -3,6 +3,16 @@
 Shared utilities for wiki-auto-testing.
 Contains config loading, result tracking, and helper functions.
 All parameters from config.yaml - no hardcoded values.
+
+配置驱动说明（通用性与配置驱动）：
+- 所有 URL / 端口 / 端点 / 鉴权字段均通过 cfg 读取，不在此文件硬编码：
+  - cfg["service"]["frontend_url"] / cfg["service"]["api_url"]  → 前后端地址与端口
+  - cfg["auth"]["login_endpoint"] / cfg["auth"]["token_storage_key"] / cfg["auth"]["token_field"] → 登录端点与 token 注入键
+  - cfg["auth"]["credentials"] → 登录账号（CI/本地均可覆盖）
+- 因此本技能适配不同项目时，只需编辑 config.yaml + defaults.yaml，无需改代码。
+- 例外（项目前端约定，非服务配置）：下方 authenticate() 中的 localStorage 键 "navCollapsed"
+  对应前端 STORAGE_KEYS 常量（导航栏折叠态持久化），属前端业务约定；
+  如要完全参数化，可新增 cfg["auth"]["nav_collapsed_key"]，当前沿用项目约定。
 """
 import json
 import os
@@ -313,6 +323,7 @@ def authenticate(page, ctx, cfg, quiet=False):
     # 重置导航栏折叠状态：v2 导航栏将 navCollapsed 持久化到 localStorage，
     # 若上轮测试遗留折叠态，本轮测试将找不到 .tab-btn（折叠态渲染为 .icon-btn）
     # 为什么放在 token 注入之后：避免页面刷新后 token 丢失
+    # 注：navCollapsed 为前端 STORAGE_KEYS 业务约定键（详见模块 docstring 配置驱动说明）
     page.evaluate('localStorage.setItem("navCollapsed", "false")')
 
     # 重新加载页面：前端 restoreSession() 在页面加载时执行，

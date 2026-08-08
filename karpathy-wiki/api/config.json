@@ -2,15 +2,16 @@
   "vaultPath": "../data/vault",
   "adapter": "harness",
   "llm": {
-    "provider": "deepseek",
-    "baseUrl": "https://api.deepseek.com",
-    "model": "deepseek-chat",
+    "provider": "openai",
+    "baseUrl": "https://api.siliconflow.cn/v1/",
+    "model": "Qwen/Qwen3-8B",
     "apiKeyRef": "DEEPSEEK_API_KEY",
     "stream": false,
-    "apiKey": "sk-7c761b8645aa4721a3a9d1160816296b",
+    "apiKey": "sk-ivnaisotjdxgffoysxicgjqifxzcgcwidjavnxvsrhjywqvx",
     "apiKeys": {
       "agnes": "sk-5BGyB2vRsrjsG3qQuXCoYYXN2O98U1zVQTGeKCJchuKHjLgW",
-      "deepseek": "sk-7c761b8645aa4721a3a9d1160816296b"
+      "deepseek": "sk-7c761b8645aa4721a3a9d1160816296b",
+      "openai": "sk-ivnaisotjdxgffoysxicgjqifxzcgcwidjavnxvsrhjywqvx"
     }
   },
   "budget": {
@@ -175,6 +176,41 @@
       "defaultVideoSeconds": 5
     }
   },
+  "sessionPersistence": {
+    "threadsPersist": false,
+    "conversationsPersist": false
+  },
+  "contextGovernor": {
+    "enabled": true,
+    "maxTokens": 5000,
+    "warnRatio": 0.75,
+    "recencyWindow": 12,
+    "maxMessages": 30,
+    "compressionStrategy": "extractive",
+    "summaryMaxChars": 1200,
+    "dedupThreshold": 0.85,
+    "minContentChars": 10,
+    "lowValuePatterns": [
+      "好的",
+      "谢谢",
+      "感谢",
+      "嗯",
+      "哦",
+      "ok",
+      "OK",
+      "好的谢谢",
+      "收到",
+      "了解了",
+      "明白了",
+      "哈哈",
+      "好的呢",
+      "没问题",
+      "行",
+      "可以",
+      "好的。"
+    ],
+    "reorderMode": "chronological"
+  },
   "tools": {
     "mcpServers": [
       {
@@ -215,7 +251,9 @@
                   "description": "需要推理/分析的具体问题或任务描述"
                 }
               },
-              "required": ["question"]
+              "required": [
+                "question"
+              ]
             }
           }
         ]
@@ -257,7 +295,9 @@
                   "description": "Excel 文件的本地绝对路径或可访问的 URL"
                 }
               },
-              "required": ["filePath"]
+              "required": [
+                "filePath"
+              ]
             }
           },
           {
@@ -275,7 +315,10 @@
                   "description": "要写入的数据（如 { sheet: 'Sheet1', rows: [...] }）"
                 }
               },
-              "required": ["filePath", "data"]
+              "required": [
+                "filePath",
+                "data"
+              ]
             }
           }
         ]
@@ -333,5 +376,5 @@
       ]
     }
   ],
-  "activeSkill": "learning-card"
+  "activeSkill": "general-qa"
 }

@@ -728,3 +728,344 @@ SSE 事件按类型推送，前端分发到 store：
 |`heavy_library_frontend.fallback_tag`|`pre`|降级标签|
 |`heavy_library_frontend.error_suppress_selectors`|`.error-icon,.error-text`|错误元素|
 |`heavy_library_frontend.ssr_static_import`|`false`|SSR 导入|
+
+## TS/JS 遮蔽审查参数（FR-061）
+
+> ts-js-shadowing-frontend-rule.md 参数。Vite 默认 `resolve.extensions` 中 `.js` 先于 `.ts`，`src/` 残留 `.js`/`.map` 会导致 `.ts` 修改静默不生效。
+
+|参数|值|说明|
+|------|-----|------|
+|`ts_js_shadowing_frontend.enabled`|`true`|启用本组规则（FR-061）|
+|`ts_js_shadowing_frontend.severity_br061_1`|`critical`|FR-061-1 src/ 残留 .js/.map 违规级别|
+|`ts_js_shadowing_frontend.severity_br061_2`|`critical`|FR-061-2 resolve.extensions 顺序违规级别|
+|`ts_js_shadowing_frontend.severity_br061_3`|`suggestion`|FR-061-3 验证步骤违规级别|
+|`ts_js_shadowing_frontend.src_glob`|`frontend/src/**`|受管控源码目录|
+|`ts_js_shadowing_frontend.forbidden_extensions`|`*.js,*.js.map`|禁止出现在 src/ 的扩展名|
+|`ts_js_shadowing_frontend.typecheck_command`|`vue-tsc --noEmit`|类型检查命令|
+|`ts_js_shadowing_frontend.build_command`|`vite build`|构建命令|
+
+> 适用：Vite + Vue 3 + TypeScript 项目，CI / pre-commit 须含清理与验证。
+
+## 前后端类型同步（SSE done 事件字段新增）审查参数（FR-062）
+
+> type-sync-done-event-rule.md 参数。后端在 API 响应 / SSE 事件（如 `done`）新增字段时，前端 `types.ts` interface 须同 PR 同步，且新字段加法可选。
+
+|参数|值|说明|
+|------|-----|------|
+|`type_sync_done_event_frontend.enabled`|`true`|启用本组规则（FR-062，扩展 TS-1）|
+|`type_sync_done_event_frontend.severity_br062_1`|`critical`|FR-062-1 未同 PR 同步 interface 违规级别|
+|`type_sync_done_event_frontend.severity_br062_2`|`critical`|FR-062-2 非加法/非可选违规级别|
+|`type_sync_done_event_frontend.backend_types_path`|`api/src/types.ts`|后端 types 路径|
+|`type_sync_done_event_frontend.frontend_types_path`|`frontend/src/types.ts`|前端 types 路径|
+|`type_sync_done_event_frontend.watch_event_types`|`done,result,progress,error`|重点关注的 SSE 事件类型|
+|`type_sync_done_event_frontend.ignore_optional_marker`|`true`|忽略 `?` 可选标记差异|
+
+> 适用：全栈 TS 手动 types.ts。GraphQL / tRPC 不适用。
+
+## 前端运行时数据隐私审查参数（FR-063）
+
+> runtime-data-privacy-frontend-rule.md 参数。前端新增浏览器端持久化命名空间须确认隐私边界与 gitignore，会话默认不服务端存储（对应后端 BR-065）。
+
+|参数|值|说明|
+|------|-----|------|
+|`runtime_data_privacy_frontend.enabled`|`true`|启用本组规则（FR-063，对应后端 BR-065）|
+|`runtime_data_privacy_frontend.severity_br063_1`|`critical`|FR-063-1 敏感字段明文/产物入库违规级别|
+|`runtime_data_privacy_frontend.severity_br063_2`|`critical`|FR-063-2 默认服务端存会话违规级别|
+|`runtime_data_privacy_frontend.forbidden_localstorage_fields`|`apiKey,authtoken,password,secret,cpolarAuthtoken`|禁止 localStorage 明文字段|
+|`runtime_data_privacy_frontend.server_side_sessions_config_field`|`persistSessions`|服务端存会话开关字段|
+|`runtime_data_privacy_frontend.gitignore_runtime_artifacts`|`test_screenshots/,test_*.json`|须 gitignore 的运行期产物|
+
+## 打包脚本与安装器审查参数（FR-064）
+
+> packaging-config-rule.md 参数。前端代码（及配套打包/安装器脚本）不得硬编码应与打包或配置同源的常量；用户数据路径须由后端 API 提供，前端不得自行拼接 exe 同级 / Program Files 路径；安装器不得覆盖用户数据。
+
+|参数|值|说明|
+|------|-----|------|
+|`packaging_config_frontend.enabled`|`true`|启用本组规则（FR-064，对应后端 BR-068 / CODING-PACKAGING-USERDATA）|
+|`packaging_config_frontend.severity_br064_1`|`critical`|FR-064-1 前端硬编码机器绝对路径/安装路径/版本号违规级别|
+|`packaging_config_frontend.severity_br064_2`|`critical`|FR-064-2 前端自行拼接 exe 同级/Program Files 用户数据路径违规级别|
+|`packaging_config_frontend.severity_br064_3`|`suggestion`|FR-064-3 安装器/打包脚本覆盖用户数据违规级别（跨文件核对）|
+|`packaging_config_frontend.forbidden_hardcoded_patterns`|`C:\Users\,C:\Program Files,/Applications,/usr/local,/opt/,vaultPath=absolute,version: 'x.y.z' literal`|前端禁止硬编码的路径/版本字面量|
+|`packaging_config_frontend.user_data_source`|`backend API (/api/ai/config 等)`|用户数据路径须由后端提供，禁止前端拼接|
+|`packaging_config_frontend.version_source`|`package.json / build define / 后端 /version`|版本号须同源派生，禁止前端字面量|
+|`packaging_config_frontend.installer_script_glob`|`**/*.iss,**/*.ps1,**/build*.{ps1,sh}`|安装器/构建脚本扫描范围（跨文件核对）|
+|`packaging_config_frontend.installer_program_files_flags`|`ignoreversion`|程序文件安装 Flags（升级即覆盖）|
+|`packaging_config_frontend.installer_exclude_user_data`|`true`|用户数据（config.json/.env/vault/data）禁止打包到 {app}|
+
+> 适用：Vite + Vue 3 前端项目、打包（SEA/Tauri/Electron/Inno Setup）应用的安装器与构建脚本。不适用：纯静态无打包项目、无桌面分发的 Web 项目（安装器相关子项不适用）。
+
+## Element Plus 单选组件弃用属性审查参数（FR-065）
+
+> element-plus-rule.md FR-065 参数。Element Plus 2.6.0+ 弃用 `el-radio` / `el-radio-button` 的 `label` 作 value，3.0.0 移除；选项值须用 `value`，显示文本用插槽。
+
+|参数|值|说明|
+|------|-----|------|
+|`element_plus_radio.enabled`|`true`|启用本组规则（FR-065）|
+|`element_plus_radio.severity_br065_1`|`critical`|FR-065-1 沿用 `label` 作 value 违规级别|
+|`element_plus_radio.severity_br065_2`|`suggestion`|FR-065-2 升级前未全量扫描弃用用法违规级别|
+|`element_plus_radio.frontend_glob`|`frontend/src/**/*.vue`|须扫描的源码范围|
+|`element_plus_radio.components`|`el-radio,el-radio-button,el-radio-group`|受影响的组件|
+|`element_plus_radio.deprecated_value_attr`|`label`|禁止用作选项值的弃用属性|
+|`element_plus_radio.replacement_attr`|`value`|替代属性（选项值）|
+|`element_plus_radio.display_text_strategy`|`slot`|显示文本改用默认插槽|
+|`element_plus_radio.removal_version`|`3.0.0`|该用法被移除的 Element Plus 大版本|
+|`element_plus_radio.deprecation_since_version`|`2.6.0`|该用法被标记弃用的 Element Plus 版本|
+
+## 可选契约字段同步审查参数（FR-066）
+
+> optional-contract-field-rule.md 参数。后端在 API 契约（如 CompileInput/QueryInput）新增可选字段、且前端不消费该内部字段时，前端 types.ts 须同 PR 同步声明可选；前端禁止对该字段做必填访问或分支依赖；后端须 `??` 兜底且跨文件核对字段一致性。扩展 TS-1 / FR-062 的"加法+可选"原则。
+
+|参数|值|说明|
+|------|-----|------|
+|`optional_contract_field_frontend.enabled`|`true`|启用本组规则（FR-066，扩展 TS-1 / FR-062）|
+|`optional_contract_field_frontend.severity_br066_1`|`suggestion`|FR-066-1 未在 types.ts 同步声明可选字段违规级别（契约清晰性，非运行时阻断）|
+|`optional_contract_field_frontend.severity_br066_2`|`critical`|FR-066-2 对不消费字段做必填访问 / 分支依赖违规级别|
+|`optional_contract_field_frontend.severity_br066_3`|`suggestion`|FR-066-3 后端缺运行时兜底 / 跨文件字段不一致违规级别|
+|`optional_contract_field_frontend.backend_types_path`|`api/src/types.ts`|后端 types 路径|
+|`optional_contract_field_frontend.frontend_types_path`|`frontend/src/types.ts`|前端 types 路径|
+|`optional_contract_field_frontend.ignored_unconsumed_internal_fields`|`originalName`|后端专属、前端不消费的可选字段清单（逗号分隔）；这些字段在前端 types.ts 须可选且前端禁止强依赖|
+|`optional_contract_field_frontend.watch_request_bodies`|`CompileInput,QueryInput`|重点关注的 API 请求体 interface 名|
+
+> 适用：全栈 TS 手动 types.ts。对应后端 BR-069-4 / BR-026。
+
+> 适用：使用 Element Plus 单选组件的 Vue 3 项目；升级 EP 主版本前须全量迁移。
+
+## 语音合成（TTS）审查参数（FR-067）
+
+> tts-neural-fallback-rule.md 参数。朗读 / 语音合成功能：优先 neural TTS（后端合成端点 + 优质 neural 音色）而非浏览器 Web Speech API；必须保留浏览器 TTS 为优雅降级；SSML 须转义且禁用免费端点不支持的 express-as；播放前校验音频有效性并重试。对应 wiki-code-dev CODING-TTS-*。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `tts_neural_fallback_frontend.enabled` | `true` | 启用本组规则（FR-067，对应 wiki-code-dev CODING-TTS-*） |
+| `tts_neural_fallback_frontend.severity_prefer_neural` | `suggestion` | FR-TTS-1 未优先 neural TTS 违规级别（建议级，非运行时阻断） |
+| `tts_neural_fallback_frontend.severity_fallback_required` | `critical` | FR-TTS-2 缺浏览器 TTS 降级 / 静默失败违规级别 |
+| `tts_neural_fallback_frontend.severity_ssml_safety` | `critical` | FR-TTS-3 未转义 SSML / 用 express-as 违规级别 |
+| `tts_neural_fallback_frontend.severity_resilience` | `suggestion` | FR-TTS-4 缺音频校验 / 重试违规级别 |
+| `tts_neural_fallback_frontend.synthesize_endpoint` | `/api/tts/synthesize` | neural 合成端点路径（前端 provider 调用） |
+| `tts_neural_fallback_frontend.voice_whitelist_pattern` | `^[a-z]{2}-[A-Z]{2}-[A-Za-z]+Neural$` | 音色白名单正则（防非法 / 注入 voice） |
+| `tts_neural_fallback_frontend.browser_fallback_api` | `speechSynthesis` | 浏览器优雅降级 API |
+| `tts_neural_fallback_frontend.retry_count` | `3` | 空 / 失败响应重试次数 |
+| `tts_neural_fallback_frontend.mp3_magic_bytes` | `ff f3, ff fb, 49 44 33` | 有效 MP3 魔数（含 ID3 头） |
+
+> 适用：Vue 3 朗读 / 语音合成功能（provider / composable / UI 控件）。纯音频播放器（无合成逻辑）不适用。
+
+## SPA 部署完整性审查参数（FR-068）
+
+> spa-deploy-integrity-frontend-rule.md 参数。前端构建产物部署：outDir 须可被部署注入为全新时间戳目录（不硬编码固定目录原地覆盖，规避 safe-delete 钩子 + 残留旧产物 + 清空在服目录）；部署须最后写入完整性标记供后端门禁识别；前端验证链构建后须校验产物完整。对应后端 BR-071 / wiki-code-dev CODING-SPA-LIVE-DEPLOY。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `spa_live_deploy_frontend.enabled` | `true` | 启用本组规则（FR-068，对应后端 BR-071 / CODING-SPA-LIVE-DEPLOY） |
+| `spa_live_deploy_frontend.severity_fresh_dir` | `suggestion` | FR-068-1 outDir 硬编码固定原地覆盖违规级别（建议级） |
+| `spa_live_deploy_frontend.severity_marker` | `critical` | FR-068-2 部署缺完整性标记（后端会选到半写入目录）违规级别 |
+| `spa_live_deploy_frontend.severity_artifact_check` | `suggestion` | FR-068-3 构建后未校验产物完整违规级别 |
+| `spa_live_deploy_frontend.out_dir_env_key` | `BUILD_OUT_DIR` | 部署注入全新输出目录的环境变量键 |
+| `spa_live_deploy_frontend.live_dir_pattern` | `public_live_` | 时间戳部署目录前缀（后接数值时间戳） |
+| `spa_live_deploy_frontend.complete_marker` | `.deploy-complete` | 完整性标记文件名（必须最后写入） |
+| `spa_live_deploy_frontend.require_fresh_dir` | `true` | 部署须写全新目录、不覆盖已存在目录 |
+| `spa_live_deploy_frontend.require_marker` | `true` | 部署须产出完整性标记供后端门禁 |
+
+> 适用：前端 `vite.config.ts` 构建配置 + 部署脚本（_deploy_live*.mjs / build*.ps1 / build*.sh）。固定单目录部署（无时间戳切换）放宽 FR-068-1，但仍须 emptyOutDir 不残留旧产物（对应后端 SH-3）。
+
+## 会话跨账户隔离审查参数（FR-069）
+
+> session-isolation-frontend-rule.md 参数。客户端按用户隔离的会话状态（IndexedDB 按 ownerId）在账户切换/登出时须真正失效：Pinia setup store 会话 state ref 必须加入 return 对象（漏加则 reset 不可观测）；auth watch 须先 resetSession 再 load；persistConversation 复用 id 前须以存储实际记录校验归属、他人记录绝不覆盖。对应 wiki-code-dev CODING-SESSION-ISOLATION。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `session_isolation_frontend.enabled` | `true` | 启用本组规则（FR-069） |
+| `session_isolation_frontend.severity_return_ref` | `critical` | FR-069-1 会话状态 ref 漏加 return 违规级别 |
+| `session_isolation_frontend.severity_reset_on_auth` | `critical` | FR-069-2 账户切换/登出未 resetSession 违规级别 |
+| `session_isolation_frontend.severity_persist_owner_check` | `critical` | FR-069-3 复用 id 未校验归属违规级别 |
+| `session_isolation_frontend.severity_defense_in_depth` | `suggestion` | FR-069-4 二次防御/严格隔离/落盘后归属违规级别 |
+| `session_isolation_frontend.session_state_refs` | `currentConversationId,scopedOwnerId` | 须加入 store return 的会话状态 ref |
+| `session_isolation_frontend.auth_watch_signal` | `user?.id` | auth watch 信号（变化即跨账户） |
+| `session_isolation_frontend.owner_store` | `chatDb (IndexedDB)` | 会话隔离存储（按 ownerId） |
+
+> 适用：`frontend/src/stores/**/*store*.ts`（会话 state ref 与 return）、`frontend/src/views/**/*.vue`（auth watch 与 reset 调用）、`chatDb.ts` / 持久化层（`persistConversation` / `dbGet` / `dbPut` / `filterByOwner` / `migrateOwnerless`）。纯服务端会话（按 token 自然隔离）、单账户应用不适用。
+
+## BYOK 多用户配置代理审查参数（FR-070）
+
+> 对应 BYOK 多用户密钥代理（前端本地命名空间隔离 + 密钥仅经请求体下发 + 覆盖纯函数 + 缺密钥不回落服务端共享）。CODING-BYOK（wiki-code-dev references/byok-per-user-override-rule.md）。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `byok_per_user_override_frontend.enabled` | `true` | 启用本组规则（FR-070） |
+| `byok_per_user_override_frontend.severity_namespace_isolation` | `critical` | FR-070-1 每用户配置未本地命名空间隔离违规级别 |
+| `byok_per_user_override_frontend.severity_secret_in_body` | `critical` | FR-070-2 密钥未仅经请求体下发 / 始终下发空块违规级别 |
+| `byok_per_user_override_frontend.severity_menu_gate` | `suggestion` | FR-070-3 配置菜单访问门控违规级别 |
+| `byok_per_user_override_frontend.user_config_namespaces` | `usercfg::ai::,usercfg::search::,usercfg::tools::` | 按用户命名空间键前缀（键内化 userId） |
+| `byok_per_user_override_frontend.config_menu_permission` | `dashboard` | 配置菜单项的可见权限（全员） |
+| `byok_per_user_override_frontend.admin_only_tabs` | `schema,system,ai-service,tools,qq-import,prompt-ide` | 仅管理员可见的敏感 tab |
+| `byok_per_user_override_frontend.secret_fields` | `apiKey` | 仅经请求体下发、禁止回显 / 日志的敏感字段 |
+
+## 流式回答增量持久化与续答审查参数（FR-071）
+
+> 对应流式回答增量持久化与断点续答（前端流式 UI）。CODING-STREAMING-RESUME（wiki-code-dev references/streaming-resume-rule.md）。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `streaming_resume_frontend.enabled` | `true` | 启用本组规则（FR-071） |
+| `streaming_resume_frontend.severity_incremental_persist` | `critical` | FR-071-1 仅完成时落盘、未增量防抖落盘违规级别 |
+| `streaming_resume_frontend.severity_no_abort_on_unmount` | `critical` | FR-071-2 卸载 / 切页 abort 在途流违规级别 |
+| `streaming_resume_frontend.severity_resume_gate` | `critical` | FR-071-3 续答门禁（仅 streaming 续、interrupted / error 不续）违规级别 |
+| `streaming_resume_frontend.persist_debounce_ms` | `1500` | 流式分片增量落盘防抖毫秒 |
+| `streaming_resume_frontend.last_active_key` | `LAST_ACTIVE_CONVERSATION` | 上次活跃会话存储键 |
+| `streaming_resume_frontend.streaming_status` | `streaming` | 触发续答的会话末条状态 |
+| `streaming_resume_frontend.skip_when_loading` | `true` | SPA 重挂载且后台流活跃(isLoading)时跳过续答 |
+
+## 隔离测试纪律（Test Isolation — FR-072）
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `test_isolation_frontend.namespaces_prefixes` | `usercfg::`,`tts-config::` | 隔离测试须唯一化的命名空间前缀（每用例用唯一 userId / 线程 id 拼接） |
+| `test_isolation_frontend.forbidden_patterns` | `indexedDB.deleteDatabase`,`deleteDatabase` | `beforeEach` 中禁止的删库模式（fake-indexeddb + 已开连接会 onblocked / 泄漏） |
+| `test_isolation_frontend.flush_rounds` | `3` | 异步落盘断言前 `await new Promise(r => setTimeout(r, 0))` 的轮数 |
+| `test_isolation_frontend.severity_namespace` | `critical` | FR-072-1 未用唯一命名空间 / 用 beforeEach 删库的违规级别 |
+| `test_isolation_frontend.severity_flush` | `suggestion` | FR-072-2 异步断言未多轮 flush 的违规级别 |
+| `test_isolation_frontend.severity_module_state` | `suggestion` | FR-072-3 后端用例未重置模块态 / mock 的违规级别 |
+
+> 参数与 wiki-auto-testing `indexeddb_test_isolation_check`（`namespace_prefixes` / `forbidden_patterns` / `flush_rounds`）对齐。
+
+## SSML / TTS Prosody 参数前端校验审查参数（FR-073）
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `ssml_injection_frontend.enabled` | `true` | 是否启用本规则 |
+| `ssml_injection_frontend.rate_regex` | `^(default\|\d{1,3}%\...)$` | 语速白名单正则（绝对百分比 / 相对倍数 / default） |
+| `ssml_injection_frontend.volume_regex` | `^(default\|\d{1,3}%\...)$` | 音量白名单正则 |
+| `ssml_injection_frontend.pitch_regex` | `^(default\|\d{1,3}Hz\...)$` | 语调白名单正则 |
+| `ssml_injection_frontend.default_value` | `default` | 校验失败回退值 |
+| `ssml_injection_frontend.escape_chars` | `<>&` | 用户文本拼入 SSML 前须转义字符 |
+| `ssml_injection_frontend.forbidden_tags_regex` | `<mstts:express-as` | 免费端点不支持标签（命中即禁止/提示） |
+| `ssml_injection_frontend.unsupported_endpoint_code` | `1007` | 免费端点拒绝 SSML 的 WebSocket 关闭码 |
+
+## 安全删 DOM 节点审查参数（FR-074）
+
+> 对应「前端归档按钮迁移」中删除功能 DOM（如 `.msg-actions`）前的引用清零核查（dom-compat-class-frontend-rule.md，与后端 BR-050-2 同一纵深）。删除与引用更新须同一 PR 完成，禁止仅因代码不报错就删除仍被 CSS / 测试引用的 class/id。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `safe_dom_delete.enabled` | `true` | 是否启用本规则 |
+| `safe_dom_delete.test_file_patterns` | `**/test_*.py,**/*.spec.ts,**/*.test.ts` | 须核查引用清零的测试文件 glob |
+| `safe_dom_delete.verify_methods` | `grep,glob` | class/id 引用交叉验证方法 |
+| `safe_dom_delete.stale_reference_threshold` | `0` | 失效 class/id 引用容忍阈值（0 = 必须清零） |
+| `safe_dom_delete.require_same_commit` | `true` | DOM 删除与引用更新须同 PR 完成 |
+| `safe_dom_delete.preserve_original_class_first` | `true` | DOM 变更时优先保留原 class 名再同步引用 |
+| `safe_dom_delete.severity` | `critical` | 删除仍被引用节点导致选择器/断言悬空违规级别 |
+
+## 主题感知图标审查参数（FR-075）
+
+> 对应「前端归档按钮迁移」中新增/修改 SVG 图标的主题感知（theme-aware-icon-frontend-rule.md，TAI）。图标须用 `currentColor`（禁硬编码固定色，否则主题切换下不可见）+ 默认 24x24 + 风格与现有线条图标一致。复用 FR 图标与导航栏审查参数（icon_navigation.*）的 currentColor / viewbox 约定。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `theme_aware_icon.enabled` | `true` | 是否启用本规则 |
+| `theme_aware_icon.color_attribute` | `currentColor` | SVG 须使用的颜色属性值（禁硬编码 #hex/rgb/rgba/hsl） |
+| `theme_aware_icon.forbidden_color_values` | `#hex,rgb(),rgba(),hsl()` | 禁止硬编码的颜色值格式 |
+| `theme_aware_icon.size` | `24` | 图标尺寸（SVG viewBox `0 0 24 24`） |
+| `theme_aware_icon.stroke_width_default` | `1.8` | stroke 默认宽度（与现有线条图标一致） |
+| `theme_aware_icon.whitelist_pure_white` | `true` | 纯白高光 rgba(255,255,255,X) 允许硬编码 |
+| `theme_aware_icon.severity_color` | `critical` | 硬编码固定色导致主题切换不可见违规级别 |
+| `theme_aware_icon.severity_style` | `suggestion` | 尺寸/风格与现有图标不一致违规级别 |
+
+## 能力门控同步审查参数（FR-076）
+
+> 对应「前端归档按钮迁移」中前端功能门控（`:can-archive` 等）须随后端契约放宽同步（capability-gating-sync-frontend-rule.md）。后端改为请求体取内容解耦（不再依赖 `sessionId` / 服务端会话）后，前端门控须移除 `!!sessionId` 等过期依赖、改为依据"内容可得性"；前后端放宽须同一变更完成。对应后端 BR-086 / wiki-code-dev CODING-CAPABILITY-GATING-SYNC（与 persistence-client-content-decoupling 同一变更闭环）。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `capability_gating_sync.enabled` | `true` | 是否启用本规则 |
+| `capability_gating_sync.sync_with_backend_contract` | `true` | 前端门控须与后端契约同步放宽 |
+| `capability_gating_sync.relax_signal` | `content availability` | 放宽依据（内容可得性而非 sessionId 存在） |
+| `capability_gating_sync.stale_gating_patterns` | `!!sessionId,!!getSession` | 过期门控依赖模式（命中即告警） |
+| `capability_gating_sync.complete_in_same_change` | `true` | 前后端放宽须同一变更完成 |
+| `capability_gating_sync.severity` | `critical` | 门控漂移导致功能卡死违规级别 |
+
+## 编辑重发审查参数（FR-077）
+
+> 对应「编辑后重新发送」中删除重发：必须先 `removeMessagesFrom(tailIndex)` 移除尾随 AI 答案，再 `submitQuestion()` 重新插入用户消息并发送；禁止仅移除 AI 答案而漏插用户消息导致「悬空答案」；编辑态不得处于 `isLoading` 等流式中（FR-071-2 卸载不 abort 同一约束）。对应 wiki-code-dev CODING-EDIT-RESEND。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `edit_resend.enabled` | `true` | 是否启用本规则 |
+| `edit_resend.remove_then_submit_order` | `true` | 须先 removeMessagesFrom 移除尾随 AI 答案、再 submitQuestion 重新插入用户消息 |
+| `edit_resend.resend_user_message_required` | `true` | 编辑重发必须重新插入用户消息（否则悬空答案） |
+| `edit_resend.block_while_loading` | `true` | 编辑态处于 isLoading / 流式中时禁止发起重发 |
+| `edit_resend.severity` | `critical` | 漏插用户消息导致悬空答案 / 流式中编辑竞态违规级别 |
+
+## 对话自动滚动审查参数（FR-078）
+
+> 对应「流式回答自动滚动」中须用 double rAF（单次 nextTick 过早、内容未 reflow）；用户主动上滑须暂停强制贴底（用 `stickToBottom` 标记避免拉回）；图片 onload 后须补滚（异步高度变化）。监听须 onMounted 绑定、onUnmounted 解绑，避免内存泄漏 / 多实例串扰。对应 wiki-code-dev CODING-STREAMING-AUTOSCROLL。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `chat_autoscroll.enabled` | `true` | 是否启用本规则 |
+| `chat_autoscroll.require_double_raf` | `true` | 滚动到底须用 double requestAnimationFrame（禁单次 nextTick） |
+| `chat_autoscroll.respect_user_scroll` | `true` | 用户主动上滑须暂停强制贴底（stickToBottom 标记） |
+| `chat_autoscroll.reroll_on_image_load` | `true` | 图片 onload 后须补滚（异步高度变化） |
+| `chat_autoscroll.bind_unbind_lifecycle` | `true` | 监听须 onMounted 绑定、onUnmounted 解绑 |
+| `chat_autoscroll.severity` | `suggestion` | 滚动跳动 / 内存泄漏违规级别 |
+
+## 按钮样式一致性审查参数（FR-079）
+
+> 对应「成对按钮样式统一」中编辑态确认/取消按钮须风格一致（同尺寸/同圆角/同主题变量，禁止一处 primary 另一处 plain 导致视觉失衡）；成对动作按钮（确认/取消、保存/重置）统一用主题 CSS 变量，禁硬编码固定色。对应 wiki-code-dev CODING-BUTTON-STYLE-CONSISTENCY。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `button_style.enabled` | `true` | 是否启用本规则 |
+| `button_style.paired_buttons_consistent` | `true` | 成对按钮（确认/取消等）须同尺寸/同圆角/同风格 |
+| `button_style.use_theme_variables` | `true` | 按钮样式须用主题 CSS 变量（禁硬编码固定色） |
+| `button_style.severity` | `suggestion` | 成对按钮风格失衡 / 硬编码色值违规级别 |
+
+## 编辑框撑满宽度审查参数（FR-080）
+
+> 对应「编辑态输入框撑满」中编辑态 wrapper（`.msg-content-wrapper.editing` / `.msg-edit`）须 `align-items:stretch` + `width:100%` 撑满 Q&A 列宽，禁止 `align-items:flex-end` 导致编辑框比原消息窄、内容被截断。对应 wiki-code-dev CODING-EDITBOX-WIDTH。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `editbox_width.enabled` | `true` | 是否启用本规则 |
+| `editbox_width.fill_column_width` | `true` | 编辑态 wrapper 须 align-items:stretch + width:100% 撑满列宽 |
+| `editbox_width.forbid_flex_end_shrink` | `true` | 禁止 align-items:flex-end 导致编辑框窄于原消息 |
+| `editbox_width.severity` | `suggestion` | 编辑框窄于原消息 / 内容截断违规级别 |
+
+## IndexedDB 写入前剥离响应式代理审查参数（FR-081）
+
+> idb-reactive-clone-frontend-rule.md 参数。凡将 Pinia store state ref / `reactive()` 对象经 `dbPut`/`saveUserConfig`/`idbPut`/`store.put` 写入 IndexedDB 的路径，写入前必须整树深拷贝剥离代理，否则 proxy 无法被 `structuredClone` 克隆 → `DataError: [object Array] could not be cloned` → 静默丢配置。对应 wiki-code-dev CODING-IDB-REACTIVE-CLONE。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `idb_reactive_clone_frontend.enabled` | `true` | 启用本组规则（FR-081） |
+| `idb_reactive_clone_frontend.scan_patterns` | `dbPut,saveUserConfig,idbPut,store.put,transactions.add` | 命中即须核对入参是否已深拷贝的 IndexedDB 写入点（逗号分隔） |
+| `idb_reactive_clone_frontend.severity_clone_before_put` | `critical` | FR-081-1 直传 reactive 代理导致静默丢配置违规级别 |
+| `idb_reactive_clone_frontend.severity_toraw` | `critical` | FR-081-2 用 toRaw() 当深剥离（嵌套代理仍失败）违规级别 |
+| `idb_reactive_clone_frontend.severity_structured_clone` | `critical` | FR-081-3 structuredClone(reactiveObj)（代理无法被克隆）违规级别 |
+| `idb_reactive_clone_frontend.severity_wrap_clone` | `suggestion` | FR-081-4 封装函数内部统一 clone 防御缺失违规级别 |
+| `idb_reactive_clone_frontend.forbidden_unsafe_patterns` | `toRaw(,structuredClone(` | 命中即判违规的"伪剥离"写法 |
+| `idb_reactive_clone_frontend.recommended_clone` | `JSON.parse(JSON.stringify(x))` | 推荐深拷贝范式（纯数据模型）；含 Date/函数/undefined 改用 toRaw+递归 |
+
+> 适用：`frontend/src/services/*UserConfig*.ts` / `*store*.ts`（将 store state 写入 IndexedDB 的 `dbPut` / `saveUserConfig` / `idbPut` / `store.put`），以及任何 `reactive()` 对象落盘路径。不适用：localStorage（`JSON.stringify` 序列化到字符串、不受代理影响）、纯服务端（无 Vue reactive）、写入值已是 `JSON.parse` 反序列化的 plain object、IndexedDB 读取（`dbGet` 返回 plain）。
+
+## 审查流程优化（Review Process Optimization）
+
+> 以下判定步骤适用于每次评审，旨在降低误报与漏报。规则文件与脚本不硬编码阈值，所有参数从本文件读取。
+
+### 1. Flake 隔离（Flake Isolation）
+
+当某条测试在完整测试套件中失败，但在单独运行时通过，先**单独运行该测试文件**再决定是否归咎于本次变更。预存在的时序 / 状态 flake 很常见（例如固定窗口限流跨过 60s 边界偶发触发 429，对应后端 BR-063-4；前端 vue-tsc 幽灵错误见 FR-026）。流程：
+
+1. 复现：单独运行失败测试文件（如 `vitest run x.spec.ts` / `playwright test e2e/foo.spec.ts`）。
+2. 若单独通过 → 判定为 flake，不计入本次变更问题；记录为预存在 issue。
+3. 若单独也失败 → 才进入变更内容排查。
+
+### 2. 变更内容范围（Modified-content Scope）
+
+评审时聚焦**实际变更的文件**，不扩大扫描面：
+
+- 优先用 `git diff` / `git diff --cached` 取得变更文件清单与行号。
+- 对新增 / 修改的**路由**或 **API 调用**（涉及 types.ts / SSE 事件），必须运行 `route_registration_check` + `type_sync_check`（前后端 types.ts 同步，见 TS-1 / FR-062）。
+- 仅对变更行及其直接上下文应用规则；未变更代码标记为"已验证，跳过"。
+
+### 3. 配置驱动（Config-driven）
+
+所有阈值 / 参数 / 严重级别均从本文件读取，**禁止在审查逻辑（规则文件、脚本、prompt）中硬编码**。新增规则须同步在对应"审查参数"段落追加参数表，并默认从 config 引用。若某判定需要新阈值，先加到本文件再在规则中引用。

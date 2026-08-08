@@ -91,3 +91,24 @@ Category: Element Plus
 把自建模态替换为 `el-dialog`，把控制变量绑到 `v-model`。
 
 > **示例代码**: 参见 [examples/element-plus-rule-examples.md](examples/element-plus-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。
+
+## 单选组件用 value 属性，禁止 label 作 value（el-radio / el-radio-button）
+
+IsUrgent: True
+Category: Element Plus
+
+### Description
+
+Element Plus **2.6.0 起** `el-radio` / `el-radio-button` 的 `label` 属性不再承担"选项值"语义，仅作为显示文本；用 `label` 充当 `v-model` 绑定值的写法已被标记弃用，并计划在 **3.0.0 移除**。选项值必须改用 `value` 属性声明，显示文本通过默认插槽（`<el-radio-button value="x">文本</el-radio-button>`）提供。`v-model` 绑定的仍是选项 value，不受影响。
+
+沿用 `label="x"` 的后果：
+1. 开发模式控制台打印 `ElementPlusError: [el-radio] [API] label act as value is about to be deprecated in version 3.0.0, please use value instead.`；
+2. 升级到 Element Plus 3.x 后选项值彻底失效（`v-model` 拿不到值），属于"现在只是警告、升级即断"的定时炸弹。
+
+> 本规则参数从 [config/review-config.md](../config/review-config.md) 的"Element Plus 单选组件弃用属性审查参数（FR-065）"章节读取，禁止在规则文件硬编码阈值或版本号。
+
+### Suggested Fix
+
+把 `<el-radio-button label="x">文本</el-radio-button>` 改为 `<el-radio-button value="x">文本</el-radio-button>`；若原本 `label` 同时承载"显示文本"与"值"且两者不同，须确认显示文本改由插槽提供、值改由 `value` 提供。升级依赖前用 `grep -rn "el-radio" --include=*.vue`（配合 `label=`）全量扫描存量用法。
+
+> **示例代码**: 参见 [examples/element-plus-rule-examples.md](examples/element-plus-rule-examples.md)。加载示例文件以参考 Wrong/Right 对照或生成修复代码。

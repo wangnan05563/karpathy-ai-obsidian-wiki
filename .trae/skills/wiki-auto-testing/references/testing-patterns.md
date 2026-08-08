@@ -1,6 +1,6 @@
 # 测试模式与复盘提炼
 
-> 本文档从 SKILL.md 拆分而来，含持久化层/系统清理/Async可靠性/配置一致性/热更新/降级机制/目录结构/v3媒体生成 共 9 个测试复盘章节。
+> 本文档从 SKILL.md 拆分而来，含持久化层/系统清理/Async可靠性/配置一致性/热更新/降级机制/目录结构/v3媒体生成/端到端编排 共 10 个测试复盘章节。
 > 当测试流程遇到特定模块问题或需要参考历史测试模式时按需加载。
 > SKILL.md 入口文件保留章节导航链接。
 
@@ -490,3 +490,151 @@ git diff 选择器变更 → Grep 测试文件引用 → 命中失效引用 → 
 - 无 git 仓库的项目（Test Case Sync 的 git diff 扫描不适用）
 - 单次性临时测试（Service Management 的残留清理不必要）
 - 已知失败原因明确无需分类的场景（Failure Classification 的分类开销不必要）
+
+## 端到端测试/部署/冒烟编排（复盘提炼，第十轮）
+
+> 本模式基于「类型门禁→单测→全量→构建(全新目录)→部署(全新目录)→干净重启(杀孤儿 :3000)→冒烟」的固定交付顺序提炼（详见 testing-process-review.md 第十轮）。**所有参数从 `config.yaml` / `defaults.yaml` 读取，不在步骤中硬编码命令、路径、端口或门禁值**，从而适配不同业务项目与沙箱策略（如 safe-delete fail-closed 的「写全新目录」约束）。
+
+### 适用场景
+
+- 前后端分离 + SPA 静态伺服 + 多用户（BYOK / 会话隔离）的前端应用交付回归
+- 沙箱环境下受 safe-delete 钩子限制（清空/覆盖已存在目录被 EPERM）的构建/部署
+- 后端有改动需确保「干净重启」避免孤儿进程伺服旧代码的场景
+- CI 端到端交付门禁（类型→单测→全量→构建→部署→冒烟 全绿才放行）
+
+### 不适用场景
+
+- 纯后端无 SPA 伺服（无需部署/冒烟 SPA 环节，走 `backend_logic_unit_test` 即可）
+- 纯静态无构建页面
+- 无沙箱限制可自由覆盖目录的环境（「写全新目录」约束不适用，但仍建议全链路门禁）
+- 单测即可覆盖的纯逻辑改动（不需全链路编排）
+
+### 关键判断（来自第十轮 维度三）
+
+- **P1 固定顺序门禁**：`typecheck → unit → full-suite → build(fresh dir) → deploy(fresh dir) → 杀孤儿 :3000 → 重启 → 冒烟`；任一阶段红则停，不进入下一步。
+- **P2 写全新目录**：构建与部署一律产出**全新目录**，绝不覆盖/清空已存在目录（safe-delete fail-closed 适配）。
+- **P3 干净重启**：后端有改动必须 `netstat` 取真实 PID → `taskkill` → 端口 FREE → 起新进程；不依赖后台任务回收状态（孤儿 :3000 会导致 `EADDRINUSE` 且跑旧代码）。
+- **P4 冒烟三类门禁**：① 缺必需密钥请求 `400` 不回落服务端共享（BYOK）；② SSE 端点 `200` 流式；③ `:3000/` 伺服 SPA 且为最新时间戳目录。
+- **P5 隔离纪律（第九轮）**：隔离测试用唯一 userId 命名空间 + 多轮 `setTimeout(0)` flush，禁用 `beforeEach deleteDatabase`。
+
+### 测试编排示例（配置驱动，零硬编码）
+
+端到端交付顺序「类型门禁 → 单测 → 全量 → 构建(全新目录) → 部署(全新目录) → 干净重启 → 冒烟」中，**前三道门禁由技能标准流程与项目测试运行器执行（配置驱动，不在技能内硬编码命令）**，后四步落地为动态引擎 `test_plan.phases` 的真实步骤类型。所有参数从 `config.yaml` / `defaults.yaml` 读取。
+
+```yaml
+# 前三道门禁（技能标准「前端验证」+ 项目测试运行器，零硬编码）
+frontend_verification:
+  enabled: true
+  typecheck_enabled: true
+  typecheck_command: "node_modules/vue-tsc/bin/vue-tsc.js --noEmit"   # 仅卡前端类型（不卡后端 pre-existing tsc errors）
+  build_enabled: true
+  build_command: "node_modules/vite/bin/vite.js build"
+  build_out_dir: "/tmp/kw-dist"      # 全新输出目录，规避 safe-delete 拦截
+# 单测 / 全量（vitest 等）由项目测试运行器或 CI 管理，不在本技能硬编码
+
+# 后四步：动态引擎阶段（步骤参数全部来自下方配置块）
+test_plan:
+  phases:
+    e2e_delivery:
+      steps:
+        # 4. 构建产物验证（构建命令来自 frontend_verification.build_command）
+        - type: build_artifact_check
+          bundle_directory: "/tmp/kw-dist"     # 对应 frontend_verification.build_out_dir
+          required_http_status: 200
+          key_strings: ["<项目关键字符串>"]     # 对应 build_artifact_check.key_strings 配置
+          abort_on_fail: true
+        # 5. 部署写全新目录（_deploy_live.mjs <新构建目录> → api/public_live_<ts>）+ 重启后端
+        - type: spa_live_deploy_check
+          live_base_dir: "api"                 # spa_live_deploy_check.live_base_dir
+          live_dir_pattern: "public_live_"     # spa_live_deploy_check.live_dir_pattern
+          complete_marker: ".deploy-complete"  # spa_live_deploy_check.complete_marker
+          asset_prefix: "/wiki/"               # spa_live_deploy_check.asset_prefix
+          restart_required: true               # 部署后必须重启后端才生效
+          abort_on_fail: true
+        # 6. 干净重启：杀孤儿 :3000 → 端口 FREE → 起新进程
+        - type: service_manage
+          action: stop
+          required_ports: [3000]               # 来自 service 端口配置
+        - type: service_manage
+          action: start
+          required_ports: [3000]
+          abort_on_fail: true
+        # 7. 冒烟三类门禁
+        - type: byok_per_user_override_check   # 缺必需密钥 → 400 不回落服务端共享（读 byok_per_user_override 配置块）
+        - type: api_check                      # SSE 端点 200 流式
+          path: "/api/query"                   # 来自 api_tests 端点配置
+          expected_status: 200
+        - type: api_check                      # SPA 根路由 200（后端静态伺服最新 public_live_<ts>）
+          path: "/"
+          expected_status: 200
+```
+
+> 切换项目只需改 `config.yaml` / `defaults.yaml` 中的上述配置块（如 `live_base_dir` / `build_out_dir` / `byok_per_user_override.require_key_fields` / `api_tests`），无需改步骤定义，满足通用性与无硬编码要求。后端有改动时步骤 5-7 必跑；纯前端改动可保留 1-4 + 7 的 SPA 伺服冒烟。
+
+## 归档路由响应分支覆盖（复盘提炼，第十二轮）
+
+> 本模式基于「归档路由重构（7 条规范）」经验提炼：**路由对"合法请求的不同业务结果"（主路径 / 回退 / 空内容）与"非法输入"（非法 threadId / 非整数 messageIndex / 缺失 messageIndex / 非法 ts）各有差异化状态码语义，类型检查 / 构建 / 端点冒烟全过却仍潜伏**。用 `route_response_branch_coverage` 步骤类型逐分支断言 `expected_status` 并校验 200 响应含必需字段，把"响应分支覆盖 + 静默缺陷回归"判断逻辑落地。**所有路由 / 方法 / 分支用例 / 判定从 `config.yaml` 读取，不在步骤中硬编码**。
+
+### 适用场景
+
+- 按 `threadId + messageIndex + ts` 等派生存储键检索内容的归档 / 历史路由
+- 对"合法请求的不同业务结果"有差异化状态码语义的路由（主路径 200 / 回退 404 / 空内容 400）
+- 沙箱无浏览器环境下的路由行为级验证（配合 `app.inject` 或真实 HTTP 断言）
+- CI 路由分支门禁（逐分支状态码 + 200 字段校验固化为流水线）
+
+### 不适用场景
+
+- 单分支无歧义路由（所有非法输入已被框架 / 中间件统一拦截为 4xx 且无需逐分支语义）：沿用 `api_check` / `path_traversal_test`
+- 纯前端 / 纯文档改动（走第十轮前端验证链或静态检查）
+
+### 关键判断（来自第十二轮 维度三）
+
+- **P1 逐分支状态码断言**：主路径 200 / 回退 404 / 非法 threadId 400 / 非整数 messageIndex 400 / 缺失 messageIndex 400 / 非法 ts 200（当前回退实现）/ 空内容 400，每个分支独立 `expected_status`。
+- **P2 200 分支须校验必需字段**：对 200 响应断言 `content` / `refs` 等 `required_fields` 存在，防"状态码对但内容缺"。
+- **P3 非法输入真实构造**：用例用真实非法值（`..%2f..` / `abc` / `not-a-number` / `""`），断言 4xx，不依赖框架默认拦截假设。
+- **P4 参数随行为演进**：`expected_status` 配置化（如非法 ts 修复为 RangeError 拦截后由 200 改 400），不写死业务值。
+- **P5 配套静态守卫**：派生键碰撞（追加随机后缀）/ refs `\n` 拼接（wikilink 完整性）/ 空内容 no-op 用 `backend_review_static_check` 针对性 grep；前后端门控同步用 `capability_gating_sync`（FR-076）思路同 commit 放宽。
+
+### 测试编排示例（配置驱动，零硬编码）
+
+```yaml
+# route_response_branch_coverage 配置块（来自 defaults.yaml / config.yaml）
+route_response_branch_coverage:
+  enabled: true
+  route_name: "/api/threads/:threadId/archive"   # 支持 :param 路径占位符
+  method: "GET"
+  branch_cases:
+    - name: "valid_main_path"
+      params: { threadId: "<valid>", messageIndex: "0", ts: "<valid_ts>" }
+      expected_status: 200
+      required_fields: ["content", "refs"]        # 200 分支校验响应含必需字段
+    - name: "fallback_no_content"
+      params: { threadId: "<valid>", messageIndex: "0", ts: "<valid_ts>" }
+      expected_status: 404                        # 无归档内容回退
+    - name: "illegal_thread_id"
+      params: { threadId: "..%2f..", messageIndex: "0", ts: "<valid_ts>" }
+      expected_status: 400
+    - name: "non_integer_message_index"
+      params: { threadId: "<valid>", messageIndex: "abc", ts: "<valid_ts>" }
+      expected_status: 400
+    - name: "missing_message_index"
+      params: { threadId: "<valid>", ts: "<valid_ts>" }
+      expected_status: 400
+    - name: "illegal_ts"
+      params: { threadId: "<valid>", messageIndex: "0", ts: "not-a-number" }
+      expected_status: 200                        # 当前回退实现；修复为 RangeError 拦截后改 400
+    - name: "empty_content"
+      params: { threadId: "<valid>", messageIndex: "0", ts: "<valid_ts>", content: "" }
+      expected_status: 400                        # no-op 落盘防护
+  timeout_ms: 120000
+
+# 动态引擎阶段（步骤参数全部来自上述配置块）
+test_plan:
+  phases:
+    archive_route:
+      steps:
+        - type: route_response_branch_coverage    # 读 route_response_branch_coverage 配置块
+          force: false                            # 随 enabled 开关
+```
+
+> 切换项目只需改 `config.yaml` / `defaults.yaml` 中的 `route_response_branch_coverage` 配置块（如 `route_name` / `branch_cases` / `required_fields`），无需改步骤定义，满足通用性与无硬编码要求。

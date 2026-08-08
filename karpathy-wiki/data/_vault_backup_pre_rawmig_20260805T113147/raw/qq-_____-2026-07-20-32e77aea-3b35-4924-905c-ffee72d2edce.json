@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "source": "qq-chat",
+    "chatName": "客户支持群",
+    "dateRange": "2026-07-20",
+    "originalCount": 4,
+    "filteredCount": 4,
+    "redactedCount": 2,
+    "rawId": "32e77aea-3b35-4924-905c-ffee72d2edce"
+  },
+  "chunks": [
+    [
+      {
+        "ts": "2026-07-20T09:00:00Z",
+        "speaker": "客服",
+        "content": "请提供您的手机号以便核实身份。",
+        "type": "text"
+      },
+      {
+        "ts": "2026-07-20T09:00:30Z",
+        "speaker": "客户",
+        "content": "我的手机号是 [REDACTED-PHONE]，身份证号是 110101[REDACTED-PHONE]4，邮箱是 [REDACTED-EMAIL]。",
+        "type": "text"
+      },
+      {
+        "ts": "2026-07-20T09:01:00Z",
+        "speaker": "客服",
+        "content": "已记录，银行卡号 [REDACTED-ID]3 也需要登记一下。",
+        "type": "text"
+      },
+      {
+        "ts": "2026-07-20T09:01:30Z",
+        "speaker": "客户",
+        "content": "好的，QQ号是 123456789。\n",
+        "type": "text"
+      }
+    ]
+  ]
+}

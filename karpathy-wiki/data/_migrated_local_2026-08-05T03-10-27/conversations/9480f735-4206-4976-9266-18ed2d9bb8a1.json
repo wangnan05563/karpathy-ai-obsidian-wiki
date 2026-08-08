@@ -1,0 +1,165 @@
+{
+  "id": "9480f735-4206-4976-9266-18ed2d9bb8a1",
+  "title": "什么是 LLM Wiki？",
+  "createdAt": "2026-07-31T07:57:25.396Z",
+  "updatedAt": "2026-07-31T07:57:32.441Z",
+  "messageCount": 2,
+  "isPinned": false,
+  "preview": "让我再搜索一些相关页面，特别是关于双向链接、SCHEMA 和 vault 的内容，以便更完整地回答。现在我已经有了足够的",
+  "messages": [
+    {
+      "id": "5823907c-dfe4-4ce7-931c-95143e6e68e0",
+      "role": "user",
+      "content": "什么是 LLM Wiki？",
+      "createdAt": "2026-07-31T07:55:25.340Z"
+    },
+    {
+      "id": "9f9989f0-0833-4a93-88f3-b230c495a778",
+      "role": "assistant",
+      "content": "让我再搜索一些相关页面，特别是关于双向链接、SCHEMA 和 vault 的内容，以便更完整地回答。现在我已经有了足够的信息来回答这个问题。根据 AI 伙伴指令，我需要将知识库中的内容整理为问答卡片格式。让我生成答案。\n\n---\n\n根据知识库内容，我将 LLM Wiki 相关的核心概念整理为问答卡片：\n\n## 📇 LLM Wiki 问答卡片\n\n---\n\n### 🃏 卡片 1：LLM Wiki\n\n- **概念名称**：LLM Wiki\n- **一句话定义**：一个基于大语言模型（LLM）的知识库 Wiki 系统，能够自动将原始资料编译为结构化的 Markdown 页面，并维护页面间的双向链接关系。\n- **3 个关键要点**：\n  1. 支持 **entity（实体）、concept（概念）、comparison（对比）** 等多种页面类型\n  2. 借助 **[[llm-entity-extraction]]** 技术自动识别核心实体，并生成符合 [[SCHEMA]] 规范的 frontmatter\n  3. 自动建立 **[[双向链接]]** 关系网络，将独立页面编织为可导航的知识图谱\n- **相关概念对比**：**传统 Wiki vs LLM Wiki**（见 [[wiki-comparison]]）——传统 Wiki 依赖人工编写和手动建立链接，维护成本高；LLM Wiki 由 AI 自动从原始资料编译生成，自动建立双向链接，结构统一、维护成本低。\n\n---\n\n### 🃏 卡片 2：Harness（LLM Agent 运行时）\n\n- **概念名称**：Harness\n- **一句话定义**：LLM Wiki 系统中的 LLM Agent 运行时组件，包裹大语言模型并为其提供完整的运行支撑能力。\n- **3 个关键要点**：\n  1. 提供 **工具调用循环**、**状态管理**、**重试机制** 和 **预算控制** 等核心能力\n  2. 核心公式：**Agent = LLM + Harness**——一个完整的 AI Agent 由底层大语言模型与上层运行时框架共同构成\n  3. Harness 负责调用 LLM 执行编译任务，而 [[vault]] 负责存储编译结果\n- **相关概念对比**：**Harness vs LLM** —— LLM 是底层模型，负责理解和生成语言；Harness 是上层运行时，赋予 LLM 与环境交互、持续运行的能力。\n\n---\n\n### 🃏 卡片 3：Vault（存储层）\n\n- **概念名称**：Vault\n- **一句话定义**：LLM Wiki 知识库的存储层，使用 Markdown 文件组织和管理所有页面。\n- **3 个关键要点**：\n  1. 页面按类型存放于不同目录：`entities/`（实体）、`concepts/`（概念）、`comparisons/`（对比）、`queries/`（归档问答）\n  2. 页面间通过 `[[页面名]]` 语法互相引用，形成知识图谱\n  3. Harness 编译生成的页面写入 Vault 持久化存储，与 Harness 共同构成 LLM Wiki 的核心架构\n- **相关概念对比**：**Vault（存储层）vs Harness（运行时）** —— Vault 是被动的数据存储层，Harness 是主动的执行引擎；Harness 调用 LLM 编译原始资料并写入 Vault。\n\n---\n\n### 🃏 卡片 4：知识库编译器（Wiki Compiler）\n\n- **概念名称**：知识库编译器\n- **一句话定义**：一个自动化工具，负责将原始资料编译为结构化的 Markdown Wiki 页面，并维护知识库的索引与日志系统。\n- **3 个关键要点**：\n  1. 读取 `raw/` 目录下的原始资料文件，判定页面类型（entity/concept/comparison/query）\n  2. 生成带有 **[[frontmatter]]** 的标准 Wiki 页面并建立双向链接\n  3. 自动更新 `index.md` 和 `log.md` 索引与操作日志\n- **相关概念对比**：**知识库编译器 vs 知识库编译（流程）** —— 编译器是执行编译的具体工具；知识库编译是整体流程概念，编译器是其核心实现。\n\n---\n\n### 🃏 卡片 5：LLM 实体抽取\n\n- **概念名称**：LLM 实体抽取（LLM Entity Extraction）\n- **一句话定义**：利用大语言模型从非结构化文本中自动识别并提取命名实体（如人物、组织、概念等）的技术。\n- **3 个关键要点**：\n  1. 用于自动判定原始资料中的核心实体，辅助确定页面类型和建立双向链接\n  2. 优势在于**减少人工标注成本**、**支持多语言和跨领域**、可结合 [[SCHEMA]] 规范输出结构化数据\n  3. 相关技术包括命名实体识别（NER）、关系抽取、知识图谱构建\n- **相关概念对比**：**LLM 实体抽取 vs 传统 NER** —— 传统 NER 依赖规则或训练模型，泛化性和跨语言能力有限；LLM 实体抽取基于大模型的语义理解能力，更加灵活且支持多语言。\n\n---\n\n### 🃏 卡片 6：Frontmatter\n\n- **概念名称**：Frontmatter\n- **一句话定义**：Markdown 文件开头的 YAML 元数据块，用于定义页面的标题、类型、创建时间、更新时间、来源和标签等结构化信息。\n- **3 个关键要点**：\n  1. 标准字段包括：`title`、`type`、`created`、`updated`、`source`、`tags`\n  2. `type` 字段决定了页面的分类（entity/concept/comparison/query）\n  3. 遵循 [[SCHEMA]] 规范，确保所有页面结构统一、便于机器处理\n- **相关概念对比**：**有 Frontmatter 的页面 vs 自由格式页面** —— Frontmatter 页面有标准化的元数据和统一结构，便于自动化处理和索引维护；自由格式页面风格各异、一致性差。\n\n---\n\n### 🃏 卡片 7：双向链接\n\n- **概念名称**：双向链接（Bidirectional Links）\n- **一句话定义**：页面间通过 `[[页面名]]` 语法互相引用，形成可双向导航的知识链接网络。\n- **3 个关键要点**：\n  1. 与普通超链接不同，**双向链接自动维护反向关联**，从任一方向都可导航\n  2. 在 LLM Wiki 中，Vault 存储层统一管理所有页面间的双向链接关系\n  3. 双向链接将独立页面编织为**知识图谱**，支持高效的知识导航和探索\n- **相关概念对比**：**双向链接 vs 普通超链接** —— 普通超链接是单向引用，需要手动维护反向关系；双向链接自动追踪反向关联，更利于知识图谱构建和语义导航。\n\n[已超时]",
+      "thinking": [
+        {
+          "phase": "thinking",
+          "message": "正在思考...",
+          "ts": "2026-07-31T07:55:26.813Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "调用工具：search_pages",
+          "ts": "2026-07-31T07:56:10.365Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "工具 search_pages 返回结果",
+          "ts": "2026-07-31T07:56:42.661Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "调用工具：read_page",
+          "ts": "2026-07-31T07:56:44.246Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "工具 read_page 返回结果",
+          "ts": "2026-07-31T07:56:44.293Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "调用工具：read_page",
+          "ts": "2026-07-31T07:56:44.293Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "工具 read_page 返回结果",
+          "ts": "2026-07-31T07:56:44.337Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "调用工具：read_page",
+          "ts": "2026-07-31T07:56:44.338Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "工具 read_page 返回结果",
+          "ts": "2026-07-31T07:56:44.387Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "调用工具：search_pages",
+          "ts": "2026-07-31T07:56:45.688Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "工具 search_pages 返回结果",
+          "ts": "2026-07-31T07:56:50.660Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "调用工具：read_page",
+          "ts": "2026-07-31T07:56:50.660Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "工具 read_page 返回结果",
+          "ts": "2026-07-31T07:56:50.677Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "调用工具：read_page",
+          "ts": "2026-07-31T07:56:52.207Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "工具 read_page 返回结果",
+          "ts": "2026-07-31T07:56:52.224Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "调用工具：read_page",
+          "ts": "2026-07-31T07:56:52.224Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "工具 read_page 返回结果",
+          "ts": "2026-07-31T07:56:52.240Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "调用工具：read_page",
+          "ts": "2026-07-31T07:56:52.240Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "工具 read_page 返回结果",
+          "ts": "2026-07-31T07:56:52.255Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "调用工具：read_page",
+          "ts": "2026-07-31T07:56:52.255Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "工具 read_page 返回结果",
+          "ts": "2026-07-31T07:56:52.272Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "调用工具：read_page",
+          "ts": "2026-07-31T07:56:53.405Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "工具 read_page 返回结果",
+          "ts": "2026-07-31T07:56:53.415Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "调用工具：read_page",
+          "ts": "2026-07-31T07:56:53.415Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "工具 read_page 返回结果",
+          "ts": "2026-07-31T07:56:53.424Z"
+        },
+        {
+          "phase": "thinking",
+          "message": "扩展工具加载失败 [mcp:Sequential Thinking]: MCP RPC \"initialize\" timed out after 30000ms",
+          "ts": "2026-07-31T07:57:07.587Z"
+        },
+        {
+          "phase": "thinking",
+          "message": "扩展工具加载失败 [mcp:Excel]: MCP RPC \"initialize\" timed out after 30000ms",
+          "ts": "2026-07-31T07:57:07.587Z"
+        },
+        {
+          "phase": "composing",
+          "message": "正在生成思维导图...",
+          "ts": "2026-07-31T07:57:20.882Z"
+        }
+      ],
+      "createdAt": "2026-07-31T07:57:32.417Z"
+    }
+  ]
+}

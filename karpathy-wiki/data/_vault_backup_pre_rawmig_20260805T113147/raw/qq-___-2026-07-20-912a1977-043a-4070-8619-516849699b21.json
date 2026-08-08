@@ -1,0 +1,21 @@
+{
+  "meta": {
+    "source": "qq-chat",
+    "chatName": "测试群",
+    "dateRange": "2026-07-20",
+    "originalCount": 7,
+    "filteredCount": 1,
+    "redactedCount": 0,
+    "rawId": "912a1977-043a-4070-8619-516849699b21"
+  },
+  "chunks": [
+    [
+      {
+        "ts": "2026-07-20T11:00:10Z",
+        "speaker": "正常用户",
+        "content": "请问如何重置密码？\n",
+        "type": "text"
+      }
+    ]
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "id": "090e46f0-2a0b-4495-aa87-24431e084554",
+  "title": "什么是 LLM Wiki？",
+  "createdAt": "2026-07-30T08:23:22.738Z",
+  "updatedAt": "2026-07-30T08:23:22.738Z",
+  "messageCount": 2,
+  "isPinned": false,
+  "preview": "根据检索到的页面内容，**LLM Wiki** 是一个基于 **[[双向链接]]** 构建的知识库系统。其核心架构包含三",
+  "messages": [
+    {
+      "id": "83d49317-b2e4-47c2-a272-8fa442e911ad",
+      "role": "user",
+      "content": "什么是 LLM Wiki？",
+      "createdAt": "2026-07-30T08:22:59.740Z"
+    },
+    {
+      "id": "701a5f3a-f0c2-4503-b2c3-beb507e10d05",
+      "role": "assistant",
+      "content": "根据检索到的页面内容，**LLM Wiki** 是一个基于 **[[双向链接]]** 构建的知识库系统。其核心架构包含三个关键组件：\n\n1. **双向链接**：通过 `[[页面名]]` 语法将独立页面编织为互联的知识网络，支持双向导航与自动追踪相关概念。\n2. **Harness**：负责运行链接触发，调用 LLM 编译时自动生成页面间的链接关系。\n3. **Vault**：统一管理并持久化存储所有页面之间的双向链接结构，支持 entity、concept、comparison 等多种页面类型的互联。\n\n三者的关系是：\n- LLM Wiki 基于双向链接构建知识库（详见 [[llm-wiki]]）\n- Harness 负责运行链接触发（详见 [[harness]]）\n- Vault 负责存储链接关系（详见 [[vault]]）\n\n例如，[[batch-compile]] 过程会利用 LLM 从原始文本中自动提取实体/概念，生成带有双向链接的结构化页面。",
+      "refs": [
+        {
+          "path": "queries/ppt-20260729-012755.md",
+          "title": "ppt-20260729-012755.md",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 1
+        },
+        {
+          "path": "concepts/batch-compile.md",
+          "title": "batch-compile.md",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 2
+        },
+        {
+          "path": "entities/batch-compile-test.md",
+          "title": "batch-compile-test.md",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 3
+        },
+        {
+          "path": "concepts/batch-compile-test.md",
+          "title": "batch-compile-test.md",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 4
+        },
+        {
+          "path": "concepts/batch-compile-test-19.md",
+          "title": "batch-compile-test-19.md",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 5
+        },
+        {
+          "path": "双向链接",
+          "title": "双向链接",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 6
+        },
+        {
+          "path": "页面名",
+          "title": "页面名",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 7
+        },
+        {
+          "path": "concepts/llm-wiki.md",
+          "title": "llm-wiki.md",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 8
+        },
+        {
+          "path": "concepts/harness.md",
+          "title": "harness.md",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 9
+        },
+        {
+          "path": "concepts/vault.md",
+          "title": "vault.md",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 10
+        }
+      ],
+      "thinking": [
+        {
+          "phase": "thinking",
+          "message": "正在思考...",
+          "ts": "2026-07-30T08:22:59.777Z"
+        },
+        {
+          "phase": "composing",
+          "message": "降级搜索中...",
+          "ts": "2026-07-30T08:23:20.385Z"
+        }
+      ],
+      "createdAt": "2026-07-30T08:23:22.703Z",
+      "sessionId": "8ed7c16d-1176-4ba6-836c-43a5bf88933b",
+      "messageIndex": 0
+    }
+  ]
+}

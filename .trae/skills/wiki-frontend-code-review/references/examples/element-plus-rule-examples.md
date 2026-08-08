@@ -152,4 +152,30 @@ import { Edit } from '@element-plus/icons-vue'
 
 ---
 
+---
+
+## 单选组件用 value 属性，禁止 label 作 value（el-radio / el-radio-button）
+
+### Wrong
+
+```ts
+<!-- Element Plus 2.6+ 已弃用：label 被当作 value，控制台告警，3.0 移除后失效 -->
+<el-radio-group v-model="mode">
+  <el-radio-button label="knowledge">知识</el-radio-button>
+  <el-radio-button label="draft">草稿</el-radio-button>
+</el-radio-group>
+```
+
+### Right
+
+```ts
+<!-- value 承载选项值，默认插槽承载显示文本；v-model 绑定不变 -->
+<el-radio-group v-model="mode">
+  <el-radio-button value="knowledge">知识</el-radio-button>
+  <el-radio-button value="draft">草稿</el-radio-button>
+</el-radio-group>
+```
+
+---
+
 *End of examples*

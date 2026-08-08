@@ -46,6 +46,27 @@
 | FR51 | Long Task Polling UI | [references/long-task-polling-ui-frontend-rule.md](references/long-task-polling-ui-frontend-rule.md) | — | *.vue, *.ts (含 setInterval / poll / AbortSignal.timeout / setTimeout abort / videoState / closeDialog / resetState / onBeforeUnmount clearInterval) | 3 | 6 |
 | FR52 | Event Delegation | [references/event-delegation-frontend-rule.md](references/event-delegation-frontend-rule.md) | — | *.vue (含 v-html / addEventListener / removeEventListener / closest / target.tagName / globalThis / window / destroy / dispose / mermaid.initialize) | 3 | 5 |
 | FR53 | Heavy Library | [references/heavy-library-frontend-rule.md](references/heavy-library-frontend-rule.md) | — | *.vue, *.ts (含 import mermaid / import marpit / dynamic import / mod.default / nextTick / mermaid.render / marpInstance / monaco.editor) | 2 | 6 |
+| FR61 | TS/JS Shadowing | [references/ts-js-shadowing-frontend-rule.md](references/ts-js-shadowing-frontend-rule.md) | — | *.ts, *.vue, vite.config.ts (含 src/**/*.js, *.js.map, resolve.extensions, vue-tsc, vite build, 编译产物) | 2 | 3 |
+| FR62 | Type Sync Done Event | [references/type-sync-done-event-rule.md](references/type-sync-done-event-rule.md) | — | types.ts, *.ts (含 done event, governor, threadId, export interface, additive, optional, SSE 字段新增) | 2 | 2 |
+| FR63 | Runtime Data Privacy | [references/runtime-data-privacy-frontend-rule.md](references/runtime-data-privacy-frontend-rule.md) | — | *.ts, *.vue (含 IndexedDB, localStorage, 新磁盘目录, gitignore, persistSessions, 服务端会话) | 2 | 2 |
+| FR64 | Packaging Config | [references/packaging-config-rule.md](references/packaging-config-rule.md) | — | *.vue, *.ts, *.ps1, *.iss (含 机器绝对路径/Program Files/用户数据路径/vaultPath 字面量) | 1 | 3 |
+| FR65 | Element Plus Radio Deprecation | [references/element-plus-rule.md](references/element-plus-rule.md) | — | *.vue (含 el-radio / el-radio-button + label= 作 value) | 1 | 2 |
+| FR66 | Optional Contract Field | [references/optional-contract-field-rule.md](references/optional-contract-field-rule.md) | — | types.ts, *.ts (含 CompileInput / QueryInput / originalName / optional / 后端内部字段 / 前端不消费 / ?? 兜底) | 1 | 3 |
+| FR67 | TTS Neural Fallback | [references/tts-neural-fallback-rule.md](references/tts-neural-fallback-rule.md) | — | *.vue, *.ts (含 speechSynthesis / SpeechSynthesisUtterance / /api/tts/synthesize / new Audio / prosody / express-as / volume|pitch|rate / 朗读) | 1 | 4 |
+| FR68 | SPA Deploy Integrity | [references/spa-deploy-integrity-frontend-rule.md](references/spa-deploy-integrity-frontend-rule.md) | — | vite.config.ts, build*.{ps1,sh,mjs}, _deploy_live*.mjs, *.vue, *.ts (含 outDir / emptyOutDir / public_live_ / .deploy-complete / 时间戳目录 / 部署完整性) | 1 | 3 |
+| FR69 | Session Isolation | [references/session-isolation-frontend-rule.md](references/session-isolation-frontend-rule.md) | — | *store*.ts, *.vue (含 currentConversationId / scopedOwnerId / resetSession / loadConversations / persistConversation / dbGet / filterByOwner / user?.id / 跨账户 / 登出) | 4 | 4 |
+| FR70 | BYOK Per-User Override | [references/byok-per-user-override-frontend-rule.md](references/byok-per-user-override-frontend-rule.md) | — | services/userConfig.ts, views/Config.vue, views/Query.vue, *.ts (含 usercfg:: / loadAiUserConfig / llmConfig / toolsConfig / apiKey / 配置菜单 / isAdmin / v-if="isAdmin" / 命名空间) | 3 | 3 |
+| FR71 | Streaming Resume | [references/streaming-resume-frontend-rule.md](references/streaming-resume-frontend-rule.md) | — | stores/query.ts, views/Query.vue, constants/storageKeys.ts, types.ts (含 streamingAnswer / persistConversation / onBeforeUnmount / abortController / LAST_ACTIVE_CONVERSATION / status:'streaming' / resumeLastAnswer / 断点续答) | 3 | 3 |
+| FR72 | Test Isolation | [references/indexeddb-test-isolation-rule.md](references/indexeddb-test-isolation-rule.md) | — | *.test.ts, *.spec.ts, test_*.py, *.ts (含 indexedDB / localStorage / deleteDatabase / setTimeout(0) / vi.clearAllMocks / vi.resetModules / 唯一命名空间 / beforeEach) | 3 | 3 |
+| FR73 | SSML Prosody Injection | [references/ssml-injection-frontend-rule.md](references/ssml-injection-frontend-rule.md) | — | *.vue, *.ts (含 /api/tts/synthesize / EdgeTtsProvider / prosody / rate|volume|pitch / 语音控件 / 朗读) | 2 | 3 |
+| FR74 | Safe DOM Delete | [references/dom-compat-class-frontend-rule.md](references/dom-compat-class-frontend-rule.md) | — | *.vue, *.ts (含 removeChild / classList.remove / 删 DOM / 删 .msg-actions / 引用清零 / 安全删) | 1 | 3 |
+| FR75 | Theme Aware Icon | [references/theme-aware-icon-frontend-rule.md](references/theme-aware-icon-frontend-rule.md) | — | *.vue, *.svg, *.ts (含 <svg / currentColor / 24x24 / 线条 / stroke / 图标) | 1 | 2 |
+| FR76 | Capability Gating Sync | [references/capability-gating-sync-frontend-rule.md](references/capability-gating-sync-frontend-rule.md) | — | *.vue, *.ts (含 !!sessionId / !!getSession / 门控 / v-if / 能力门控 / 内容可得性) | 1 | 2 |
+| FR77 | Edit Resend | [references/edit-resend-frontend-rule.md](references/edit-resend-frontend-rule.md) | — | views/Query.vue, stores/query.ts, components/MessageToolbar.vue (含 removeMessagesFrom / submitQuestion / editingIdx / 编辑重发 / 悬空答案 / isLoading) | 2 | 3 |
+| FR78 | Chat Autoscroll | [references/chat-autoscroll-frontend-rule.md](references/chat-autoscroll-frontend-rule.md) | — | composables/useChatAutoScroll.ts, views/Query.vue, components/FloatingChat.vue (含 scrollToBottom / double rAF / stickToBottom / img load / 监听绑定解绑 / 贴底) | 1 | 5 |
+| FR79 | Button Style | [references/button-style-frontend-rule.md](references/button-style-frontend-rule.md) | — | *.vue (含 .edit-btn.confirm / .edit-btn.cancel / 确认 / 取消 / type="primary" / 主题变量 / 成对按钮) | 0 | 3 |
+| FR80 | Editbox Width | [references/editbox-width-frontend-rule.md](references/editbox-width-frontend-rule.md) | — | views/Query.vue, *.vue (含 .msg-content-wrapper.editing / .msg-edit / flex-end / align-items:stretch / width:100% / 编辑态撑满) | 0 | 3 |
+| FR81 | IDB Reactive Clone | [references/idb-reactive-clone-frontend-rule.md](references/idb-reactive-clone-frontend-rule.md) | — | services/*UserConfig*.ts, *store*.ts (含 dbPut / saveUserConfig / idbPut / store.put / reactive / toRaw / structuredClone / [object Array] could not be cloned) | 3 | 4 |
 
 ## 2. Quick Routing Table
 
@@ -87,6 +108,26 @@
 | *.vue / *.ts + setInterval / poll / AbortSignal.timeout / setTimeout abort / videoState / closeDialog / resetState / onBeforeUnmount clearInterval | long-task-polling-ui-frontend-rule (FR51) | long-task-architecture-frontend-rule (if 任务架构选择), async-reliability (if 定时器), event-delegation-frontend-rule (if addEventListener) |
 | *.vue + v-html / addEventListener / removeEventListener / closest / target.tagName / globalThis / window / destroy / dispose | event-delegation-frontend-rule (FR52) | heavy-library-frontend-rule (if 含 mermaid/marp/monaco 库), third-party-error-guard-frontend-rule (if 库渲染), encoding-safety (if Edit 后) |
 | *.vue / *.ts + import mermaid / import marpit / dynamic import / mod.default / nextTick / mermaid.render / marpInstance / monaco.editor | heavy-library-frontend-rule (FR53) | third-party-error-guard-frontend-rule (if 库渲染错误防护), event-delegation-frontend-rule (if 库实例需销毁), encoding-safety (if Edit 后) |
+| *.ts / *.vue + src/**/*.js / *.js.map / resolve.extensions / vue-tsc / vite build | ts-js-shadowing-frontend-rule (FR61) | typecheck-cache-frontend-rule (FR26, if 幽灵错误), encoding-safety (if Edit 后) |
+| types.ts + done event / governor / threadId / export interface / SSE 字段新增 | type-sync-done-event-rule (FR62) | type-sync-frontend-rule (TS-1), type-safety (if 类型不匹配) |
+| *.ts / *.vue + IndexedDB / localStorage / 新磁盘目录 / gitignore / persistSessions | runtime-data-privacy-frontend-rule (FR63) | persistence-boundary-rule (PB1-PB6), sensitive-field-display-rule (SF1) |
+| *.vue + el-radio / el-radio-button + label= 作 value / ElementPlusError label act as value | element-plus-rule (FR65) | encoding-safety (if Edit 后) |
+| types.ts / *.ts + CompileInput / QueryInput / originalName / 后端内部可选字段 / 前端不消费 / ?? 兜底 / 同 PR 同步可选 | optional-contract-field-rule (FR66) | type-sync-frontend-rule (TS-1), type-sync-done-event-rule (FR62, if SSE 字段), type-safety (if 类型不匹配) |
+| *.vue / *.ts + speechSynthesis / SpeechSynthesisUtterance / /api/tts/synthesize / prosody / express-as / new Audio / 朗读 | tts-neural-fallback-rule (FR67) | async-reliability (if fetch/axios 合成请求) |
+| vite.config.ts / build*.{ps1,sh,mjs} / _deploy_live*.mjs + outDir / emptyOutDir / public_live_ / .deploy-complete / 时间戳目录 / 部署完整性 | spa-deploy-integrity-frontend-rule (FR68) | ts-js-shadowing-frontend-rule (FR61, if 构建产物残留), build-artifact (if 产物验证) |
+| *store*.ts / *.vue + currentConversationId / scopedOwnerId / resetSession / loadConversations / persistConversation / dbGet / filterByOwner / user?.id / 跨账户 / 登出 | session-isolation-frontend-rule (FR69) | runtime-data-privacy-frontend-rule (FR63, if 客户端按 ownerId 隔离), config-isolation-rule (if 多账户配置命名空间) |
+| services/userConfig.ts / views/Config.vue / views/Query.vue + usercfg:: / loadAiUserConfig / llmConfig / toolsConfig / apiKey / 配置菜单 / isAdmin / v-if="isAdmin" / 命名空间 / BYOK | byok-per-user-override-frontend-rule (FR70) | runtime-data-privacy-frontend-rule (FR63, if 密钥/IndexedDB), config-isolation-rule (if 多账户配置隔离) |
+| stores/query.ts / views/Query.vue + streamingAnswer / persistConversation / onBeforeUnmount / abortController / LAST_ACTIVE_CONVERSATION / status:'streaming' / resumeLastAnswer / 断点续答 | streaming-resume-frontend-rule (FR71) | sse-event-dispatch-frontend-rule (if SSE 事件分发), persistence-boundary-frontend-rule (if 客户端持久化) |
+| *.test.ts / *.spec.ts / test_*.py + indexedDB / localStorage / deleteDatabase / setTimeout(0) flush / vi.clearAllMocks / vi.resetModules / 唯一命名空间 / 唯一 userId | indexeddb-test-isolation-rule (FR72) | runtime-data-privacy-frontend-rule (FR63, if IndexedDB 持久化), config-isolation-rule (if 多账户配置命名空间) |
+| *.vue / *.ts + /api/tts/synthesize / EdgeTtsProvider / prosody / rate|volume|pitch / 语音控件 / 朗读 | ssml-injection-frontend-rule (FR73) | tts-neural-fallback-rule (FR67, if 后端合成 + 降级), async-reliability (if fetch 合成请求) |
+| *.vue / *.ts + 删除 DOM 节点 / removeChild / classList.remove / 删 .msg-actions / 引用清零 / 安全删 | safe-dom-delete-rule (FR74) | test-case-sync-frontend-rule (if 引用同步), encoding-safety (if Edit 后) |
+| *.vue / *.svg + <svg / fill= / stroke= / currentColor / 24x24 / 线条图标 / 图标主题 | theme-aware-icon-frontend-rule (FR75) | theming (if 主题色), icon-and-navigation-rule (if 图标导航) |
+| *.vue / *.ts + !!sessionId / !!getSession / v-if 门控 / can-archive / 内容可得性 | capability-gating-sync-frontend-rule (FR76) | backend-review-static-check (if 后端契约同步) |
+| *.vue / *.ts + removeMessagesFrom / submitQuestion / editingIdx / 编辑重发 / 悬空答案 / isLoading / 编辑态发送 | edit-resend-frontend-rule (FR77) | streaming-resume-frontend-rule (FR71, if 影响断点续答状态), backend-review-static-check (if 后端 /messages 端点契约) |
+| composables/*.ts / *.vue + scrollToBottom / double rAF / stickToBottom / 监听绑定解绑 / img load 补滚 / 贴底 / 用户滚动暂停 | chat-autoscroll-frontend-rule (FR78) | streaming-resume-frontend-rule (FR71, if 流式中滚动) |
+| *.vue + .edit-btn.confirm / .edit-btn.cancel / 确认 / 取消 / type="primary" / 成对按钮 / 主题变量 | button-style-frontend-rule (FR79) | theming (if 主题色), icon-and-navigation-rule (if 图标按钮) |
+| *.vue + .msg-content-wrapper.editing / .msg-edit / flex-end / align-items:stretch / width:100% / 编辑态撑满 / 输入框宽度 | editbox-width-frontend-rule (FR80) | responsive-layout (if 响应式) |
+| services/*UserConfig*.ts / *store*.ts + dbPut / saveUserConfig / idbPut / store.put / reactive( / toRaw( / structuredClone( / [object Array] could not be cloned / 深拷贝 / clone( | idb-reactive-clone-frontend-rule (FR81) | persistence-boundary-rule (if 客户端持久化), runtime-data-privacy-frontend-rule (FR63, if IndexedDB 命名空间) |
 
 ## 3. Keyword Scanning Guide
 
@@ -140,3 +181,23 @@ ormalize |
 | long-task-polling-ui-frontend-rule | setInterval, poll, pollTimer, AbortSignal.timeout, setTimeout, abortReason, videoState, queued, processing, completed, failed, closeDialog, resetState, onBeforeUnmount, clearInterval, clearTimeout, handleKeydown |
 | event-delegation-frontend-rule | v-html, addEventListener, removeEventListener, closest, target.tagName, event.target, globalThis, window, document, destroy, dispose, cleanup, mermaid.initialize, mermaidModule, onBeforeUnmount, handleKeydown |
 | heavy-library-frontend-rule | import mermaid, import marpit, import monaco, dynamic import, mod.default, mod.mermaid, mod.Marp, xxxLoaded, mermaidModule, marpInstance, nextTick, await import, render, innerHTML, fallback, pre, 200KB, bundle |
+| ts-js-shadowing-frontend-rule | src/**/*.js, *.js.map, resolve.extensions, vue-tsc, vite build, 编译产物, .ts 不生效, noEmit |
+| type-sync-done-event-rule | done event, governor, threadId, export interface, types.ts, additive, optional, SSE 字段新增, 同 PR 同步 |
+| runtime-data-privacy-frontend-rule | IndexedDB, localStorage, 新磁盘目录, gitignore, persistSessions, 服务端会话, 敏感字段明文, 运行期产物 |
+| element-plus-radio-deprecation | el-radio, el-radio-button, label act as value, ElementPlusError, label=, value=, 3.0.0 deprecated |
+| optional-contract-field-rule | CompileInput, QueryInput, originalName, 后端内部字段, 前端不消费, optional, ?? 兜底, 同 PR 同步, field!, as T, 分支依赖, 加法可选 |
+| tts-neural-fallback-rule | speechSynthesis, SpeechSynthesisUtterance, /api/tts/synthesize, prosody, express-as, new Audio, zh-CN-XiaoxiaoNeural, volume, pitch, rate, 朗读, 语音合成 |
+| spa-deploy-integrity-frontend-rule | vite.config.ts, outDir, emptyOutDir, public_live_, .deploy-complete, 时间戳目录, deploy, 部署完整性, 全新目录, 覆盖, safe-delete |
+| session-isolation-frontend-rule | currentConversationId, scopedOwnerId, resetSession, loadConversations, persistConversation, dbGet, filterByOwner, migrateOwnerless, user?.id, 跨账户, 登出, ownerId, 会话隔离, 复用 id |
+| byok-per-user-override-frontend-rule | usercfg::, loadAiUserConfig, saveAiUserConfig, llmConfig, searchConfig, toolsConfig, apiKey, BYOK, 配置菜单, isAdmin, v-if="isAdmin", 命名空间, 自带密钥 |
+| streaming-resume-frontend-rule | streamingAnswer, persistConversation, schedulePersistInProgress, onBeforeUnmount, abortController, LAST_ACTIVE_CONVERSATION, status:'streaming', resumeLastAnswer, maybeResumeOnLoad, 断点续答, 增量持久化 |
+| test-isolation-frontend-rule | indexedDB, localStorage, deleteDatabase, indexeddb.deleteDatabase, setTimeout(0), flush, vi.clearAllMocks, vi.resetModules, 命名空间, 唯一 userId, beforeEach, fake-indexeddb, onblocked, 异步落盘 |
+| ssml-injection-frontend-rule | /api/tts/synthesize, EdgeTtsProvider, prosody, express-as, rate, volume, pitch, 朗读, 语音合成, 1007 |
+| safe-dom-delete-rule | removeChild, classList.remove, 删除, remove, querySelector, getElementsByClass, 引用, 清零, .msg-actions, grep, stale |
+| theme-aware-icon-frontend-rule | <svg, currentColor, fill=, stroke=, 24x24, viewBox, 线条, icon, rgba(255,255,255, stroke-width |
+| capability-gating-sync-frontend-rule | !!sessionId, !!getSession, v-if, can-archive, 门控, 能力, 内容可得性, content availability, 放宽 |
+| edit-resend-frontend-rule | removeMessagesFrom, submitQuestion, editingIdx, 编辑重发, 编辑并重新发送, 悬空答案, isLoading, 编辑态发送, 重新插入用户消息 |
+| chat-autoscroll-frontend-rule | scrollToBottom, double rAF, requestAnimationFrame, stickToBottom, 贴底, 用户滚动, 监听解绑, img load, 补滚, onMounted, onUnmounted |
+| button-style-frontend-rule | .edit-btn.confirm, .edit-btn.cancel, 确认, 取消, type="primary", 成对按钮, 主题变量, el-button |
+| editbox-width-frontend-rule | .msg-content-wrapper.editing, .msg-edit, flex-end, align-items:stretch, width:100%, 编辑态撑满, 输入框宽度, 编辑框 |
+| idb-reactive-clone-frontend-rule | dbPut, saveUserConfig, idbPut, store.put, reactive(, toRaw(, structuredClone(, [object Array] could not be cloned, JSON.parse(JSON.stringify, 深拷贝, clone(, 静默丢配置 |

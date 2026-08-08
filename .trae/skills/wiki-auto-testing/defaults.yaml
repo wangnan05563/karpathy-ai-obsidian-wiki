@@ -13,6 +13,27 @@ build:
   enabled: false
   timeout_sec: 120
 
+# --- 前端验证配置（类型检查 + 构建） ---
+# 验证命令、运行时、产物目录全部参数化，禁止在脚本/逻辑中硬编码 node 路径、命令或输出目录。
+# 构建产物输出到项目外临时目录（build_out_dir），规避 WorkBuddy 安全删除钩子拦截与源码树污染（详见 testing-process-review.md 第三轮复盘）。
+frontend_verification:
+  enabled: true
+  # 留空则使用 PATH 中的 node；显式指定可锁定运行时（跨机一致）
+  node_path: ""
+  typecheck_enabled: true
+  # vue-tsc 直接走仓库内置 bin，避免全局版本漂移
+  typecheck_command: "node_modules/vue-tsc/bin/vue-tsc.js --noEmit"
+  typecheck_run_dir: "frontend"
+  build_enabled: true
+  # vite 同样走仓库内置 bin
+  build_command: "node_modules/vite/bin/vite.js build"
+  build_run_dir: "frontend"
+  # 产物输出到 /tmp 等非项目目录，规避 safe-delete 拦截 + 源码树污染
+  build_out_dir: "/tmp/kw-dist"
+  build_empty_out_dir: true
+  # TS/JS 遮蔽清理：构建/类型检查前先移除 src/**/*.js 陈旧产物（FR-061）
+  stale_js_cleanup_glob: "src/**/*.js"
+
 # --- 启动配置 ---
 startup:
   enabled: false
@@ -1459,3 +1480,449 @@ powershell_long_process:
   test_pages: []
   # 默认失败时截图取证
   screenshot_on_fail: true
+
+# ============================================================
+# 以下为"只测改动内容"与覆盖率/端点自发现测试补充默认配置（第二十三批次）
+# 基于"上下文记忆治理"后端模块测试复盘提炼（详见 references/testing-process-review.md）
+# 所有参数可配置，避免硬编码
+# 核心目标：测试聚焦"被修改的内容"，并自动发现/校验端点覆盖，适配不同业务场景
+# 默认值比 config.yaml 更保守（多数 enabled 默认 false）
+# ============================================================
+
+# --- 测试范围（变更内容聚焦）默认配置 ---
+# 启用后技能聚焦测试 changed_paths 推导出的改动路由/端点，而非全量测试
+# 典型用法：CI 中用 git diff --name-only 生成 changed_paths 注入 config.yaml
+scope:
+  modified_content:
+    # 是否启用"只测改动内容"模式
+    enabled: false
+    # 变更文件相对项目根的路径列表（如 ["api/src/routes/context.ts"]）
+    changed_paths: []
+    # 是否从 changed_paths 推导受影响的路由文件
+    # （供 endpoint_coverage_check / endpoint_autodiscovery 缩小范围使用）
+    derive_routes: true
+    # 是否从 changed_paths 推导需测试的端点（自动追加到 api_tests.endpoints）
+    derive_endpoints: true
+
+# --- 测试覆盖率检查默认配置 ---
+# 校验入口文件注册的每个路由是否都有对应测试，防止新端点"裸奔上线"
+# 基于"两个新端点随代码上线却零覆盖"的历史问题复盘提炼
+test_coverage:
+  endpoint_coverage_check:
+    # 是否启用端点覆盖检查
+    enabled: false
+    # 后端路由目录（相对于项目根目录），用于扫描所有路由定义
+    routes_dir: "api/src/routes"
+    # 未测端点是否判定为失败（false = 仅标记/报告，不阻断套件；非阻断模式）
+    fail_if_untested: false
+    # 覆盖率报告输出路径（相对于项目根目录）
+    report_path: "output/endpoint-coverage.json"
+
+# --- 端点自动发现默认配置 ---
+# 可选：从路由定义自动推导 api_tests.endpoints，免去手工维护端点列表
+# 与 scope.modified_content.derive_endpoints 配合可进一步聚焦到改动端点
+endpoint_autodiscovery:
+  # 是否启用端点自动发现
+  enabled: false
+  # 后端路由目录（相对于项目根目录）
+  routes_dir: "api/src/routes"
+  # 需要匹配的 HTTP 方法列表（用于过滤自动发现的端点）
+  method_match:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+
+# ============================================================
+# 以下为打包与用户数据测试默认配置（第二十四批次）
+# 基于「安装器覆盖配置 / AppData 数据迁移 / SEA 路径解析 / clean-defaults」复盘提炼
+# 对应 CODING-PACKAGING-USERDATA / BR-068（详见 references/testing-process-review.md 第二轮复盘）
+# 所有参数可配置，避免硬编码
+# 默认保守（enabled: false），项目在 config.yaml 中按需开启并覆盖参数
+# ============================================================
+
+# --- 打包与用户数据测试默认配置 ---
+# 验证安装器脚本不会覆盖用户数据、资源路径与用户数据路径严格分离、
+# 数据目录解析落点正确、用户数据按线程/会话隔离且非法 ID 被拒绝
+packaging_tests:
+  # 是否启用安装器防覆盖验证
+  enabled: false
+  # 安装器脚本路径（相对项目根目录），支持 Inno Setup *.iss 或 PowerShell *.ps1
+  installer_script: "installer.iss"
+  # 程序文件应使用的 Flags（仅覆盖程序文件，绝不触碰用户数据）
+  program_files_flags: "ignoreversion"
+  # 安装器是否必须将用户数据（config.json/.env/vault/data）排除在 {app} 之外
+  exclude_user_data: true
+  # 视为"用户数据"的文件/目录模式（出现于 {app} 即判定违规）
+  user_data_patterns:
+    - "config.json"
+    - ".env"
+    - "vault"
+    - "data"
+
+# --- 数据目录解析落点验证默认配置 ---
+# 断言 getUserDataDir()/getDataDir() 返回值锚定到预期用户数据根，
+# 且回退顺序正确、文件系统实际写入位置与解析一致
+data_dir_tests:
+  # 是否启用数据目录解析落点验证
+  enabled: false
+  # 需验证的数据目录解析函数名（在项目源码中定位并注入其返回值）
+  data_dir_funcs:
+    - "getUserDataDir"
+    - "getDataDir"
+  # 预期锚点环境变量（解析出的根目录应基于此）
+  expected_anchor: "LOCALAPPDATA"
+  # 锚点缺失时的回退顺序
+  fallback_anchors:
+    - "APPDATA"
+    - "HOME"
+  # 预期路径模式（{anchor} 会被替换为实际锚点求值结果）
+  expected_pattern: "{anchor}/KarpathyWiki"
+  # 是否在文件系统层面验证实际写入位置与解析一致
+  verify_filesystem_write: true
+
+# --- 用户数据隔离验证默认配置 ---
+# 不同线程/会话数据目录互相隔离；非法 ID（路径穿越/非 UUID）必须被拒绝（4xx）
+user_data_isolation_tests:
+  # 是否启用用户数据隔离验证
+  enabled: false
+  # 需隔离的资源端点（如 threads/sessions/memory 的写入路径）
+  isolation_resources: []
+  # 非法 ID 样例（用于触发 UUID 校验 / 路径穿越防护）
+  malicious_ids:
+    - "../"
+    - "..\\"
+    - "0"
+    - "null"
+  # 非法 ID 访问时期望的 HTTP 状态码（应为 4xx，典型 400）
+  expect_status: 400
+
+# --- 后端逻辑单元验证默认配置 ---
+# 沙箱无浏览器 / 无 PyYAML 时，直接运行"实例化后端 service"的单元测试文件，
+# 对落盘前的纯逻辑做断言。所有 runner / 测试文件 / 工作目录 / 判定关键字均参数化，零硬编码。
+backend_logic_unit_test:
+  # 是否启用后端逻辑单元验证
+  enabled: false
+  # 运行单测的运行时（务必用 Windows 原生路径：C:\Users\...，嵌套子进程只认此格式，
+  # 不认 Git-Bash 的 /c/Users/...，否则 ENOENT）
+  runner_path: "node"
+  # 单元测试文件路径（该文件会 import 并实例化目标后端 service 做断言）
+  test_file: "api/_test_service_unit.mjs"
+  # 运行工作目录（默认项目根）
+  cwd: "."
+  # 输出中视为"失败"的关键字（匹配则判定失败；不硬编码业务值）
+  fail_patterns:
+    - "FAIL"
+    - "failed"
+  # 输出中视为"通过"的关键字
+  pass_patterns:
+    - "PASS"
+    - "passed"
+  # 单测超时（毫秒）
+  timeout_ms: 120000
+
+# --- 迁移 / 修复脚本端到端验证默认配置 ---
+# 对临时 vault 真实调用数据迁移 / 修复脚本（默认 dry-run，显式 --apply 才写盘），
+# 验证其既不破坏原数据、又能正确改写；可选 setup_command 造 fixture、verify_command 做改动断言。
+migration_script_e2e:
+  # 是否启用迁移/修复脚本端到端验证
+  enabled: false
+  # 迁移/修复脚本路径
+  script_path: "api/scripts/migrate-raw-filenames.mjs"
+  # 运行时（务必用 Windows 原生路径，同上 ENOENT 陷阱）
+  runtime: "node"
+  # 目标 vault / 数据目录的参数名
+  target_arg: "--vault"
+  # 写盘标志（脚本默认 dry-run，显式该标志才真正改写；安全优先）
+  apply_flag: "--apply"
+  # 临时 vault 目录（脚本真实 --apply 于此；测试后回收，不触碰项目源码树）
+  temp_vault_dir: "/tmp/kw-migrate-e2e"
+  # 造数据命令（可选；在临时 vault 生成 fixture，{temp_vault} 占位会被替换）
+  setup_command: "mkdir -p {temp_vault}/raw"
+  # 改动后验证命令（可选；退出码 0 视为断言通过，{temp_vault} 占位会被替换）
+  verify_command: ""
+  # 测试后是否回收临时目录
+  cleanup_temp: true
+  # 工作目录（默认项目根）
+  cwd: "."
+  # 超时（毫秒）
+  timeout_ms: 120000
+
+# --- 后端行为级缺陷静态守卫（第十一轮复盘） ---
+# 配置化 grep 后端源码中的"禁止模式组"，把 round 11 的"静态守卫"判断逻辑（J4）落地为可执行检查。
+# error 级命中即阻断；warn 级仅标记。全部模式/目录/判定来自配置，零硬编码。
+backend_review_static_check:
+  # 是否启用后端行为级缺陷静态守卫
+  enabled: false
+  # 扫描目录（相对项目根 / 后端 cwd）
+  scan_dirs:
+    - "api/src"
+  # 扫描文件 glob
+  file_glob: "*.ts"
+  # 禁止模式组：每组可参数化 name / patterns / message / rule_ref / severity（error|warn）
+  # regex 默认为 false（按字面子串匹配，避免正则元字符误伤）；设为 true 时 patterns 按正则匹配
+  groups:
+    - name: "type_bypass"
+      # 类型安全绕过：as any / as unknown as（非空断言 !. 易误报，仅作 warn 复核）
+      patterns:
+        - "as any"
+        - "as unknown as"
+      regex: false
+      message: "发现类型安全绕过（as any / as unknown as），应改用显式类型或类型守卫"
+      rule_ref: "BR-078 / CODING-TYPE-SAFE-NO-ANY"
+      severity: "error"
+    - name: "redundant_probe"
+      # 冗余能力探测：每次调用都探测 ffprobe / isXxxAvailable / -version
+      patterns:
+        - "ffprobe"
+        - "isFfmpegAvailable"
+      regex: false
+      message: "发现冗余能力探测（ffprobe / isFfmpegAvailable），能力应一次性确定而非重复探测"
+      rule_ref: "BR-080 / CODING-NO-REDUNDANT-PROBE"
+      severity: "warn"
+    - name: "swallowed_critical_write"
+      # 关键写吞错信号：落盘函数出现即需人工复核其错误处理
+      patterns:
+        - "saveUsers"
+        - "saveConfig"
+        - "persistConversation"
+      regex: false
+      message: "关键写函数出现，需复核是否吞错（try/catch 内恒返 ok:true）；应传播错误"
+      rule_ref: "BR-076 / CODING-CRITICAL-WRITE-NO-SWALLOW"
+      severity: "warn"
+    - name: "hardcoded_timeout"
+      # 硬编码超时：字面量 30000 / 30_000（与 timeout_tier_check 互补）
+      patterns:
+        - "30000"
+        - "30_000"
+      regex: false
+      message: "发现硬编码超时字面量（30000/30_000），应改从配置读取"
+      rule_ref: "BR-079 / CODING-CONFIG-TIMEOUT"
+      severity: "warn"
+    - name: "async_sync_mismatch"
+      # 异步当同步：execFile 未 await（与 async_reliability_static_check 超时保护互补）
+      patterns:
+        - "execFile("
+      regex: false
+      message: "发现 execFile 调用，确认已 await 或改用 execFileSync（异步当同步是 BR-075 类缺陷）"
+      rule_ref: "BR-075 / CODING-CHILD-PROCESS-SYNC"
+      severity: "warn"
+  # 超时（毫秒，配置契约保留）
+  timeout_ms: 120000
+
+# --- 路由响应分支覆盖（第十二轮复盘） ---
+# 配置化逐分支断言被测路由在各请求参数组合下的返回状态码，把"归档路由响应分支覆盖
+# + 静默缺陷回归"判断逻辑落地为可执行检查。全部路由、方法、分支用例、判定来自配置，零硬编码。
+route_response_branch_coverage:
+  # 是否启用路由响应分支覆盖
+  enabled: false
+  # 被测路由（相对 service.api_url；支持 :param 路径占位符，由 branch_cases.params 填充）
+  route_name: "/api/threads/:threadId/archive"
+  # HTTP 方法
+  method: "GET"
+  # 分支用例：每个用例构造不同请求参数，断言返回状态码（与必需字段）
+  # expected_status 来自配置，不在代码中硬编码；非法 ts 当前回退实现返回 200，
+  # 若修复为 RangeError 拦截应改为 400，参数化以便随行为演进。
+  branch_cases:
+    - name: "valid_main_path"
+      description: "合法 threadId + 合法 messageIndex + 合法 ts + 非空内容 → 200，且响应含必需字段"
+      params:
+        threadId: "<valid_thread_id>"
+        messageIndex: "0"
+        ts: "<valid_ts>"
+      expected_status: 200
+      required_fields: ["content", "refs"]
+    - name: "fallback_no_content"
+      description: "无归档内容 → 回退 404"
+      params:
+        threadId: "<valid_thread_id>"
+        messageIndex: "0"
+        ts: "<valid_ts>"
+      expected_status: 404
+    - name: "illegal_thread_id"
+      description: "非法 threadId（路径穿越/非 UUID）→ 400"
+      params:
+        threadId: "..%2f.."
+        messageIndex: "0"
+        ts: "<valid_ts>"
+      expected_status: 400
+    - name: "non_integer_message_index"
+      description: "非整数 messageIndex（undefined 访问防护）→ 400"
+      params:
+        threadId: "<valid_thread_id>"
+        messageIndex: "abc"
+        ts: "<valid_ts>"
+      expected_status: 400
+    - name: "missing_message_index"
+      description: "缺失 messageIndex → 400"
+      params:
+        threadId: "<valid_thread_id>"
+        ts: "<valid_ts>"
+      expected_status: 400
+    - name: "illegal_ts"
+      description: "非法 ts（当前回退实现返回 200；修复为 RangeError 拦截后改 400）"
+      params:
+        threadId: "<valid_thread_id>"
+        messageIndex: "0"
+        ts: "not-a-number"
+      expected_status: 200
+    - name: "empty_content"
+      description: "空内容（no-op 落盘防护）→ 400"
+      params:
+        threadId: "<valid_thread_id>"
+        messageIndex: "0"
+        ts: "<valid_ts>"
+        content: ""
+      expected_status: 400
+  # 超时（毫秒，配置契约保留）
+  timeout_ms: 120000
+
+frontend_review_static_check:
+  # 是否启用前端行为级缺陷静态守卫（对应第十三轮复盘 / FR-077~FR-080）
+  enabled: false
+  # 扫描目录（相对项目根，参数化以适配任意前端项目）
+  scan_dirs:
+    - "frontend/src"
+  # 文件 glob（TS / Vue 源码）
+  file_glob: "*.{ts,vue}"
+  # 模式组：每个组可含 forbidden_patterns（命中即违规）与 required_patterns
+  # （整个扫描集中完全缺失即违规，守护保护性代码被重构误删）。severity=error 阻断 / warn 仅标记。
+  # 全部模式来自配置，零硬编码业务值；新增前端规范只需在此加一组。
+  groups:
+    - name: "edit_resend_pair"
+      description: "编辑重发必须同时具备 removeMessagesFrom（裁掉尾随 AI 答案）与 submitQuestion（重插用户消息），缺一则悬空答案"
+      severity: "error"
+      rule_ref: "FR-077"
+      forbidden_patterns: []
+      required_patterns:
+        - "removeMessagesFrom"
+        - "submitQuestion"
+    - name: "autoscroll_double_rAF"
+      description: "流式自动滚动须保留 double requestAnimationFrame + stickToBottom（用户滚动暂停）+ 生命周期绑定解绑"
+      severity: "warn"
+      rule_ref: "FR-078"
+      forbidden_patterns:
+        - "nextTick(scrollToBottom)"
+      required_patterns:
+        - "requestAnimationFrame"
+        - "stickToBottom"
+    - name: "button_style_pair"
+      description: "编辑态确认/取消按钮样式须成对定义（.edit-btn.confirm / .edit-btn.cancel），禁止视觉失衡"
+      severity: "warn"
+      rule_ref: "FR-079"
+      forbidden_patterns: []
+      required_patterns:
+        - "edit-btn.confirm"
+        - "edit-btn.cancel"
+    - name: "editbox_width_fill"
+      description: "编辑态输入框 wrapper（.msg-content-wrapper / .msg-edit）须撑满列宽，禁止 flex-end 收缩导致窄于原消息"
+      severity: "warn"
+      rule_ref: "FR-080"
+      forbidden_patterns:
+        - "align-items: flex-end"
+      required_patterns:
+        - "msg-content-wrapper"
+        - "msg-edit"
+
+spa_live_deploy_check:
+  # 是否启用 SPA 实时部署解析验证（对应 CODING-SPA-LIVE-DEPLOY / BR-071 / 前端 FR-068）
+  enabled: false
+  # 部署目录基准父目录（相对项目根 / 后端 cwd）
+  live_base_dir: "api"
+  # 时间戳部署目录前缀（后接数值时间戳）
+  live_dir_pattern: "public_live_"
+  # 兜底固定目录（新目录完整性失败时回退）
+  legacy_dir: "public"
+  # 完整性标记文件名（部署脚本最后写入）
+  complete_marker: ".deploy-complete"
+  # 需 within-root 防穿越的静态资源前缀
+  asset_prefix: "/wiki/"
+  # 恶意路径样本（须全部被拒绝，与 path_traversal_test 共用判定）
+  malicious_paths:
+    - "/wiki/../../etc/passwd"
+    - "/wiki//absolute"
+  # 部署新目录后是否必须重启后端（spaRoot 启动时算一次）
+  restart_required: true
+  # 后端端口（重启后轮询 Listen）
+  required_ports:
+    - 3000
+
+cross_account_session_check:
+  # 是否启用多账户会话隔离验证（对应 CODING-SESSION-ISOLATION / 前端 FR-069）
+  enabled: false
+  # 会话 store 文件路径（Pinia setup store）
+  conversation_store_path: "frontend/src/stores/conversations.ts"
+  # 会话按此字段隔离（IndexedDB 按 ownerId）
+  owner_field: "ownerId"
+  # 须加入 store return 的会话状态 ref（漏加则 reset 不可观测=死状态）
+  session_state_refs:
+    - "currentConversationId"
+    - "scopedOwnerId"
+  # auth watch 信号（变化即跨账户，须先 resetSession 再 load）
+  auth_watch_signal: "user?.id"
+  # 复用 id 持久化前是否以存储实际记录校验归属（他人记录绝不覆盖）
+  persist_reuse_owner_check: true
+  # 恶意 owner id 样本（越权访问须被拒绝）
+  malicious_owner_ids:
+    - "other-user-id"
+    - "attacker"
+  # 账户切换/登出是否要求 resetSession
+  require_reset_on_auth: true
+
+byok_per_user_override:
+  # 是否启用 BYOK 多用户密钥代理验证（对应 CODING-BYOK / 前端 FR-070 / 后端 BR-072）
+  enabled: false
+  # 前端按用户命名空间读写配置的服务层（键内化 userId）
+  user_config_service: "frontend/src/services/userConfig.ts"
+  # 按用户命名空间键前缀（键内化 userId，天然隔离）
+  user_config_namespaces:
+    - "usercfg::ai::"
+    - "usercfg::search::"
+    - "usercfg::tools::"
+  # 随请求体下发的覆盖配置字段
+  override_fields:
+    - "llmConfig"
+    - "searchConfig"
+    - "toolsConfig"
+  # 仅经请求体下发、禁止落盘/回显 GET/记日志的敏感字段
+  secret_fields:
+    - "apiKey"
+  # 缺任一即 400 的必需密钥字段
+  require_key_fields:
+    - "apiKey"
+    - "provider"
+    - "baseUrl"
+    - "model"
+  # 覆盖纯函数（运行时零依赖）
+  override_func: "applyPerRequestOverride"
+  # 空/默认工具配置须回退服务端共享配置（不清空）
+  empty_override_falls_back: true
+
+streaming_resume_check:
+  # 是否启用流式回答增量持久化与续答验证（对应 CODING-STREAMING-RESUME / 前端 FR-071）
+  enabled: false
+  # 持有流式分片的 store（streamingAnswer）
+  streaming_store_path: "frontend/src/stores/query.ts"
+  # 增量落盘防抖毫秒（须 > 0，验证是否防抖落盘而非仅完成时）
+  persist_debounce_ms: 1500
+  # 上次活跃会话存储键（重载恢复用）
+  last_active_key: "LAST_ACTIVE_CONVERSATION"
+  # 触发续答的会话末条状态
+  streaming_status: "streaming"
+  # 页面卸载/切页不得 abort 在途流（仅卸监听）
+  no_abort_on_unmount: true
+  # SPA 重挂载且后台流活跃(isLoading)时跳过续答
+  skip_when_loading: true
+
+indexeddb_test_isolation:
+  # 是否启用前端隔离测试纪律验证（对应 chatDb + fake-indexeddb 测试隔离复盘）
+  enabled: false
+  # 隔离测试须使用的唯一命名空间键前缀（每条用例用不同 userId，根本不依赖清空数据库）
+  namespace_prefixes:
+    - "tts-config::"
+    - "usercfg::"
+  # 禁止在 beforeEach 使用（会导致连接未关闭 onblocked / 10s 钩子超时 / 跨用例泄漏）
+  forbidden_patterns:
+    - "indexedDB.deleteDatabase"
+  # fake-indexeddb 异步落盘（onsuccess 是 macrotask）须 flush 的轮数（单次 flush 不足）
+  flush_rounds: 10

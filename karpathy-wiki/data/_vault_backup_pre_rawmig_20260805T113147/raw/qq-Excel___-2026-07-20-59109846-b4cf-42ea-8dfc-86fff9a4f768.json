@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "source": "qq-chat",
+    "chatName": "Excel测试群",
+    "dateRange": "2026-07-20",
+    "originalCount": 2,
+    "filteredCount": 2,
+    "redactedCount": 0,
+    "rawId": "59109846-b4cf-42ea-8dfc-86fff9a4f768"
+  },
+  "chunks": [
+    [
+      {
+        "ts": "2026-07-20T14:30:15Z",
+        "speaker": "张三",
+        "content": "如何部署？",
+        "type": "text"
+      },
+      {
+        "ts": "2026-07-20T14:30:20Z",
+        "speaker": "李四",
+        "content": "用 docker compose up",
+        "type": "text"
+      }
+    ]
+  ]
+}

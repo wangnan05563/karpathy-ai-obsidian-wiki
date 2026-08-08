@@ -1,0 +1,202 @@
+# =============================================================================
+# wiki-auto-testing — 启用示例配置（针对 karpathy-wiki 真实仓库）
+# -----------------------------------------------------------------------------
+# 本文件是对 config.yaml / defaults.yaml 中四个「默认关闭」步骤类型的 *启用版* 示例。
+# 直接把 config.yaml 里对应块的 enabled 改为 true 即可启用；本文件展示针对本仓库
+# 真实路径与字段的推荐取值，便于一键复制。
+#
+# 覆盖的步骤类型（对应编码规范 → 前端/后端审查规则）：
+#   1. cross_account_session_check  → CODING-SESSION-ISOLATION / 前端 FR-069
+#   2. byok_per_user_override       → CODING-BYOK / 前端 FR-070 / 后端 BR-072
+#   3. streaming_resume_check       → CODING-STREAMING-RESUME / 前端 FR-071
+#   4. indexeddb_test_isolation     → fake-indexeddb 测试隔离（第九轮复盘）
+#   5. frontend_review_static_check → 前端编码标准静态守卫（第十三轮复盘 / FR-077~FR-080）
+#      注：本仓库默认已具备这些保护性代码，故作为「回归守卫」启用；
+#      若某规范尚未落地，对应 required_patterns 会告警，按需关闭该组或先修复源码。
+#
+# 所有路径相对仓库根；字段名取自真实源码，非占位符。
+# =============================================================================
+
+cross_account_session_check:
+  # 启用：多账户会话隔离验证（FR-RM-05/06 复盘）
+  enabled: true
+  # 会话 store（Pinia setup store），真实路径
+  conversation_store_path: "karpathy-wiki/frontend/src/stores/conversations.ts"
+  # 会话按此字段隔离（ConversationRecord.ownerId）
+  owner_field: "ownerId"
+  # 必须加入 store return 的会话状态 ref（漏加则 resetSession 赋值不可观测=死状态）
+  session_state_refs:
+    - "currentConversationId"
+    - "scopedOwnerId"
+  # auth watch 信号：useAuthStore().user?.id（conversations.ts 第 36 行）
+  auth_watch_signal: "user?.id"
+  # 复用 id 持久化前以 IndexedDB 实际记录（dbGet）校验归属，他人记录绝不覆盖
+  persist_reuse_owner_check: true
+  # 恶意 owner id 样本（越权访问须被 reject）
+  malicious_owner_ids:
+    - "other-user-id"
+    - "attacker"
+  # 账户切换/登出必须触发 resetSession（作废 currentConversationId+scopedOwnerId、清空列表）
+  require_reset_on_auth: true
+
+byok_per_user_override:
+  # 启用：BYOK 多用户密钥代理验证（前端 FR-070 / 后端 BR-072）
+  enabled: true
+  # 前端按用户命名空间读写配置的服务层（键内化 userId）
+  user_config_service: "karpathy-wiki/frontend/src/services/userConfig.ts"
+  # 按用户命名空间键前缀（userConfigKey = `usercfg::<kind>::<userId>`）
+  user_config_namespaces:
+    - "usercfg::ai::"
+    - "usercfg::search::"
+    - "usercfg::tools::"
+  # 随请求体下发的覆盖配置字段（PerRequestOverride 形状）
+  override_fields:
+    - "llmConfig"
+    - "searchConfig"
+    - "toolsConfig"
+  # 仅经请求体下发、禁止落盘 / 回显 GET / 记日志的敏感字段
+  secret_fields:
+    - "apiKey"
+  # 缺任一即 400 的必需密钥字段（llmConfig: provider/baseUrl/model/apiKey）
+  require_key_fields:
+    - "apiKey"
+    - "provider"
+    - "baseUrl"
+    - "model"
+  # 覆盖纯函数（运行时零副作用、不读写存储）
+  override_func: "applyPerRequestOverride"
+  # 空/默认工具配置须回退服务端共享配置（不清空）
+  empty_override_falls_back: true
+
+streaming_resume_check:
+  # 启用：流式回答增量持久化与续答验证（FR-RM-09 复盘）
+  enabled: true
+  # 持有流式分片的 store（streamingAnswer / isLoading）
+  streaming_store_path: "karpathy-wiki/frontend/src/stores/query.ts"
+  # 增量落盘防抖毫秒（须 > 0，验证是否防抖落盘而非仅完成时）
+  persist_debounce_ms: 1500
+  # 上次活跃会话存储键（STORAGE_KEYS.LAST_ACTIVE_CONVERSATION，常量值 'lastActiveConversation'）
+  last_active_key: "LAST_ACTIVE_CONVERSATION"
+  # 触发续答的会话末条状态（status:'streaming'，query.ts 第 391 行）
+  streaming_status: "streaming"
+  # 页面卸载/切页不得 abort 在途流（仅卸监听、后台继续生成）
+  no_abort_on_unmount: true
+  # SPA 重挂载且后台流活跃(isLoading)时跳过续答
+  skip_when_loading: true
+
+indexeddb_test_isolation:
+  # 启用：前端隔离测试纪律验证（chatDb + fake-indexeddb 测试隔离复盘）
+  enabled: true
+  # 隔离测试须使用的唯一命名空间键前缀（每条用例用不同 userId，根本不依赖清空数据库）
+  namespace_prefixes:
+    - "tts-config::"
+    - "usercfg::"
+  # 禁止在 beforeEach 使用（会导致连接未关闭 onblocked / 10s 钩子超时 / 跨用例泄漏）
+  forbidden_patterns:
+    - "indexedDB.deleteDatabase"
+  # fake-indexeddb 异步落盘（onsuccess 是 macrotask）须 flush 的轮数（单次 flush 不足）
+  flush_rounds: 10
+
+route_response_branch_coverage:
+  # 启用：归档路由响应分支覆盖（第十二轮复盘）
+  enabled: true
+  # 被测归档路由（支持 :threadId 路径占位符）
+  route_name: "/api/threads/:threadId/archive"
+  method: "GET"
+  # 分支用例：逐分支断言返回状态码；用真实 threadId / ts 替换占位符后启用
+  branch_cases:
+    - name: "valid_main_path"
+      description: "合法参数 + 非空内容 → 200，响应含 content/refs"
+      params:
+        threadId: "<valid_thread_id>"
+        messageIndex: "0"
+        ts: "<valid_ts>"
+      expected_status: 200
+      required_fields: ["content", "refs"]
+    - name: "fallback_no_content"
+      description: "无归档内容 → 回退 404"
+      params:
+        threadId: "<valid_thread_id>"
+        messageIndex: "0"
+        ts: "<valid_ts>"
+      expected_status: 404
+    - name: "illegal_thread_id"
+      description: "非法 threadId → 400"
+      params:
+        threadId: "..%2f.."
+        messageIndex: "0"
+        ts: "<valid_ts>"
+      expected_status: 400
+    - name: "non_integer_message_index"
+      description: "非整数 messageIndex → 400"
+      params:
+        threadId: "<valid_thread_id>"
+        messageIndex: "abc"
+        ts: "<valid_ts>"
+      expected_status: 400
+    - name: "missing_message_index"
+      description: "缺失 messageIndex → 400"
+      params:
+        threadId: "<valid_thread_id>"
+        ts: "<valid_ts>"
+      expected_status: 400
+    - name: "illegal_ts"
+      description: "非法 ts（当前回退实现返回 200；修复为 RangeError 拦截后改 400）"
+      params:
+        threadId: "<valid_thread_id>"
+        messageIndex: "0"
+        ts: "not-a-number"
+      expected_status: 200
+    - name: "empty_content"
+      description: "空内容（no-op 落盘防护）→ 400"
+      params:
+        threadId: "<valid_thread_id>"
+        messageIndex: "0"
+        ts: "<valid_ts>"
+        content: ""
+      expected_status: 400
+
+frontend_review_static_check:
+  # 启用：前端编码标准静态守卫（第十三轮复盘 / FR-077~FR-080）
+  enabled: true
+  # 扫描前端源码目录
+  scan_dirs:
+    - "karpathy-wiki/frontend/src"
+  file_glob: "*.{ts,vue}"
+  # 内置四组：编辑重发配对 / autoscroll 双 rAF / 成对按钮样式 / 编辑框撑满
+  # required_patterns 缺失即告警（守护保护性代码被重构误删）；forbidden_patterns 命中即违规。
+  groups:
+    - name: "edit_resend_pair"
+      description: "编辑重发必须同时具备 removeMessagesFrom + submitQuestion，缺一则悬空答案"
+      severity: "error"
+      rule_ref: "FR-077"
+      forbidden_patterns: []
+      required_patterns:
+        - "removeMessagesFrom"
+        - "submitQuestion"
+    - name: "autoscroll_double_rAF"
+      description: "流式自动滚动须保留 double requestAnimationFrame + stickToBottom"
+      severity: "warn"
+      rule_ref: "FR-078"
+      forbidden_patterns:
+        - "nextTick(scrollToBottom)"
+      required_patterns:
+        - "requestAnimationFrame"
+        - "stickToBottom"
+    - name: "button_style_pair"
+      description: "编辑态确认/取消按钮样式须成对定义（.edit-btn.confirm / .edit-btn.cancel）"
+      severity: "warn"
+      rule_ref: "FR-079"
+      forbidden_patterns: []
+      required_patterns:
+        - "edit-btn.confirm"
+        - "edit-btn.cancel"
+    - name: "editbox_width_fill"
+      description: "编辑态输入框 wrapper（.msg-content-wrapper / .msg-edit）须撑满列宽"
+      severity: "warn"
+      rule_ref: "FR-080"
+      forbidden_patterns:
+        - "align-items: flex-end"
+      required_patterns:
+        - "msg-content-wrapper"
+        - "msg-edit"

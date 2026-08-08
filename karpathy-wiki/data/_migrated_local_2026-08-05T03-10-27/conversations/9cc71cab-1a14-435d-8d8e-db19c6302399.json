@@ -1,0 +1,63 @@
+{
+  "id": "9cc71cab-1a14-435d-8d8e-db19c6302399",
+  "title": "请用思维导图模式说明票交所系统",
+  "createdAt": "2026-07-30T09:24:39.044Z",
+  "updatedAt": "2026-07-30T09:40:24.422Z",
+  "messageCount": 4,
+  "isPinned": false,
+  "preview": "知识库未覆盖此问题，或当前问答服务暂不可用。",
+  "messages": [
+    {
+      "id": "cb601b83-6af8-44d0-85ba-638e155a8484",
+      "role": "user",
+      "content": "请用思维导图模式说明票交所系统",
+      "createdAt": "2026-07-30T09:24:07.336Z"
+    },
+    {
+      "id": "6e0cc8a0-0814-4aec-b835-4b1f1d30fa3a",
+      "role": "assistant",
+      "content": "知识库未覆盖此问题，或当前问答服务暂不可用。",
+      "thinking": [
+        {
+          "phase": "thinking",
+          "message": "正在思考...",
+          "ts": "2026-07-30T09:24:07.384Z"
+        },
+        {
+          "phase": "composing",
+          "message": "降级搜索中...",
+          "ts": "2026-07-30T09:24:38.235Z"
+        }
+      ],
+      "createdAt": "2026-07-30T09:24:38.760Z",
+      "sessionId": "6dc318f2-0eef-4159-9d86-f678a3c1ae44",
+      "messageIndex": 0
+    },
+    {
+      "id": "5eb6f7b5-1aaa-4943-a6c5-7969817aa44b",
+      "role": "user",
+      "content": "请输出一个简单思维导图说明什么是LLM",
+      "createdAt": "2026-07-30T09:40:06.870Z"
+    },
+    {
+      "id": "8d228d97-f70a-4214-ac83-213e6406f050",
+      "role": "assistant",
+      "content": "知识库未覆盖此问题，或当前问答服务暂不可用。",
+      "thinking": [
+        {
+          "phase": "thinking",
+          "message": "正在思考...",
+          "ts": "2026-07-30T09:40:06.886Z"
+        },
+        {
+          "phase": "composing",
+          "message": "降级搜索中...",
+          "ts": "2026-07-30T09:40:24.266Z"
+        }
+      ],
+      "createdAt": "2026-07-30T09:40:24.413Z",
+      "sessionId": "134fe885-840b-47d5-b4af-774c035ecd6c",
+      "messageIndex": 0
+    }
+  ]
+}

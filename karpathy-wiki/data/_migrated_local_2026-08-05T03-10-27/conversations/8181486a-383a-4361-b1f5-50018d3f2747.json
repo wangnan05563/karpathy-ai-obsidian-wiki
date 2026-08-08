@@ -1,0 +1,99 @@
+{
+  "id": "8181486a-383a-4361-b1f5-50018d3f2747",
+  "title": "什么是 LLM Wiki？",
+  "createdAt": "2026-07-23T03:53:29.467Z",
+  "updatedAt": "2026-07-23T03:53:29.467Z",
+  "messageCount": 2,
+  "isPinned": false,
+  "preview": "现在我已经获取了关于 LLM Wiki 的完整信息。以下是回答：\n\n---\n\n## 什么是 LLM Wiki？\n\n**L",
+  "messages": [
+    {
+      "id": "97bf8153-77b2-43ea-b578-030ff6d7298f",
+      "role": "user",
+      "content": "什么是 LLM Wiki？",
+      "createdAt": "2026-07-23T03:53:21.254Z"
+    },
+    {
+      "id": "c9773a42-afaf-4188-8cfa-03ca92222dbf",
+      "role": "assistant",
+      "content": "现在我已经获取了关于 LLM Wiki 的完整信息。以下是回答：\n\n---\n\n## 什么是 LLM Wiki？\n\n**LLM Wiki** 是一个基于大语言模型（LLM）的知识库 Wiki 系统。它的核心能力是**自动将原始资料编译为结构化的 Markdown 页面**，并维护页面间的双向链接关系。[[llm-wiki]]\n\n### 核心功能特性\n\n1. **多页面类型支持**\n   - 支持实体（entity）、概念（concept）、对比（comparison）等多种页面类型，适用于不同维度的知识组织需求。\n\n2. **自动信息提取**\n   - 能够自动从原始资料中提取关键信息，将非结构化或半结构化的内容转化为结构化知识。\n\n3. **规范化 frontmatter**\n   - 自动生成符合 [[SCHEMA]] 规范的 frontmatter（元数据头部），确保每个页面的元数据结构统一、可解析。\n\n4. **双向链接网络**\n   - 自动建立和维护页面间的 [[双向链接]] 关系网络，形成互联互通的知识图谱，方便知识发现与导航。\n\n### 运行机制\n\nLLM Wiki 通过调用大语言模型（如 [[batch-compile-testing]] 所示的批量编译流程），对原始文本进行实体抽取（[[LLM 实体抽取]]）、Markdown 解析和知识图谱构建，最终生成结构化的 Wiki 页面集合。\n\n### 相关系统\n\n- [[batch-compile-testing]] — 批量编译测试方法，用于验证 LLM Wiki 的编译流程正确性\n- [[harness]] — 系统中的 LLM Agent 运行时工具调用框架\n- [[LLM 实体抽取]] — 底层使用的实体抽取技术\n\n---\n\n简而言之，**LLM Wiki 是一个利用大语言模型自动构建和维护的结构化知识库系统**，它解决了传统 Wiki 需要人工编辑和维护的痛点，实现了从原始资料到结构化知识网络的自动化编译。",
+      "refs": [
+        {
+          "path": "concepts/llm-wiki.md",
+          "title": "llm-wiki.md",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 1
+        },
+        {
+          "path": "SCHEMA",
+          "title": "SCHEMA",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 2
+        },
+        {
+          "path": "双向链接",
+          "title": "双向链接",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 3
+        },
+        {
+          "path": "concepts/batch-compile-testing.md",
+          "title": "batch-compile-testing.md",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 4
+        },
+        {
+          "path": "LLM 实体抽取",
+          "title": "LLM 实体抽取",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 5
+        },
+        {
+          "path": "concepts/harness.md",
+          "title": "harness.md",
+          "snippet": "",
+          "source": "vault",
+          "citeIndex": 6
+        }
+      ],
+      "followups": [
+        "详细解释一下「llm-wiki」的概念",
+        "「llm-wiki」和「SCHEMA」有什么区别？",
+        " LLM Wiki有哪些实际应用场景？"
+      ],
+      "thinking": [
+        {
+          "phase": "thinking",
+          "message": "正在思考...",
+          "ts": "2026-07-23T03:53:21.281Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "正在调用：search_pages",
+          "tool": "search_pages",
+          "args": {
+            "keywords": "LLM Wiki"
+          },
+          "ts": "2026-07-23T03:53:29.348Z"
+        },
+        {
+          "phase": "tool_call",
+          "message": "正在调用：read_page",
+          "tool": "read_page",
+          "args": {
+            "path": "concepts/llm-wiki.md"
+          },
+          "ts": "2026-07-23T03:53:29.348Z"
+        }
+      ],
+      "createdAt": "2026-07-23T03:53:29.425Z",
+      "sessionId": "780a69d1-fd0a-4f6c-a8be-caa0035cb7e6",
+      "messageIndex": 0
+    }
+  ]
+}

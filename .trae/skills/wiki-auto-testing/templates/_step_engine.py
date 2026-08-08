@@ -83,6 +83,17 @@ class StepEngine:
         self.register("multi_form_test", self._handle_multi_form_test)
         self.register("service_lifecycle", self._handle_service_lifecycle)
         self.register("temp_cleanup", self._handle_temp_cleanup)
+        # 第四轮复盘补充步骤类型：后端逻辑单元验证 + 迁移/修复脚本端到端
+        self.register("backend_logic_unit_test", self._handle_backend_logic_unit_test)
+        self.register("migration_script_e2e", self._handle_migration_script_e2e)
+        # 第十一轮复盘补充步骤类型：后端行为级缺陷静态守卫（配置化 forbid 扫描）
+        self.register("backend_review_static_check", self._handle_backend_review_static_check)
+        # 第十二轮复盘补充步骤类型：路由响应分支覆盖（配置化逐分支断言返回状态码）
+        self.register("route_response_branch_coverage", self._handle_route_response_branch_coverage)
+        # 第十三轮复盘补充步骤类型：前端行为级缺陷静态守卫（配置化 forbidden + required 扫描，比后端更泛化）
+        self.register("frontend_review_static_check", self._handle_frontend_review_static_check)
+        # 第十四轮复盘补充步骤类型：IndexedDB 写入前剥离 Vue/Pinia 响应式代理（配置化静态守卫）
+        self.register("idb_reactive_clone_check", self._handle_idb_reactive_clone_check)
 
     # --- Step Handlers ---
 
@@ -857,3 +868,520 @@ class StepEngine:
             detail += f";first_err={result['failed'][0]['error']}"
 
         ctx["results"].log("TempCleanup", ok, detail)
+
+    # --- 第四轮复盘补充步骤类型：后端逻辑单元验证 + 迁移/修复脚本端到端 ---
+    # 适用：沙箱无浏览器 / 无 PyYAML 时，对后端"落盘前逻辑"做直接实例化单元验证，
+    # 或对数据迁移 / 修复脚本做真实 --apply 端到端验证。所有参数从对应 config 块读取，
+    # step 可覆盖，不在代码中硬编码任何业务路径 / 命令 / 运行时。
+    # 注意 Windows 路径陷阱：嵌套子进程（execFileSync / subprocess 列表参数）调用的是
+    # Windows API，只认 Windows 原生路径（C:\Users\...），不认 Git-Bash 的 /c/Users/...，
+    # 否则报 ENOENT。故 runtime / script_path / cwd 一律从 config 取 Windows 原生路径。
+
+    def _handle_backend_logic_unit_test(self, step, ctx):
+        """后端逻辑单元验证：直接运行单元测试文件，该文件会实例化某个后端 service，
+        对"落盘前的纯逻辑"（如文件名清洗 / 内部前缀剥离 / 路径穿越二次校验）做断言。
+
+        触发场景：沙箱无浏览器，无法跑完整 E2E；但后端某些逻辑（文件名管线、文本治理）
+        在写入磁盘前即可单元测试，无需启动服务或浏览器。
+
+        所有 runner、测试文件路径、工作目录、判定模式从 config.backend_logic_unit_test 读取，
+        step 可覆盖，不在代码中硬编码具体业务值。
+        """
+        blk = ctx["cfg"].get("backend_logic_unit_test", {})
+        if not blk.get("enabled", True) and not step.get("force", False):
+            ctx["results"].log("BackendLogicUnit", True, "Disabled, skipped")
+            return
+
+        runner_path = step.get("runner_path", blk.get("runner_path"))
+        test_file = step.get("test_file", blk.get("test_file"))
+        cwd = step.get("cwd", blk.get("cwd", ctx.get("project_root", os.getcwd())))
+        # 判定模式：runner 退出码 + 输出关键字（不在代码中硬编码具体业务关键字）
+        fail_patterns = step.get("fail_patterns", blk.get("fail_patterns", ["FAIL", "failed", "❌"]))
+        pass_patterns = step.get("pass_patterns", blk.get("pass_patterns", ["PASS", "passed", "✓"]))
+        timeout_ms = step.get("timeout_ms", blk.get("timeout_ms", 120000))
+
+        if not runner_path or not test_file:
+            ctx["results"].log("BackendLogicUnit", True,
+                               "No runner_path/test_file configured, skipped")
+            return
+
+        cmd = [runner_path, test_file]
+        try:
+            proc = subprocess.run(
+                cmd, cwd=cwd, capture_output=True, text=True,
+                timeout=timeout_ms / 1000.0,
+                shell=False,
+            )
+            out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+            # 判定：退出码 0 且输出不含失败关键字；或输出含通过关键字
+            exited_ok = proc.returncode == 0
+            has_fail = any(p.lower() in out.lower() for p in fail_patterns)
+            has_pass = any(p.lower() in out.lower() for p in pass_patterns)
+            ok = exited_ok and not has_fail and (has_pass or exited_ok)
+            detail = out.strip().splitlines()[-5:] if out.strip() else [f"rc={proc.returncode}"]
+            ctx["results"].log("BackendLogicUnit", ok, "; ".join(detail)[-200:])
+        except subprocess.TimeoutExpired:
+            ctx["results"].log("BackendLogicUnit", False, f"Timeout after {timeout_ms}ms")
+        except Exception as e:
+            ctx["results"].log("BackendLogicUnit", False, f"Err: {str(e)[:80]}")
+
+    def _handle_migration_script_e2e(self, step, ctx):
+        """迁移 / 修复脚本端到端验证：对临时 vault 真实调用迁移/修复脚本（默认 dry-run，
+        显式 --apply 才写盘），验证其确实按预期改写数据；可选 setup_command 造临时 vault，
+        可选 verify_command 做改动后断言，cleanup_temp 控制是否回收临时目录。
+
+        触发场景：数据迁移 / 文件名修复脚本必须真实跑一次才能验证"既不破坏原数据、又能正确改写"，
+        仅看源码无法证明正确性；脚本默认 dry-run 保证安全。
+
+        所有脚本路径、运行时、目标参数名、apply 标志、临时目录、验证命令从
+        config.migration_script_e2e 读取，step 可覆盖，不在代码中硬编码业务值。
+        """
+        import shutil
+        blk = ctx["cfg"].get("migration_script_e2e", {})
+        if not blk.get("enabled", True) and not step.get("force", False):
+            ctx["results"].log("MigrationScriptE2E", True, "Disabled, skipped")
+            return
+
+        script_path = step.get("script_path", blk.get("script_path"))
+        runtime = step.get("runtime", blk.get("runtime"))
+        target_arg = step.get("target_arg", blk.get("target_arg", "--vault"))
+        apply_flag = step.get("apply_flag", blk.get("apply_flag", "--apply"))
+        temp_vault = step.get("temp_vault_dir", blk.get("temp_vault_dir"))
+        setup_command = step.get("setup_command", blk.get("setup_command"))
+        verify_command = step.get("verify_command", blk.get("verify_command"))
+        cleanup_temp = step.get("cleanup_temp", blk.get("cleanup_temp", True))
+        cwd = step.get("cwd", blk.get("cwd", ctx.get("project_root", os.getcwd())))
+        timeout_ms = step.get("timeout_ms", blk.get("timeout_ms", 120000))
+
+        if not script_path or not runtime or not temp_vault:
+            ctx["results"].log("MigrationScriptE2E", True,
+                               "Insufficient config (script_path/runtime/temp_vault_dir), skipped")
+            return
+
+        try:
+            # 1. 准备临时 vault（造数据）：setup_command 可以是 copy / mkdir / 生成 fixture
+            if setup_command:
+                subprocess.run(setup_command, cwd=cwd, shell=True,
+                               capture_output=True, text=True, timeout=timeout_ms / 1000.0)
+
+            # 2. 真实调用脚本：dry-run 为默认安全态，显式 apply_flag 才写盘
+            cmd = [runtime, script_path, target_arg, temp_vault, apply_flag]
+            proc = subprocess.run(
+                cmd, cwd=cwd, capture_output=True, text=True,
+                timeout=timeout_ms / 1000.0, shell=False,
+            )
+            out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+            apply_ok = proc.returncode == 0
+
+            # 3. 改动后断言（可选）：verify_command 通常会引用 temp_vault
+            verify_ok = True
+            verify_detail = "no verify_command"
+            if verify_command:
+                vcmd = verify_command.replace("{temp_vault}", temp_vault)
+                vproc = subprocess.run(vcmd, cwd=cwd, shell=True,
+                                       capture_output=True, text=True,
+                                       timeout=timeout_ms / 1000.0)
+                vout = (vproc.stdout or "") + "\n" + (vproc.stderr or "")
+                # verify_command 约定：退出码 0 = 断言通过
+                verify_ok = vproc.returncode == 0
+                verify_detail = vout.strip().splitlines()[-3:]
+                verify_detail = "; ".join(verify_detail)[-200:] if verify_detail else "verified"
+
+            ok = apply_ok and verify_ok
+            detail = f"apply_rc={proc.returncode}; {verify_detail}"
+            ctx["results"].log("MigrationScriptE2E", ok, detail)
+        except subprocess.TimeoutExpired:
+            ctx["results"].log("MigrationScriptE2E", False, f"Timeout after {timeout_ms}ms")
+        except Exception as e:
+            ctx["results"].log("MigrationScriptE2E", False, f"Err: {str(e)[:80]}")
+        finally:
+            # 4. 回收临时 vault（仅清理本次新建的临时目录，不触碰项目源码树）
+            if cleanup_temp and temp_vault and os.path.isdir(temp_vault):
+                try:
+                    shutil.rmtree(temp_vault, ignore_errors=True)
+                except Exception:
+                    pass
+
+    def _handle_backend_review_static_check(self, step, ctx):
+        """后端行为级缺陷静态守卫：配置化扫描后端源码中的"禁止模式组"，
+        把第十一轮复盘的"静态守卫"判断逻辑（J4）落地为可执行检查。
+
+        触发场景：七类后端行为级缺陷（类型绕过 / 冗余探测 / 关键写吞错 / 硬编码超时 /
+        异步当同步）类型检查与构建都无法捕获，需在源码层做 forbid 扫描；error 级命中即阻断，
+        warn 级仅标记。
+
+        所有扫描目录、文件 glob、模式组（name/patterns/message/rule_ref/severity）、判定
+        全部来自 config.backend_review_static_check，step 可覆盖，不在代码中硬编码业务值。
+        """
+        import re
+        import fnmatch
+        blk = ctx["cfg"].get("backend_review_static_check", {})
+        if not blk.get("enabled", False) and not step.get("force", False):
+            ctx["results"].log("BackendReviewStatic", True, "Disabled, skipped")
+            return
+
+        scan_dirs = step.get("scan_dirs", blk.get("scan_dirs", ["api/src"]))
+        file_glob = step.get("file_glob", blk.get("file_glob", "*.ts"))
+        groups = step.get("groups", blk.get("groups", []))
+        if not groups:
+            ctx["results"].log("BackendReviewStatic", True, "No groups configured, skipped")
+            return
+
+        project_root = ctx.get("project_root", os.getcwd())
+        files = []
+        for d in scan_dirs:
+            base = d if os.path.isabs(d) else os.path.join(project_root, d)
+            if not os.path.isdir(base):
+                continue
+            for root, _dirs, fnames in os.walk(base):
+                for fn in fnames:
+                    if fnmatch.fnmatch(fn, file_glob):
+                        files.append(os.path.join(root, fn))
+        if not files:
+            ctx["results"].log("BackendReviewStatic", True, "No files matched, skipped")
+            return
+
+        error_hits = []
+        warn_hits = []
+        for grp in groups:
+            gname = grp.get("name", "group")
+            patterns = grp.get("patterns", [])
+            use_regex = grp.get("regex", False)
+            severity = grp.get("severity", "warn")
+            message = grp.get("message", gname)
+            rule_ref = grp.get("rule_ref", "")
+            for fpath in files:
+                try:
+                    with open(fpath, "r", encoding="utf-8", errors="ignore") as fh:
+                        flines = fh.readlines()
+                except Exception:
+                    continue
+                rel = os.path.relpath(fpath, project_root)
+                for ln, content in enumerate(flines, 1):
+                    for pat in patterns:
+                        if use_regex:
+                            try:
+                                matched = re.search(pat, content) is not None
+                            except re.error:
+                                matched = False
+                        else:
+                            matched = pat in content
+                        if not matched:
+                            continue
+                        hit = f"{rel}:{ln}: {message}" + (f" [{rule_ref}]" if rule_ref else "")
+                        if severity == "error":
+                            error_hits.append(hit)
+                        else:
+                            warn_hits.append(hit)
+
+        ok = len(error_hits) == 0
+        parts = []
+        if error_hits:
+            parts.append(f"ERROR({len(error_hits)}): " + " | ".join(error_hits[:5]))
+        if warn_hits:
+            parts.append(f"WARN({len(warn_hits)}): " + " | ".join(warn_hits[:5]))
+        if not parts:
+            parts.append("no forbidden patterns matched")
+        ctx["results"].log("BackendReviewStatic", ok, "; ".join(parts)[-300:])
+
+    def _handle_frontend_review_static_check(self, step, ctx):
+        """前端行为级缺陷静态守卫：配置化扫描前端源码中的「禁止模式组」与「必须存在模式组」，
+        把第十三轮复盘的「前端编码标准静态守卫」判断逻辑（J4）落地为可执行检查。
+
+        与 backend_review_static_check 的区别：除 forbidden_patterns（命中即违规）外，
+        额外支持 required_patterns（若扫描文件中**完全不存在**该模式则违规），用于守护
+        "保护性代码被重构误删" 这类失败模式——例如 autoscroll 的 double rAF、
+        edit-resend 的 removeMessagesFrom+submitQuestion 配对、成对按钮的 .edit-btn.confirm/.cancel
+        样式、编辑框撑满的 .msg-content-wrapper/.msg-edit。这是比后端守卫更泛化的"存在性 + 禁止性"
+        双模式静态检查。
+
+        所有扫描目录、文件 glob、模式组（name/forbidden_patterns/required_patterns/message/rule_ref/severity）、
+        判定全部来自 config.frontend_review_static_check，step 可覆盖，不在代码中硬编码业务值。
+        """
+        import re
+        import fnmatch
+        blk = ctx["cfg"].get("frontend_review_static_check", {})
+        if not blk.get("enabled", False) and not step.get("force", False):
+            ctx["results"].log("FrontendReviewStatic", True, "Disabled, skipped")
+            return
+
+        scan_dirs = step.get("scan_dirs", blk.get("scan_dirs", ["frontend/src"]))
+        file_glob = step.get("file_glob", blk.get("file_glob", "*.{ts,vue}"))
+        groups = step.get("groups", blk.get("groups", []))
+        if not groups:
+            ctx["results"].log("FrontendReviewStatic", True, "No groups configured, skipped")
+            return
+
+        project_root = ctx.get("project_root", os.getcwd())
+        files = []
+        for d in scan_dirs:
+            base = d if os.path.isabs(d) else os.path.join(project_root, d)
+            if not os.path.isdir(base):
+                continue
+            for root, _dirs, fnames in os.walk(base):
+                for fn in fnames:
+                    if fnmatch.fnmatch(fn, file_glob):
+                        files.append(os.path.join(root, fn))
+        if not files:
+            ctx["results"].log("FrontendReviewStatic", True, "No files matched, skipped")
+            return
+
+        # 预读所有文件内容（required_patterns 需在"整个扫描集"维度判断存在性）
+        file_contents = {}
+        for fpath in files:
+            try:
+                with open(fpath, "r", encoding="utf-8", errors="ignore") as fh:
+                    file_contents[fpath] = fh.readlines()
+            except Exception:
+                file_contents[fpath] = []
+
+        error_hits = []
+        warn_hits = []
+        for grp in groups:
+            gname = grp.get("name", "group")
+            use_regex = grp.get("regex", False)
+            severity = grp.get("severity", "warn")
+            message = grp.get("message", gname)
+            rule_ref = grp.get("rule_ref", "")
+            forbidden = grp.get("forbidden_patterns", [])
+            required = grp.get("required_patterns", [])
+
+            # 1) forbidden_patterns：逐文件逐行命中即违规
+            for fpath in files:
+                rel = os.path.relpath(fpath, project_root)
+                for ln, content in enumerate(file_contents[fpath], 1):
+                    for pat in forbidden:
+                        if use_regex:
+                            try:
+                                matched = re.search(pat, content) is not None
+                            except re.error:
+                                matched = False
+                        else:
+                            matched = pat in content
+                        if not matched:
+                            continue
+                        hit = f"{rel}:{ln}: {message}" + (f" [{rule_ref}]" if rule_ref else "")
+                        (error_hits if severity == "error" else warn_hits).append(hit)
+
+            # 2) required_patterns：在整个扫描集中完全缺失即违规（守护保护性代码被删）
+            if required:
+                present = False
+                for fpath in files:
+                    for content in file_contents[fpath]:
+                        for pat in required:
+                            if use_regex:
+                                try:
+                                    found = re.search(pat, content) is not None
+                                except re.error:
+                                    found = False
+                            else:
+                                found = pat in content
+                            if found:
+                                present = True
+                                break
+                        if present:
+                            break
+                    if present:
+                        break
+                if not present:
+                    hit = f"[scan-set] missing required pattern(s): {','.join(required)} — {message}" + (f" [{rule_ref}]" if rule_ref else "")
+                    (error_hits if severity == "error" else warn_hits).append(hit)
+
+        ok = len(error_hits) == 0
+        parts = []
+        if error_hits:
+            parts.append(f"ERROR({len(error_hits)}): " + " | ".join(error_hits[:5]))
+        if warn_hits:
+            parts.append(f"WARN({len(warn_hits)}): " + " | ".join(warn_hits[:5]))
+        if not parts:
+            parts.append("no forbidden patterns matched; all required patterns present")
+        ctx["results"].log("FrontendReviewStatic", ok, "; ".join(parts)[-300:])
+
+    def _handle_route_response_branch_coverage(self, step, ctx):
+        """路由响应分支覆盖：配置化逐分支断言被测路由在各请求参数组合下的返回状态码，
+        把第十二轮复盘"归档路由响应分支覆盖 + 静默缺陷回归"判断逻辑落地为可执行检查。
+
+        静默缺陷特征：类型检查 / 构建 / 端点冒烟都"通过"，但某个非法输入分支返回了
+        错误状态码（或错误地把非法输入当作合法处理）。必须逐分支断言 expected_status，
+        并对 200 分支校验响应含 required_fields（如 content / refs）。
+
+        所有路由、方法、分支用例（params / expected_status / required_fields）、判定
+        全部来自 config.route_response_branch_coverage，step 可覆盖，不在代码中硬编码业务值。
+        """
+        import urllib.parse
+        blk = ctx["cfg"].get("route_response_branch_coverage", {})
+        if not blk.get("enabled", False) and not step.get("force", False):
+            ctx["results"].log("RouteBranchCoverage", True, "Disabled, skipped")
+            return
+
+        base_url = ctx["cfg"].get("service", {}).get("api_url", "http://localhost:3000")
+        route_name = step.get("route_name", blk.get("route_name", ""))
+        method = step.get("method", blk.get("method", "GET")).upper()
+        branch_cases = step.get("branch_cases", blk.get("branch_cases", []))
+        if not route_name or not branch_cases:
+            ctx["results"].log("RouteBranchCoverage", True, "No route_name/branch_cases configured, skipped")
+            return
+
+        pctx = ctx.get("ctx")
+        req = getattr(pctx, "request", None) if pctx is not None else None
+        if req is None:
+            ctx["results"].log("RouteBranchCoverage", False, "No HTTP request context available")
+            return
+
+        overall_ok = True
+        details = []
+        for case in branch_cases:
+            cname = case.get("name", "case")
+            params = dict(case.get("params", {}))
+            expected = int(case.get("expected_status", 200))
+            required_fields = case.get("required_fields", [])
+            # 路径占位符替换（:param 从 params 中移除并填入路径），其余作为 query 参数
+            path = route_name
+            for k in list(params.keys()):
+                ph = ":" + k
+                if ph in path:
+                    path = path.replace(ph, urllib.parse.quote(str(params[k]), safe=""))
+                    del params[k]
+            qs = urllib.parse.urlencode(params) if params else ""
+            url = base_url.rstrip("/") + path + (("?" + qs) if qs else "")
+            try:
+                resp = req.request(method, url, timeout=10)
+                status = resp.status
+                ok = status == expected
+                extra = ""
+                if ok and status == 200 and required_fields:
+                    try:
+                        body = resp.json()
+                        missing = [f for f in required_fields if f not in body]
+                        if missing:
+                            ok = False
+                            extra = f"; missing fields: {missing}"
+                    except Exception:
+                        ok = False
+                        extra = "; response not JSON"
+                if not ok:
+                    overall_ok = False
+                details.append(f"{cname}:{status}" + (extra if extra else ""))
+            except Exception as e:
+                overall_ok = False
+                details.append(f"{cname}:ERR({str(e)[:40]})")
+
+        ctx["results"].log("RouteBranchCoverage", overall_ok, "; ".join(details))
+
+    def _handle_idb_reactive_clone_check(self, step, ctx):
+        """IndexedDB 写入前剥离 Vue/Pinia 响应式代理静态守卫：配置化扫描前端源码中的
+        IndexedDB 写入点（dbPut / saveUserConfig / idbPut / store.put / transactions.add），
+        核对写入值若源自 store state ref / reactive() 是否在写入前整树深拷贝
+        （JSON.parse(JSON.stringify(x)) / clone(x)），并对"伪剥离"写法（toRaw( /
+        structuredClone(reactiveObj)）判违规。
+
+        把 CODING-IDB-REACTIVE-CLONE（前端 FR-081）的"reactive 代理直传 IndexedDB 导致
+        [object Array] could not be cloned 静默丢配置"判断逻辑落地为可执行静态检查。
+
+        判定语义（与 FR-081 三子规则对齐）：
+        - R-2 禁 toRaw() 当深剥离：toRaw( 出现在写入点上下文 → 必违规（仅剥顶层）。
+        - R-3 禁 structuredClone(reactiveObj)：structuredClone( 无法克隆代理，将其排除在
+          安全深拷贝指示符之外，故"响应式来源 + 未见安全深拷贝"分支持自然覆盖。
+        - R-1 写入前必须整树深拷贝：窗口内含响应式来源（reactive_indicators / reactive_arg_regex）
+          但无安全深拷贝指示符（safe_clone_indicators）→ 命中缺失克隆违规。
+
+        所有扫描目录、文件 glob、写入点模式、响应式指示符、安全深拷贝指示符、伪剥离模式、
+        判定 severity 与 rule_ref 全部来自 config.idb_reactive_clone_check，step 可覆盖，
+        不在代码中硬编码业务值。本检查是运行时单测（写入 reactive 对象后验证落盘）的
+        互补静态守卫——静态扫描用于防回归，不替代真实写入验证。
+        """
+        import re
+        import fnmatch
+        blk = ctx["cfg"].get("idb_reactive_clone_check", {})
+        if not blk.get("enabled", False) and not step.get("force", False):
+            ctx["results"].log("IdbReactiveClone", True, "Disabled, skipped")
+            return
+
+        scan_dirs = step.get("scan_dirs", blk.get("scan_dirs", ["frontend/src"]))
+        file_glob = step.get("file_glob", blk.get("file_glob", "*.{ts,vue}"))
+        scan_patterns = step.get("scan_patterns", blk.get("scan_patterns",
+            ["dbPut", "saveUserConfig", "idbPut", "store.put", "transactions.add"]))
+        reactive_indicators = step.get("reactive_indicators", blk.get("reactive_indicators",
+            ["reactive(", "toRefs(", "toRef(", "defineStore("]))
+        reactive_arg_regex = step.get("reactive_arg_regex", blk.get("reactive_arg_regex",
+            r"(store\.|state\.|this\.|\.value\b|reactiveStore)"))
+        safe_clone_indicators = step.get("safe_clone_indicators", blk.get("safe_clone_indicators",
+            ["JSON.parse(JSON.stringify", "clone(", "deepClone(", "cloneDeep("]))
+        forbidden_unsafe = step.get("forbidden_unsafe_patterns",
+            blk.get("forbidden_unsafe_patterns", ["toRaw("]))
+        scan_window = int(step.get("scan_window_lines", blk.get("scan_window_lines", 40)))
+        severity_missing = step.get("severity_missing_clone",
+            blk.get("severity_missing_clone", "error"))
+        severity_unsafe = step.get("severity_unsafe", blk.get("severity_unsafe", "error"))
+        rule_ref = step.get("rule_ref",
+            blk.get("rule_ref", "FR-081 / CODING-IDB-REACTIVE-CLONE"))
+
+        project_root = ctx.get("project_root", os.getcwd())
+        files = []
+        for d in scan_dirs:
+            base = d if os.path.isabs(d) else os.path.join(project_root, d)
+            if not os.path.isdir(base):
+                continue
+            for root, _dirs, fnames in os.walk(base):
+                for fn in fnames:
+                    if fnmatch.fnmatch(fn, file_glob):
+                        files.append(os.path.join(root, fn))
+        if not files:
+            ctx["results"].log("IdbReactiveClone", True, "No files matched, skipped")
+            return
+
+        # 预读所有文件内容（按行存储，便于窗口切片）
+        file_lines = {}
+        for fpath in files:
+            try:
+                with open(fpath, "r", encoding="utf-8", errors="ignore") as fh:
+                    file_lines[fpath] = fh.readlines()
+            except Exception:
+                file_lines[fpath] = []
+
+        try:
+            arg_re = re.compile(reactive_arg_regex)
+        except re.error:
+            arg_re = re.compile(r"(store\.|state\.|this\.|\.value\b|reactiveStore)")
+
+        error_hits = []
+        warn_hits = []
+        for fpath in files:
+            rel = os.path.relpath(fpath, project_root)
+            lines = file_lines[fpath]
+            for li, content in enumerate(lines):
+                # 命中 IndexedDB 写入点才进入判定（缩小扫描面）
+                if not any(p in content for p in scan_patterns):
+                    continue
+                # 写入点上方 scan_window 行 + 本行作为上下文窗口
+                start = max(0, li - scan_window)
+                window_text = "".join(lines[start:li + 1])
+
+                # 1) 伪剥离：toRaw( 在写入点上下文中出现 → 必违规（R-2）
+                for fu in forbidden_unsafe:
+                    if fu in window_text:
+                        hit = (f"{rel}:{li+1}: 发现伪剥离写法 '{fu.strip()}'"
+                               f"（toRaw 仅剥顶层、嵌套代理仍会 [object Array] could not be cloned）"
+                               f"—写入前必须整树深拷贝 [{rule_ref}]")
+                        (error_hits if severity_unsafe == "error" else warn_hits).append(hit)
+                        break
+
+                # 2) 响应式代理直传风险：窗口/本行含响应式来源，但未见安全深拷贝指示符（R-1）
+                has_reactive = any(r in window_text for r in reactive_indicators) \
+                    or bool(arg_re.search(content))
+                has_safe_clone = any(c in window_text for c in safe_clone_indicators)
+                if has_reactive and not has_safe_clone:
+                    hit = (f"{rel}:{li+1}: IndexedDB 写入点疑似直传 reactive 代理"
+                           f"（含响应式来源但未见安全深拷贝：{', '.join(safe_clone_indicators)}）"
+                           f"—直传将导致 [object Array] could not be cloned 静默丢配置 [{rule_ref}]")
+                    (error_hits if severity_missing == "error" else warn_hits).append(hit)
+
+        ok = len(error_hits) == 0
+        parts = []
+        if error_hits:
+            parts.append(f"ERROR({len(error_hits)}): " + " | ".join(error_hits[:5]))
+        if warn_hits:
+            parts.append(f"WARN({len(warn_hits)}): " + " | ".join(warn_hits[:5]))
+        if not parts:
+            parts.append("no reactive-proxy-in-IDB write sites, or all cloned safely before put")
+        ctx["results"].log("IdbReactiveClone", ok, "; ".join(parts)[-300:])

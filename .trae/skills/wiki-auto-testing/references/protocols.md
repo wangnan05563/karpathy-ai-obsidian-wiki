@@ -11,6 +11,7 @@
 - [失败分类协议（Failure Classification Protocol）](#失败分类协议failure-classification-protocol)
 - [服务管理协议（Service Management Protocol）](#服务管理协议service-management-protocol)
 - [搜索结果交叉验证协议（Search Result Cross-Verification Protocol）](#搜索结果交叉验证协议search-result-cross-verification-protocol)
+- [Flake 隔离协议（Flake Isolation Protocol）](#flake-隔离协议flake-isolation-protocol)
 - [v2 导航栏改造测试复盘（2026-07-22）](#v2-导航栏改造测试复盘2026-07-22)
 - [文件夹上传批量编译测试复盘（2026-07-22）](#文件夹上传批量编译测试复盘2026-07-22)
 
@@ -272,6 +273,38 @@ service_management:
 - **互补方法也失败**：确认为真阴性，按测试用例预期失败处理，输出诊断日志（主方法输出、互补方法输出、尝试的模式列表）
 - **Glob 转义失败**：检查路径是否含 `glob_escape_chars`，重新构造转义后的模式重试
 - **Grep 未入库**：检查文件是否被 .gitignore 排除或未 git add，必要时用 `Test-Path` 直接验证文件系统存在性
+
+## Flake 隔离协议（Flake Isolation Protocol）
+
+> 基于"上下文记忆治理"后端模块测试复盘提炼（详见 references/testing-process-review.md 维度二）。
+> 核心原则：**全量套件中单个用例失败时，先隔离重跑再归因，不要急于把失败算到本次改动头上。**
+
+### 触发条件
+
+在阶段 6 结果汇总（或全量套件运行）中发现某测试用例失败，且该失败**无法立即判定为改动直接引入**时，执行本协议。
+
+### 子阶段：Flake 隔离验证
+
+1. **定位失败文件**：从失败报告中提取失败用例所属的测试文件（如 `auth-rate-limit.test.ts`）。
+2. **隔离重跑**：仅运行该单个测试文件（排除套件其余部分的并发 / 时序 / 全局状态干扰）。
+   - 例如 vitest：`npx vitest run path/to/the.test.ts`（或对应运行器单文件模式）。
+3. **判定**：
+   - 隔离重跑**通过** → 判定为**预存在 flake / 环境竞态**，不计入本次改动缺陷；在报告中标注"isolated-pass"。
+   - 隔离重跑**仍失败** → 进入失败分类协议（Failure Classification），按错误消息模式归类为 `assertion_failed` / `timeout` / `config_mismatch` 等。
+4. **根因记录**：对确认的 flake，记录触发条件（时间边界 / 并发 / 全局状态），避免重复排查。
+
+### 真实示例：固定窗口速率限制跨分钟边界
+
+- **现象**：全量 `vitest run` 报告某鉴权速率限制测试期望 HTTP 429，却收到 200（1 failed / 379 passed）。
+- **隔离重跑**：仅运行该文件 → 2/2 通过。
+- **根因**：该测试使用**固定窗口计数器（fixed-window counter）**，在**跨 60 秒真实分钟边界**时窗口被重置，恰好错峰，导致偶发 200。该 flake 在改动前已存在，与本次"上下文记忆治理"改动**无关**。
+- **结论**：标记为预存在 flake，不阻断改动合入；后续可将该速率限制测试改为确定性时间注入（mock 时钟）以消除竞态。
+
+### 关键原则
+
+- **先隔离、后归因**：全量失败 ≠ 改动缺陷，并发 / 时序 / 共享状态都可能制造 flake。
+- **隔离通过即降级为 flake**：不阻断套件，但在报告中显式标注，防止 flake 被静默忽略。
+- **与失败分类协议衔接**：隔离仍失败时，交给 Failure Classification 协议按模式分类并输出修复建议。
 
 ## v2 导航栏改造测试复盘（2026-07-22）
 

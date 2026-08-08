@@ -29,7 +29,7 @@ description: "Automates end-to-end frontend testing with Playwright: build, star
 
 | 层级 | 文件 | 内容 |
 |------|------|------|
-| 默认值 | defaults.yaml | 技能通用参数：超时、浏览器选项、终端策略 |
+| 默认值 | defaults.yaml | 技能通用参数：超时、浏览器选项、终端策略、前端验证（类型检查 / 构建，命令与产物目录参数化） |
 | 项目配置 | config.yaml | 项目特定参数：URL、端口、选择器、页面列表、API 端点 |
 
 ### 执行模式
@@ -85,6 +85,24 @@ description: "Automates end-to-end frontend testing with Playwright: build, star
 | timeout_chain_tests | 超时阈值链式匹配测试（递增覆盖、部分结果保留、降级路径） |
 | folding_panel_event_tests | 折叠面板事件冲突测试（click outside 排除、teleport 组件、@mousedown.stop） |
 | media_generation_tests | v3 媒体生成工具测试（外部 API 契约/超时分级/归档 frontmatter/长任务状态机/外部 API 不可达降级） |
+| scope | 测试范围聚焦（只测改动内容：从 changed_paths 推导改动路由/端点） |
+| test_coverage | 端点覆盖率检查（校验入口文件注册的每个路由都有测试，防新端点裸奔上线） |
+| endpoint_autodiscovery | 端点自动发现（从路由定义推导 api_tests.endpoints，免去手工维护端点清单） |
+
+## 通用性与配置驱动
+
+本技能**完全配置驱动、零硬编码业务参数**，因此可适配任意遵循相同测试约定的项目（不仅限 Karpathy-Wiki），只需修改 `config.yaml` + `defaults.yaml` 即可，无需改动代码。
+
+- **地址 / 端口**：`service.frontend_url` / `service.api_url` / `service.required_ports` 全部参数化；`port_conflict_resolution` 支持端口被占用时自动迁移。
+- **API 端点清单**：`api_tests.endpoints` 列表化维护；新增 `endpoint_autodiscovery` 后可由路由定义自动推导，无需手工列举。
+- **鉴权**：`auth.login_endpoint` / `auth.token_storage_key` / `auth.token_field` / `auth.credentials` 全部参数化（见 `_shared.authenticate()`，从 `cfg["auth"]` 读取，不硬编码 URL 或 token 键）。
+- **路由注册 / 类型对齐**：`route_registration_check` / `type_sync_check` 的路径、入口文件、接口名均配置驱动。
+- **测试范围聚焦**：`scope.modified_content`（enabled + `changed_paths`）让技能只测改动内容而非全应用，适配 CI 增量测试与"改动无 UI 界面时浏览器 E2E 低信号"的场景。
+- **端点覆盖保障**：`test_coverage.endpoint_coverage_check`（默认 `fail_if_untested: false` 非阻断）标记未测端点，防止新端点裸奔上线。
+- 所有 URL / 端口 / 端点 / 选择器 / 攻击向量 / payload 模板均集中在 YAML；模板与 `_shared.py` 仅读取 `cfg`，不内联业务值。
+- **前端规范静态守卫泛化**：`frontend_review_static_check` 在后端守卫基础上新增 `required_patterns` 存在性维度（保护性代码被删即告警），`groups` 全配置化——新增任意前端编码规范（如编辑重发 / autoscroll / 按钮样式 / 编辑框宽度）只需在 YAML 加一组 `name/forbidden_patterns/required_patterns/severity/rule_ref`，无需改 `_step_engine.py`，实现"规范即配置"的泛化覆盖。
+
+> 测试策略与流程复盘见 [references/testing-process-review.md](references/testing-process-review.md)（基于"上下文记忆治理"后端模块测试经验提炼的 4 维度参考）。
 
 ## 测试流程（6 阶段）
 
@@ -186,6 +204,19 @@ description: "Automates end-to-end frontend testing with Playwright: build, star
 | archive_frontmatter_check | archive_dir, required_fields, expected_output_modes, filename_pattern, business_fields_by_mode | 归档 frontmatter 验证：扫描归档目录，验证 type/output_mode/generated_at 字段完整 + 文件名模式匹配 |
 | long_task_state_machine_check | required_states, test_views, video_dialog_selector, state_ui_selectors, required_abort_reasons | 长任务状态机验证：5 态覆盖 + abortReason 三态 + 定时器清理 + 关闭/重置拆分 + setTimeout 超时 |
 | external_api_unavailable_test | intercepted_endpoints, response_status, expected_behavior, forbidden_error_messages, require_abort_error_swallow | 外部 API 不可达降级验证：拦截端点返回 503 + 验证前端不崩溃 + 错误消息分类 + AbortError 吞掉 |
+| packaging_config_overwrite_test | installer_script, program_files_flags, exclude_user_data, user_data_patterns | 安装器防覆盖验证：解析安装器脚本（*.iss / *.ps1），确认 `[Files]` 仅含程序文件且用 ignoreversion，用户数据（config.json/.env/vault/data）未打包到 {app} |
+| data_dir_derivation_test | data_dir_funcs, expected_anchor, fallback_anchors, expected_pattern, verify_filesystem_write | 数据目录解析落点验证：断言 getUserDataDir()/getDataDir() 返回值符合预期锚点（LOCALAPPDATA 回退 APPDATA→HOME），且文件系统实际写入位置与解析一致 |
+| user_data_isolation_test | isolation_resources, malicious_ids, expect_status | 用户数据隔离验证：不同线程/会话数据目录互相隔离；非法 ID 用 UUID 正则校验，越权访问必须返回 4xx |
+| backend_logic_unit_test | runner_path, test_file, cwd, fail_patterns, pass_patterns, timeout_ms | 后端逻辑单元验证：直接运行实例化 service 的单元测试文件，验证落盘前纯逻辑（文件名清洗 / 内部前缀剥离 / 路径穿越二次校验）无需浏览器或服务 |
+| migration_script_e2e | script_path, runtime, target_arg, apply_flag, temp_vault_dir, setup_command, verify_command, cleanup_temp | 迁移 / 修复脚本端到端：对临时 vault 真实调用脚本（默认 dry-run，显式 --apply 才写盘），验证既不改坏原数据又能正确改写 |
+| spa_live_deploy_check | live_base_dir, live_dir_pattern, legacy_dir, complete_marker, asset_prefix, malicious_paths, restart_required, required_ports | SPA 实时部署验证：断言后端从候选（含 public_live_<ts>）选数值时间戳最新且完整性门禁通过（index.html + .deploy-complete）；/wiki/* 资源 within-root 防穿越（../ 逃逸返回拒绝）；部署写全新目录不覆盖已存在；部署后重启后端才生效 |
+| cross_account_session_check | conversation_store_path, owner_field, session_state_refs, auth_watch_signal, persist_reuse_owner_check, malicious_owner_ids, require_reset_on_auth | 多账户会话隔离验证：断言账户切换/登出触发 resetSession（currentConversationId+scopedOwnerId 作废、列表清空）；persistConversation 复用 id 前以 IndexedDB 实际记录校验归属，他人记录绝不覆盖（冲突改用全新 uuid）；filterByOwner 严格按 ownerId 隔离；跨账户须用真实登出/切换 E2E（非 store 直接 setUser）验证无泄漏 |
+| byok_per_user_override_check | user_config_service, user_config_namespaces, override_fields, secret_fields, require_key_fields, override_func, empty_override_falls_back | BYOK 多用户密钥代理验证：断言每用户配置按 userId 命名空间隔离（不跨用户共享）；密钥仅经请求体下发、后端不落盘/不回显 GET/不记日志；缺必需密钥（apiKey/provider/baseUrl/model）请求返回 400 不回落服务端共享；覆盖为纯函数 applyPerRequestOverride、空/默认工具配置回退服务端共享不清空；前端仅当配置存在才下发对应块（避免空 toolsConfig 清空服务端能力） |
+| streaming_resume_check | streaming_store_path, persist_debounce_ms, last_active_key, streaming_status, no_abort_on_unmount, skip_when_loading | 流式回答增量持久化与续答验证：断言流式分片增量（防抖）落盘中间态而非仅完成时；页面卸载/切页不 abort 在途流（仅卸监听、后台继续生成）；重载恢复仅对 status='streaming' 末条续答、interrupted/error 不自动续；SPA 重挂载且后台流活跃(isLoading)时跳过续答 |
+| indexeddb_test_isolation_check | namespace_prefixes, forbidden_patterns, flush_rounds | 前端隔离测试纪律验证：断言隔离测试用唯一 userId 命名空间（而非 beforeEach indexedDB.deleteDatabase，会导致 onblocked/超时/跨用例泄漏）；fake-indexeddb 异步落盘断言须多轮 setTimeout(0) flush |
+| backend_review_static_check | scan_dirs, file_glob, groups[name,patterns,message,rule_ref,severity,regex], force | 后端行为级缺陷静态守卫：配置化 grep 后端源码 forbid 模式组（as any 类型绕过 / ffprobe 冗余探测 / 落盘函数吞错信号 / 硬编码 30000 / execFile 未 await），error 级命中即阻断、warn 级仅标记，全部模式来自配置零硬编码 |
+| route_response_branch_coverage | route_name, method, branch_cases[name,params,expected_status,required_fields,description], force | 路由响应分支覆盖：配置化逐分支断言被测路由在各请求参数组合下的返回状态码（主路径 200 / 回退 404 / 非法 threadId 400 / 非整数 messageIndex 400 / 缺失 messageIndex 400 / 非法 ts 200 / 空内容 400），并校验 200 响应含必需字段；把"归档路由响应分支覆盖 + 静默缺陷回归"判断逻辑落地，全部用例来自配置零硬编码 |
+| frontend_review_static_check | scan_dirs, file_glob, groups[name, forbidden_patterns, required_patterns, message, rule_ref, severity, regex], force | 前端行为级缺陷静态守卫：配置化扫描前端源码 forbidden_patterns（命中即违规）+ required_patterns（整个扫描集完全缺失即违规，守护保护性代码被重构误删），error 级阻断 / warn 级标记；比 backend_review_static_check 更泛化（存在性 + 禁止性双模式）。内置 FR-077~FR-080 四组（编辑重发配对 / autoscroll 双 rAF / 成对按钮样式 / 编辑框撑满），新增前端规范只需加一组，全部零硬编码 |
 
 ## 测试模式与协议（按需加载）
 
@@ -193,8 +224,9 @@ description: "Automates end-to-end frontend testing with Playwright: build, star
 
 | 文档 | 内容摘要 |
 |------|----------|
-| [测试协议（Protocols）](references/protocols.md) | 前置检查 / 测试用例同步 / 失败分类 / 服务管理 / 搜索结果交叉验证 5 个协议 |
-| [测试模式（复盘提炼）](references/testing-patterns.md) | 持久化层 / 系统清理 / Async 可靠性 / 配置一致性 / 热更新 / 降级 / 目录结构 / v3 媒体生成 / v2 导航栏 9 个模式 |
+| [测试协议（Protocols）](references/protocols.md) | 前置检查 / 测试用例同步 / 失败分类 / 服务管理 / 搜索结果交叉验证 5 个协议 + Flake 隔离协议 |
+| [测试流程复盘（Process Review）](references/testing-process-review.md) | 测试 4 维度参考（共十二轮）：后端变更 / 数据迁移·安装器·打包·沙箱回退 / 用户上传文件名·迁移脚本 / SPA 实时部署 / 多账户会话隔离 / BYOK 多用户密钥代理 / 流式续答 / fake-indexeddb 隔离测试 / 端到端测试·部署·冒烟编排 / 后端行为级缺陷专项测试（七类潜伏缺陷）/ 归档路由响应分支覆盖 + 静默缺陷回归（各轮均含：成功步骤 / 不确定性失败点 / 可抽象流程与判断 / 适用与不适用） |
+| [测试模式（复盘提炼）](references/testing-patterns.md) | 持久化层 / 系统清理 / Async 可靠性 / 配置一致性 / 热更新 / 降级 / 目录结构 / v3 媒体生成 / v2 导航栏 / 端到端测试·部署·冒烟编排 / 归档路由响应分支覆盖（配置驱动，零硬编码）共 11 个模式 |
 | [批量编译测试复盘](references/batch-compile-testing.md) | 文件夹上传批量编译六阶段测试流程、4 个新增配置块、DAG 依赖关系 |
 | [Tauri 桌面应用测试](references/tauri-desktop-testing.md) | Tauri 2.x 桌面应用 6 阶段测试流程、invoke 权限三层验证、SPA 产物验证 |
 | [Async 可靠性测试详情](references/async-reliability-testing.md) | Async 可靠性测试方法、模拟阻塞模板、覆盖矩阵 |
@@ -224,7 +256,8 @@ description: "Automates end-to-end frontend testing with Playwright: build, star
 | 文件 | 内容 |
 |------|------|
 | [references/testing-patterns.md](references/testing-patterns.md) | 持久化层 / 系统清理 / Async可靠性 / 配置一致性 / 热更新 / 降级机制 / 目录结构 / v3媒体生成 共 9 个测试复盘章节 |
-| [references/protocols.md](references/protocols.md) | 前置检查 / 测试用例同步 / 失败分类 / 服务管理 / 搜索交叉验证 共 5 个协议 + 导航栏改造复盘 + 批量编译复盘 |
+| [references/protocols.md](references/protocols.md) | 前置检查 / 测试用例同步 / 失败分类 / 服务管理 / 搜索交叉验证 共 5 个协议 + Flake 隔离协议 + 导航栏改造复盘 + 批量编译复盘 |
+| [references/testing-process-review.md](references/testing-process-review.md) | 测试 4 维度参考（两轮）：第一轮后端变更；第二轮数据迁移/安装器/打包/沙箱回退 |
 | [references/tauri-desktop-testing.md](references/tauri-desktop-testing.md) | Tauri 2.x 桌面应用测试（复盘提炼） |
 | [references/changelog.md](references/changelog.md) | 版本历史（完整记录） |
 
@@ -234,11 +267,31 @@ description: "Automates end-to-end frontend testing with Playwright: build, star
 
 **基础配置**：service.frontend_url / service.api_url / navigation.tab_selector / navigation.pages / button_discovery.button_selectors / api_tests.endpoints / build.script_path / startup.script_path / button_discovery.destructive_button_texts
 
+**增量测试与覆盖配置**（详见 [references/testing-process-review.md](references/testing-process-review.md)，基于"上下文记忆治理"后端模块复盘）：scope.modified_content.enabled / scope.modified_content.changed_paths / test_coverage.endpoint_coverage_check.enabled / endpoint_autodiscovery.enabled / endpoint_autodiscovery.routes_dir / endpoint_autodiscovery.method_match
+
 **复盘提炼配置**（详见 [references/testing-patterns.md](references/testing-patterns.md)）：persistence_tests.endpoints / encoding_tests.check_pages / dangerous_action_tests.test_pages / service_lifecycle.start_backend / cleanup.temp_files_pattern / powershell_constraints.blocked_commands / route_registration_check.backend_route_directory / type_sync_check.backend_types_path / cors_bypass.strategy / headless_crash_guard.required_launch_args / powershell_compatibility.forbidden_syntaxes / encoding_safety_enhanced.check_extensions / scroll_container_tests.test_pages / spa_navigation_tests.test_routes / update_check_tests.test_pages / build_artifact_verification.serving_endpoint_template / browser_automation_fallback.chain / nav_dual_mode_tests.toggle_selector / icon_theme_tests.icon_selectors / powershell_string_verification.forbidden_patterns / async_reliability_tests.timeout_protection / verification.config_consistency_check / verification.hot_update_verification / verification.degradation_verification / destructive_buttons
 
 **Tauri 桌面应用配置**（详见 [references/tauri-desktop-testing.md](references/tauri-desktop-testing.md)）：tauri.enabled / tauri.exe_name / tauri.src_tauri_dir / tauri.build_script_path / spa.source_dirs / spa.output_dir / health_check.endpoint / invoke.commands / invoke.permissions / invoke.url_patterns / disk_space.debug_min_gb / console_log.prefixes
 
 **编码规范测试配置**（详见 [references/testing-patterns.md](references/testing-patterns.md)）：control_layering_tests.toggle_selector / third_party_error_guard_tests.test_libraries / parallel_loading_tests.resource_patterns / timeout_chain_tests.layer_order / folding_panel_event_tests.panel_selector / media_generation_tests.external_api_contract.test_endpoints / media_generation_tests.timeout_tier_verification.expected_tiers / media_generation_tests.archive_frontmatter_check.archive_dir / media_generation_tests.long_task_state_machine.test_views / media_generation_tests.external_api_unavailable.intercepted_endpoints / powershell_long_process.long_running_commands（与 CODING-056/057/059/060/061/063/064/065 编码规范对齐）
+
+**打包与用户数据测试配置**（详见 [references/testing-process-review.md](references/testing-process-review.md) 第二轮复盘，对应 CODING-PACKAGING-USERDATA / BR-068）：packaging_tests.installer_script / packaging_tests.program_files_flags / packaging_tests.exclude_user_data / packaging_tests.user_data_patterns / data_dir_tests.data_dir_funcs / data_dir_tests.expected_anchor / data_dir_tests.fallback_anchors / data_dir_tests.expected_pattern / data_dir_tests.verify_filesystem_write / user_data_isolation_tests.isolation_resources / user_data_isolation_tests.malicious_ids / user_data_isolation_tests.expect_status
+
+**后端逻辑单元与迁移脚本测试配置**（详见 [references/testing-process-review.md](references/testing-process-review.md) 第四轮复盘，对应 CODING-USER-UPLOAD-FILENAME / CODING-MIGRATION-SAFETY / BR-069 / BR-070）：backend_logic_unit_test.enabled / backend_logic_unit_test.runner_path / backend_logic_unit_test.test_file / backend_logic_unit_test.cwd / backend_logic_unit_test.fail_patterns / backend_logic_unit_test.pass_patterns / migration_script_e2e.enabled / migration_script_e2e.script_path / migration_script_e2e.runtime / migration_script_e2e.target_arg / migration_script_e2e.apply_flag / migration_script_e2e.temp_vault_dir / migration_script_e2e.setup_command / migration_script_e2e.verify_command / migration_script_e2e.cleanup_temp
+
+**SPA 实时部署验证配置**（详见 [references/testing-process-review.md](references/testing-process-review.md) 第五轮复盘，对应 CODING-SPA-LIVE-DEPLOY / BR-071 / 前端 FR-068）：spa_live_deploy_check.enabled / spa_live_deploy_check.live_base_dir / spa_live_deploy_check.live_dir_pattern / spa_live_deploy_check.legacy_dir / spa_live_deploy_check.complete_marker / spa_live_deploy_check.asset_prefix / spa_live_deploy_check.malicious_paths / spa_live_deploy_check.restart_required / spa_live_deploy_check.required_ports
+
+**多账户会话隔离验证配置**（详见 [references/testing-process-review.md](references/testing-process-review.md) 第六轮复盘，对应 CODING-SESSION-ISOLATION / 前端 FR-069）：cross_account_session_check.enabled / cross_account_session_check.conversation_store_path / cross_account_session_check.owner_field / cross_account_session_check.session_state_refs / cross_account_session_check.auth_watch_signal / cross_account_session_check.persist_reuse_owner_check / cross_account_session_check.malicious_owner_ids / cross_account_session_check.require_reset_on_auth
+
+**BYOK 多用户密钥代理验证配置**（详见 [references/testing-process-review.md](references/testing-process-review.md) 第七轮复盘，对应 CODING-BYOK / 前端 FR-070 / 后端 BR-072）：byok_per_user_override.enabled / byok_per_user_override.user_config_service / byok_per_user_override.user_config_namespaces / byok_per_user_override.override_fields / byok_per_user_override.secret_fields / byok_per_user_override.require_key_fields / byok_per_user_override.override_func / byok_per_user_override.empty_override_falls_back
+
+**流式回答增量持久化与续答验证配置**（详见 [references/testing-process-review.md](references/testing-process-review.md) 第八轮复盘，对应 CODING-STREAMING-RESUME / 前端 FR-071）：streaming_resume_check.enabled / streaming_resume_check.streaming_store_path / streaming_resume_check.persist_debounce_ms / streaming_resume_check.last_active_key / streaming_resume_check.streaming_status / streaming_resume_check.no_abort_on_unmount / streaming_resume_check.skip_when_loading
+
+**前端隔离测试纪律配置**（详见 [references/testing-process-review.md](references/testing-process-review.md) 第九轮复盘，对应 chatDb + fake-indexeddb）：indexeddb_test_isolation.enabled / indexeddb_test_isolation.namespace_prefixes / indexeddb_test_isolation.forbidden_patterns / indexeddb_test_isolation.flush_rounds
+
+**前端编码标准静态守卫配置**（详见 [references/testing-process-review.md](references/testing-process-review.md) 第十三轮复盘，对应 FR-077~FR-080 / CODING-EDIT-RESEND / CODING-STREAMING-AUTOSCROLL / CODING-BUTTON-STYLE-CONSISTENCY / CODING-EDITBOX-WIDTH）：frontend_review_static_check.enabled / frontend_review_static_check.scan_dirs / frontend_review_static_check.file_glob / frontend_review_static_check.groups[name, forbidden_patterns, required_patterns, message, rule_ref, severity, regex]（内置 edit_resend_pair / autoscroll_double_rAF / button_style_pair / editbox_width_fill 四组，覆盖编辑重发配对 / autoscroll 双 rAF / 成对按钮样式 / 编辑框撑满；新增前端规范只需加一组，零硬编码）
+
+**一键启用模板**：针对本仓库（karpathy-wiki）真实路径与字段的 *已启用* 示例见 [examples/config.enabled.example.yaml](examples/config.enabled.example.yaml)（涵盖上述四个步骤类型：cross_account_session_check / byok_per_user_override / streaming_resume_check / indexeddb_test_isolation，全部 `enabled: true`，字段名取自实际源码）。复制其中对应块到 config.yaml 即可直接使用，无需再逐项推断路径。
 
 ## 适用场景
 
@@ -275,6 +328,18 @@ description: "Automates end-to-end frontend testing with Playwright: build, star
 - **LLM 生成产物归档到 vault**（验证 frontmatter 字段 type/output_mode/generated_at 完整 + 文件名模式匹配，对应 CODING-060）
 - **长任务前端轮询 + 状态机 UI**（验证 5 态覆盖 + abortReason 三态 + 定时器清理 + setTimeout 超时，对应 CODING-065）
 - **外部 API 不可达时的降级策略**（验证拦截 503 不崩溃 + 错误消息分类 + AbortError 吞掉 + reader.cancel 兜底，对应 CODING-056/064）
+- **打包（SEA/Electron/Tauri）/ 安装器 / 用户数据目录解析改动**（验证安装器防覆盖 + 数据目录落点 + 用户数据隔离，对应 CODING-PACKAGING-USERDATA / BR-068）
+- **后端落盘前纯逻辑验证（无浏览器）**：用 `backend_logic_unit_test` 直接实例化 service 做文件名清洗 / 内部前缀剥离 / 路径穿越二次校验等单元断言，无需启动服务或浏览器，对应 CODING-USER-UPLOAD-FILENAME / BR-069
+- **数据迁移 / 修复脚本验证**：用 `migration_script_e2e` 对临时 vault 真实 `--apply`，验证既不破坏原数据又能正确改写；脚本默认 dry-run 安全，对应 CODING-MIGRATION-SAFETY / BR-070
+- **沙箱无浏览器 / 无 PyYAML 环境的测试回退**（回退 vitest 单元 + Fastify app.inject + 真实 API HTTP 集成，浏览器 E2E 降级）
+- **SPA 实时部署解析改动（后端 resolveSpaRoot / resolveSpaAsset + 部署脚本 _deploy_live.mjs）**：用 `spa_live_deploy_check` 断言后端选最新时间戳目录 + 完整性门禁、/wiki/* within-root 防穿越（`../` 逃逸拒绝）、部署写全新目录不覆盖、部署后重启后端生效；对应 CODING-SPA-LIVE-DEPLOY / BR-071 / 前端 FR-068
+- **safe-delete 沙箱钩子约束下的清理 / 部署**：钩子 fail-closed（拦截 overwrite/rename-overwrite/unlink 已存在文件、rm 完全被拦），唯一放行的是新建目录整目录写入与移动到【全新(不存在)路径】；统一走「写新目录 → 移动/重建」而非原地 rm/覆盖，对应第五轮复盘
+- **多账户会话隔离改动（Pinia 会话 store + 问答页 auth watch + 持久化层）**：用 `cross_account_session_check` 断言账户切换/登出触发 resetSession（currentConversationId+scopedOwnerId 作废、列表清空）、persistConversation 复用 id 前以 IndexedDB 实际记录校验归属（他人记录绝不覆盖、冲突改用全新 uuid）、filterByOwner 严格按 ownerId 隔离；跨账户须用真实登出/切换 E2E 而非 store 直接 setUser；对应 CODING-SESSION-ISOLATION / 前端 FR-069
+- **BYOK 多用户密钥代理改动（前端 userConfig.ts + Config.vue + Query.vue + 后端 applyPerRequestOverride / routes/query.ts）**：用 `byok_per_user_override_check` 断言每用户配置按 userId 命名空间隔离、密钥仅经请求体下发（后端不落盘/不回显/不记日志）、缺必需密钥返回 400 不回落服务端共享、覆盖为纯函数且空工具配置回退服务端共享；对应 CODING-BYOK / 前端 FR-070 / 后端 BR-072
+- **流式回答增量持久化与续答改动（stores/query.ts streamingAnswer + Query.vue onBeforeUnmount/maybeResumeOnLoad + types.ts status）**：用 `streaming_resume_check` 断言流式分片增量防抖落盘、卸载不 abort 在途流、重载仅对 streaming 末条续答（interrupted/error 不续）；对应 CODING-STREAMING-RESUME / 前端 FR-071
+- **前端隔离测试编写（chatDb + fake-indexeddb）**：用 `indexeddb_test_isolation_check` 断言隔离测试用唯一 userId 命名空间、禁用 beforeEach deleteDatabase（避免 onblocked/超时/跨用例泄漏）、fake-indexeddb 异步落盘断言多轮 flush；对应第九轮复盘
+- **前端编码标准静态守卫改动（编辑重发 / 流式自动滚动 / 成对按钮样式 / 编辑框撑满等 UI 规范）**：用 `frontend_review_static_check` 配置化扫描前端源码 forbidden_patterns（命中即违规）+ required_patterns（保护性代码被删即违规），把 FR-077~FR-080 的"静态守卫"判断逻辑落地；新增前端规范只需加一组配置，零硬编码，对应第十三轮复盘 / CODING-EDIT-RESEND / CODING-STREAMING-AUTOSCROLL / CODING-BUTTON-STYLE-CONSISTENCY / CODING-EDITBOX-WIDTH
+- **归档路由（按 threadId + messageIndex + ts 派生存储键）响应分支覆盖改动**：用 `route_response_branch_coverage` 逐分支断言主路径 200 / 回退 404 / 非法 threadId 400 / 非整数 messageIndex 400 / 缺失 messageIndex 400 / 非法 ts 200 / 空内容 400，并校验 200 响应含必需字段（content/refs 等）；把"静默缺陷回归"判断逻辑落地，对应第十二轮复盘 / 前端 FR-076 能力门控同步
 
 ## 不适用场景
 
@@ -303,6 +368,11 @@ description: "Automates end-to-end frontend testing with Playwright: build, star
 - **纯本地 LLM 调用**（无外部 API 集成，fetchWithDiagnostics 包装与错误码翻译验证不适用）
 - **秒级同步任务**（无长任务轮询，5 状态机与 abortReason 三态验证不适用）
 - **无归档需求的临时查询**（LLM 产物不落盘 vault，frontmatter 标准化验证不适用）
+- **纯前端 UI 动画/交互变更**（落点/安装器验证不适用，应走既有 Playwright 浏览器测试）
+- **服务端容器部署（volume 挂载）**（用户数据目录锚点非 LOCALAPPDATA，T2/T5 判定需按部署模型调整）
+- **无后端 service / 无迁移脚本的纯前端或纯文档改动**：`backend_logic_unit_test` / `migration_script_e2e` 无对应测试目标，应沿用前几轮流程或既有浏览器测试阶段
+- **无可静态识别"保护性代码"的前端规范（纯运行时行为、无特征字符串）**：`frontend_review_static_check` 的 required_patterns 无法可靠匹配，应改用浏览器 E2E（如 button_discovery / theme_switch）或运行时断言验证，而非静态守卫
+- **单分支无歧义路由（所有非法输入已被框架/中间件统一拦截为 4xx 且无需逐分支断言返回语义）**：`route_response_branch_coverage` 的分支矩阵价值有限，沿用 `api_check` / `path_traversal_test` 即可；仅当路由内部对"合法请求的不同业务结果"（主路径 vs 回退 vs 空内容）有差异化状态码语义时才有必要
 
 ## 故障排查
 
@@ -340,12 +410,24 @@ description: "Automates end-to-end frontend testing with Playwright: build, star
 - **外部 API 类型契约不匹配（seconds 字段）**：第 37 条，启用 `media_generation_tests.external_api_contract.enabled: true`
 - **长任务轮询定时器未清理**：第 38 条，启用 `media_generation_tests.long_task_state_machine.require_timer_cleanup: true`
 - **PowerShell 管道导致 EPIPE 断裂（退出码 -1）**：第 39 条，启用 `powershell_long_process.enabled: true`
+- **沙箱无浏览器/无 PyYAML 导致 E2E 与部分脚本无法运行**：第 40 条，回退 vitest 单元 + Fastify app.inject + 真实 API HTTP 集成，浏览器 E2E 降级
 
 ## Version History
 
 | 版本 | 日期 | 变更说明 |
 |------|------|----------|
+| v2.10.0 | 2026-08-08 | **归档路由响应分支覆盖测试复盘补充**：基于「归档路由重构（7 条规范：文件名碰撞 / 非法 ts→RangeError / 非整数 messageIndex→undefined 访问 / refs 换行破坏 wikilink / 空内容 no-op 落盘 / 依赖服务端会话 100% 误报过期 / 前端门控漂移）」经验，新增 1 个动态引擎步骤类型（`route_response_branch_coverage`：配置化逐分支断言被测路由在各请求参数组合下的返回状态码——主路径 200 / 回退 404 / 非法 threadId 400 / 非整数 messageIndex 400 / 缺失 messageIndex 400 / 非法 ts 200 / 空内容 400——并校验 200 响应含必需字段，把"响应分支覆盖 + 静默缺陷回归"判断逻辑落地）；testing-process-review.md 追加第十二轮 4 维度复盘（成功步骤 / 不确定性失败点 / 可抽象流程与判断 / 适用与不适用）；testing-patterns.md 追加「归档路由响应分支覆盖」通用模式；defaults.yaml / config.yaml / examples/config.enabled.example.yaml 新增 `route_response_branch_coverage` 零硬编码配置块（route_name / method / branch_cases[name,params,expected_status,required_fields,description]）。对应 CODING-GENERATED-FILENAME-UNIQUENESS / CODING-WIKILINK-SANITIZATION / CODING-EMPTY-CONTENT-REJECTION / CODING-INTEGER-INDEX-VALIDATION / CODING-SAFE-CLIENT-DATE-PARSE / CODING-PERSISTENCE-CLIENT-CONTENT-DECOUPLING / 前端 FR-076 能力门控同步。 |
+| v2.11.0 | 2026-08-08 | **前端编码标准静态守卫 + 测试流程四维度复盘补充**：基于本对话「从历史已解决问题系统性提炼编码规范并同步到测试」经验，新增 1 个**更泛化**的动态引擎步骤类型 `frontend_review_static_check`（在 backend_review_static_check 的 forbidden_patterns 基础上新增 required_patterns「存在性」维度——整个扫描集完全缺失即违规，守护保护性代码被重构误删）；内置 FR-077~FR-080 四组（编辑重发配对 removeMessagesFrom+submitQuestion / autoscroll 双 rAF+stickToBottom / 成对按钮 .edit-btn.confirm+.cancel / 编辑框撑满 .msg-content-wrapper+.msg-edit），新增前端规范只需在 config 加一组、零硬编码；_step_engine.py 注册并实现该 handler（registry 模式，step 可覆盖参数）。testing-process-review.md 追加第十三轮 4 维度复盘（测试流程：成功步骤 / 不确定性与失败点 / 可抽象流程与判断 / 适用与不适用，含"从编码规范派生测试""flake 型 typecheck 诊断""配置化步骤类型泛化"三小节）。defaults.yaml / config.yaml 新增 `frontend_review_static_check` 零硬编码配置块（scan_dirs / file_glob / groups[name,forbidden_patterns,required_patterns,message,rule_ref,severity,regex]）。对应 CODING-EDIT-RESEND / CODING-STREAMING-AUTOSCROLL / CODING-BUTTON-STYLE-CONSISTENCY / CODING-EDITBOX-WIDTH / 前端 FR-077~FR-080 / 后端 BR-087。 |
+| v2.9.0 | 2026-08-07 | **后端行为级缺陷专项测试复盘补充**：基于「SSML prosody 注入防护 / 子进程异步当同步 / 关键写静默吞错 / 数据文件损坏未区分 / request.method 类型绕过 / 硬编码超时 / 冗余探测」七类后端潜伏缺陷的测试经验，新增 1 个动态引擎步骤类型（`backend_review_static_check`：配置化 grep 后端源码 forbid 模式组，error 级阻断 / warn 级标记，把"静态守卫"判断逻辑落地）；testing-process-review.md 追加第十一轮 4 维度复盘（成功步骤 / 不确定性失败点 / 可抽象流程与判断 / 适用与不适用）；defaults.yaml / config.yaml 新增 `backend_review_static_check` 零硬编码配置块（scan_dirs / file_glob / groups[name,patterns,message,rule_ref,severity,regex]）；步骤类型表追加 1 行。对应 BR-074~080 / CODING-SSML-INJECTION / CODING-CHILD-PROCESS-SYNC / CODING-CRITICAL-WRITE-NO-SWALLOW / CODING-FILE-CORRUPTION-GUARD / CODING-TYPE-SAFE-NO-ANY / CODING-CONFIG-TIMEOUT / CODING-NO-REDUNDANT-PROBE。 |
+| v2.6.0 | 2026-08-06 | **SPA 实时部署解析测试复盘补充**：基于「/wiki/* 路径穿越加固 + 实时部署解析（resolveSpaRoot 选最新时间戳目录 + isDeployComplete 完整性门禁；resolveSpaAsset normalize + within-root 防穿越）+ 部署脚本 _deploy_live.mjs 写全新 public_live_<ts> 目录」与沙箱 safe-delete 钩子 fail-closed 经验，新增 1 个动态引擎步骤类型（`spa_live_deploy_check`：断言后端选最新时间戳目录 + 完整性门禁、/wiki/* within-root 防穿越、部署写全新目录不覆盖、重启后端生效）；testing-process-review.md 追加第五轮 4 维度复盘（含 safe-delete 钩子 fail-closed 工作模式：唯一放行新建目录整目录写入与移动到全新路径，清理/部署统一走「写新目录→移动/重建」）；defaults.yaml / config.yaml 新增 `spa_live_deploy_check` 零硬编码配置块；适配新项目章节追加 SPA 实时部署验证配置；适用场景追加 2 项；步骤类型表追加 1 行。对应 CODING-SPA-LIVE-DEPLOY / BR-071 / 前端 FR-068。 |
+| v2.8.0 | 2026-08-07 | **端到端测试/部署/冒烟编排复盘补充**：基于「类型门禁→单测→全量→构建(全新目录)→部署(全新目录)→干净重启(杀孤儿 :3000)→冒烟(400 缺密钥不回落/200 SSE/SPA 伺服最新目录)」经验，testing-process-review.md 追加第十轮 4 维度复盘；修复版本表遗漏（补 v2.7.1/2.7.2/2.7.3 对应 BYOK/流式续答/隔离测试三轮）；衔接 CODING-TEST-ISOLATION 与 retrospective-synthesis.md。对应 spa_live_deploy_check / indexeddb_test_isolation_check / service_manage / byok_per_user_override_check。 |
+| v2.7.3 | 2026-08-07 | **前端隔离测试纪律复盘补充**：新增动态引擎步骤类型 `indexeddb_test_isolation_check`（断言隔离测试用唯一 userId 命名空间、禁用 beforeEach deleteDatabase、fake-indexeddb 异步落盘断言须多轮 setTimeout(0) flush）；testing-process-review.md 追加第九轮 4 维度复盘；defaults.yaml / config.yaml 新增零硬编码配置块。对应 CODING-TEST-ISOLATION。 |
+| v2.7.2 | 2026-08-07 | **流式回答增量持久化与续答复盘补充**：新增动态引擎步骤类型 `streaming_resume_check`（断言流式分片增量防抖落盘、卸载不 abort 在途流、仅 streaming 末条续答、后台流活跃时跳过）；testing-process-review.md 追加第八轮 4 维度复盘；defaults.yaml / config.yaml 新增零硬编码配置块。对应 CODING-STREAMING-RESUME / 前端 FR-071。 |
+| v2.7.1 | 2026-08-07 | **BYOK 多用户密钥代理复盘补充**：新增动态引擎步骤类型 `byok_per_user_override_check`（断言每用户命名空间隔离、密钥仅请求体不落盘、缺必需密钥 400 不回落、覆盖纯函数空覆盖回退、前端仅当配置存在才下发）；testing-process-review.md 追加第七轮 4 维度复盘；defaults.yaml / config.yaml 新增零硬编码配置块。对应 CODING-BYOK / 前端 FR-070 / 后端 BR-072。 |
+| v2.7.0 | 2026-08-07 | **多账户会话隔离测试复盘补充**：基于「多账户会话隔离泄漏（currentConversationId 模块级共享 ref 跨账户未 reset + scopedOwnerId 漏加 store return 死状态 + persistConversation 复用 id 未校验归属）」经验，新增 1 个动态引擎步骤类型（`cross_account_session_check`：断言账户切换/登出触发 resetSession、persistConversation 复用 id 前以 IndexedDB 实际记录校验归属、filterByOwner 严格隔离、跨账户真实登出/切换 E2E 无泄漏）；testing-process-review.md 追加第六轮 4 维度复盘；defaults.yaml / config.yaml 新增 `cross_account_session_check` 零硬编码配置块；适配新项目章节追加多账户会话隔离验证配置；适用场景追加 1 项；步骤类型表追加 1 行。对应 CODING-SESSION-ISOLATION / 前端 FR-069。 |
+| v2.5.0 | 2026-08-05 | **后端逻辑单元与迁移脚本测试复盘补充**：基于「raw 文件名修复 + 走查建议优化」与沙箱 Windows 路径（Git-Bash `/c/Users` vs Windows 原生 `C:\Users` 导致 ENOENT、safe-delete 钩子拦截 `rm`）经验，新增 2 个动态引擎步骤类型（`backend_logic_unit_test` 直接实例化 service 做落盘前纯逻辑单元断言；`migration_script_e2e` 对临时 vault 真实 `--apply` 验证迁移/修复脚本）；testing-process-review.md 追加第四轮 4 维度复盘；defaults.yaml / config.yaml 新增 `backend_logic_unit_test` / `migration_script_e2e` 两个零硬编码配置块；适配新项目章节追加后端逻辑单元与迁移脚本测试配置；适用/不适用场景各追加 2 项；步骤类型表追加 2 行。对应 CODING-USER-UPLOAD-FILENAME / CODING-MIGRATION-SAFETY / BR-069 / BR-070。 |
 | v2.3.0 | 2026-07-31 | **PowerShell 长时进程管道陷阱测试补充**：新增 powershell_long_process 核心配置块；新增 EPIPE 故障分类类型（epipe_error）；新增 TROUBLESHOOTING 第 39 条；配置适配章节追加 1 项配置说明。对应 CODING-059 编码规范。 |
+| v2.4.0 | 2026-08-05 | **打包与用户数据测试复盘补充**：基于「安装器覆盖配置 / AppData 数据迁移 / SEA 路径解析 / clean-defaults」与沙箱无浏览器回退经验，新增 3 个动态引擎步骤类型（packaging_config_overwrite_test / data_dir_derivation_test / user_data_isolation_test）；testing-process-review.md 追加第二轮 4 维度复盘；适配新项目章节追加打包与用户数据测试配置；适用/不适用场景各追加 2-3 项；故障排查追加第 40 条（沙箱无浏览器/PyYAML 回退）。对应 CODING-PACKAGING-USERDATA / BR-068。 |
 | v2.2.0 | 2026-07-31 | **v3 媒体生成工具复盘测试补充**：新增 media_generation_tests 核心配置块（5 个子段）；新增"v3 媒体生成工具测试（复盘提炼）"章节（5 个子阶段 5.15-5.19）；新增 5 个动态引擎步骤类型；适配新项目章节追加 1 项配置说明（第 43 项）；适用场景追加 5 项；不适用场景追加 3 项；故障排查追加 4 条（TROUBLESHOOTING 第 35-38 条）。对应 CODING-056/057/059/060/061/063/064/065 编码规范。 |
 | v2.1.0 | 2026-07-31 | **编码规范测试流程补充**：基于控件分层、第三方库错误防护、多资源并行加载、超时阈值链式匹配、折叠面板事件冲突五项编码规范，新增 5 个核心配置块；新增 5 个测试子阶段（5.10-5.14）；新增 5 个动态引擎步骤类型；适配新项目章节追加 5 项配置说明；适用场景追加 5 项；不适用场景追加 5 项；故障排查追加 5 条（TROUBLESHOOTING 第 30-34 条）。 |
 | v2.0.0 | 2026-07-22 | **Tauri 2.x 桌面应用测试复盘**：新增"Tauri 2.x 桌面应用测试（复盘提炼）"章节（含 6 阶段测试流程、invoke 权限三层验证、SPA 产物验证、阶段间 DAG 依赖关系、故障排查速查表）；新增 3 个参考文档（tauri-desktop-testing.md / spa-artifact-verification.md / invoke-permission-verification.md）；新增 templates/phase_tauri_desktop.py 测试阶段模板；config.yaml 与 defaults.yaml 新增 tauri / spa / health_check / invoke / disk_space / console_log 6 个配置块。 |

@@ -10,6 +10,23 @@ Karpathy-Wiki 项目的通用编码规范与开发准则。规则与具体业务
 - Code Review 时作为规则源
 - 不确定某写法是否合规时查询
 
+## 规范提炼方法论（四维度复盘 → 规则）
+
+本技能的规则不是凭空制定的，而是对**已解决问题的系统性复盘**沉淀而来。每遇到一次事故或返工，
+按以下四维度复盘，并将结论固化为可复用规则（UF-/MS-/BR-/FR- 等）：
+
+| 维度 | 复盘问题 | 产出 |
+|------|---------|------|
+| ① 成功步骤 | 这次是怎么修好的？哪些动作被验证有效？ | 可复制的修复流程骨架 |
+| ② 不确定性与失败点 | 哪里踩坑/试错？环境约束是什么？（如沙箱无浏览器、safe-delete 钩子、Git-Bash 路径） | 防御性检查点 / 降级路径 |
+| ③ 可抽象的流程与判断 | 哪些决策可参数化、可泛化到同类问题？ | 规则（严重级别 + 正/误示例）+ 对应 config 参数 |
+| ④ 适用与不适用 | 这个规则在哪些场景成立？哪些场景是噪声？ | 规则的适用 / 不适用边界（写进 review 技能） |
+
+**闭环**：复盘(①②③④) → 提炼为编码规则（本技能 references/） → 映射为审查要点（wiki-backend-code-review BR- / wiki-frontend-code-review FR-） → 参数全部落入各技能 `config/*.md`（零硬编码）。
+每次新增规则须同步：① 在本技能 SKILL.md 路由表登记；② 在对应 review 技能加 BR-/FR- 条目；③ 在 review `config` 加参数段。
+
+测试侧的四维度复盘范本见 [wiki-auto-testing references/testing-process-review.md](../../wiki-auto-testing/references/testing-process-review.md)。
+
 ## 加载策略
 
 按需加载以节省 context token：
@@ -69,5 +86,39 @@ Karpathy-Wiki 项目的通用编码规范与开发准则。规则与具体业务
 | 涉及状态机简化（多态→二态、折叠一步到位） | [references/state-machine-simplify-rule.md](references/state-machine-simplify-rule.md) |
 | 涉及 PowerShell 长时进程管道陷阱（EPIPE/退出码异常） | [references/powershell-long-process-rule.md](references/powershell-long-process-rule.md) |
 | 涉及功能回滚（按删除反向顺序恢复） | [references/rollback-minimal-rule.md](references/rollback-minimal-rule.md) |
-| 需要参考历史复盘/工作流模板 | [references/development-workflow.md](references/development-workflow.md) |
+| 涉及前端 .ts 被 .js 影子覆盖 / vite resolve.extensions / 构建双验证 | [references/frontend-ts-js-shadowing-rule.md](references/frontend-ts-js-shadowing-rule.md) |
+| 涉及 Unicode 分词 / 去重 / 压缩 / 淘汰的确定性文本处理 | [references/deterministic-text-processing-rule.md](references/deterministic-text-processing-rule.md) |
+| 涉及运行时数据目录隐私 / .gitignore / 持久化默认 | [references/runtime-data-privacy-rule.md](references/runtime-data-privacy-rule.md) |
+| 涉及 SEA 多机打包 / config 可移植默认 / dataDir 派生 | [references/config-portable-defaults-rule.md](references/config-portable-defaults-rule.md) |
+| 涉及安装器防覆盖 / SEA 用户数据目录解析 / 资源路径与用户数据路径分离 / 首次落盘干净默认 | [references/packaging-userdata-rule.md](references/packaging-userdata-rule.md) |
+| 涉及限流韧性 / 真实 IP / 滑动窗口 / 时钟无关测试 | [references/rate-limit-resilience-rule.md](references/rate-limit-resilience-rule.md) |
+| 涉及新增路由测试覆盖 / 端点测试 / 前后端类型同步 | [references/api-endpoint-test-coverage-rule.md](references/api-endpoint-test-coverage-rule.md) |
+| 涉及第三方 UI 组件库（Element Plus 等）API 升级 / 弃用属性迁移 / 主版本升级前全量扫描 | [references/third-party-ui-api-currency-rule.md](references/third-party-ui-api-currency-rule.md) |
+| 涉及用户输入作文件名/路径（中文/全角/CJK 清洗 + 内部前缀剥离 + `..` 二次校验） | [references/user-upload-filename-rule.md](references/user-upload-filename-rule.md) |
+| 涉及数据迁移/修复脚本（dry-run 默认 / 幂等 / 无丢失 / 冲突后缀 / 函数式替换 / pageCache） | [references/data-repair-script-safety-rule.md](references/data-repair-script-safety-rule.md) |
+| 涉及语音合成/TTS/朗读/浏览器 Web Speech API / neural 音色优雅降级 | [references/tts-neural-fallback-rule.md](references/tts-neural-fallback-rule.md) |
+| 涉及 SPA 实时部署目录解析（最新时间戳目录 + 完整性门禁）/ `/wiki/*` within-root 防穿越 / 部署写全新目录不覆盖 | [references/spa-live-deploy-rule.md](references/spa-live-deploy-rule.md) |
+| 涉及多账户会话隔离（Pinia 模块级共享 ref 跨账户未重置 / 复用 id 持久化未校验归属 / 会话按 ownerId 隔离） | [references/frontend-session-isolation-rule.md](references/frontend-session-isolation-rule.md) |
+| 涉及 BYOK 多用户密钥代理（前端本地命名空间隔离 / 密钥仅经请求体下发不落服务端 / 覆盖纯函数 + 缺密钥不回落服务端共享） | [references/byok-per-user-override-rule.md](references/byok-per-user-override-rule.md) |
+| 涉及流式回答增量持久化与断点续答（SSE 部分答案仅内存 / 切页 abort 在途流 / 刷新丢失中间态） | [references/streaming-resume-rule.md](references/streaming-resume-rule.md) |
+| 涉及隔离测试纪律（含状态测试用唯一命名空间而非 beforeEach deleteDatabase / fake-indexeddb 异步多轮 flush / 后端模块态与 mock 隔离） | [references/indexeddb-test-isolation-rule.md](references/indexeddb-test-isolation-rule.md) |
+| 涉及 SSML / TTS prosody 注入防护（用户文本 `<>&` 转义 / rate·volume·pitch 格式校验 / 禁用 express-as / 免费端点 1007） | [references/ssml-injection-rule.md](references/ssml-injection-rule.md) |
+| 涉及子进程异步/同步正确性（execFile 异步当同步用 / execFileSync 带超时 / 需同步结果须 await） | [references/child-process-sync-rule.md](references/child-process-sync-rule.md) |
+| 涉及关键写不得静默吞错（saveUsers 等持久化写失败须传播 / 禁止空 catch 假成功） | [references/critical-write-no-swallow-rule.md](references/critical-write-no-swallow-rule.md) |
+| 涉及关键数据文件损坏防护（loadUsers 区分 not-found 与 corrupt / 损坏备份回退默认 / 禁静默清零） | [references/file-corruption-guard-rule.md](references/file-corruption-guard-rule.md) |
+| 涉及类型安全禁止 `as any` 绕过（提取真实类型 InjectOptions['method'] / 类型守卫 / 迁移期标注） | [references/type-safe-no-any-rule.md](references/type-safe-no-any-rule.md) |
+| 涉及超时/阈值可配置化（禁止硬编码 30000 / 从配置读取超时键 / 多层递增） | [references/config-timeout-rule.md](references/config-timeout-rule.md) |
+| 涉及去除冗余探测/探针（isFfmpegAvailable 用 `ffmpeg -version` 能力检测 / 禁 ffprobe 冗余探测） | [references/no-redundant-probe-rule.md](references/no-redundant-probe-rule.md) |
+| 涉及归档/落盘文件名唯一性（同线程同日多条归档互相覆盖 / 派生键非全局唯一须追加随机后缀 / 冲突拒绝） | [references/generated-filename-uniqueness-rule.md](references/generated-filename-uniqueness-rule.md) |
+| 涉及服务端解析客户端日期串（非法 `ts` → RangeError → 500 / 禁 `new Date(str).toISOString()` / 安全解析回退默认） | [references/safe-client-date-parse-rule.md](references/safe-client-date-parse-rule.md) |
+| 涉及客户端传下标访问数组（messageIndex 非整数 → undefined 访问 → 500 / Number.isInteger 校验短路） | [references/integer-index-validation-rule.md](references/integer-index-validation-rule.md) |
+| 涉及注入 `[[wikilink]]`/Markdown 链接（换行破坏/空串脏链接 / 注入前去换行+trim+去空+字符集清洗） | [references/wikilink-sanitization-rule.md](references/wikilink-sanitization-rule.md) |
+| 涉及创建型写入端点空内容（空串/no-op 落盘污染 / 必填字段缺失即拒绝） | [references/empty-content-rejection-rule.md](references/empty-content-rejection-rule.md) |
+| 涉及归档内容取源解耦（服务端不持久化会话→误报过期 / 请求体优先取内容 / 前端门控随后端契约同步放宽） | [references/persistence-client-content-decoupling-rule.md](references/persistence-client-content-decoupling-rule.md) · [references/capability-gating-sync-rule.md](references/capability-gating-sync-rule.md) |
+| 涉及编辑已发送消息并重发（removeMessagesFrom 后必须 submitQuestion 重插 / 先停 in-flight / 未变不重发） | [references/edit-resend-rule.md](references/edit-resend-rule.md) |
+| 涉及流式聊天自动贴底滚动（双 rAF / 用户上滑暂停 / 图片加载补滚 / 监听挂载卸载绑定） | [references/streaming-autoscroll-rule.md](references/streaming-autoscroll-rule.md) |
+| 涉及成对操作按钮样式一致性（确认/取消幽灵按钮 / 主题变量 / 单主操作） | [references/button-style-consistency-rule.md](references/button-style-consistency-rule.md) |
+| 涉及消息气泡进入编辑态撑满问答列宽（align-items:stretch / width:100% 覆盖已发送窄宽） | [references/editbox-width-rule.md](references/editbox-width-rule.md) |
+| 涉及 Vue 3 / Pinia state 写入 IndexedDB（reactive 代理无法被 structuredClone 克隆 → `[object Array] could not be cloned` 静默丢数据 / toRaw 只剥顶层 / 须整树深拷贝） | [references/idb-reactive-clone-rule.md](references/idb-reactive-clone-rule.md) |
+| 需要参考历史复盘/工作流模板 | [references/development-workflow.md](references/development-workflow.md) · [references/retrospective-synthesis.md](references/retrospective-synthesis.md)（四维度复盘综合索引：事故→规则→审查→测试闭环） |
 | 不确定加载哪些 | 全部加载（约 50KB） |
