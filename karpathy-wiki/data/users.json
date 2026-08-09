@@ -9,7 +9,7 @@
       "enabled": true,
       "createdAt": "2026-07-31T07:31:13.914Z",
       "updatedAt": "2026-07-31T07:31:13.914Z",
-      "lastLoginAt": "2026-08-07T02:05:19.620Z"
+      "lastLoginAt": "2026-08-08T04:06:49.973Z"
     },
     {
       "id": "298c775b-29ba-4729-bafa-5eaacfcce6f0",
@@ -98,6 +98,50 @@
       "createdAt": "2026-08-06T00:03:22.998Z",
       "updatedAt": "2026-08-06T00:03:22.998Z",
       "lastLoginAt": "2026-08-06T00:03:23.124Z"
+    },
+    {
+      "id": "487d0c2f-6606-4082-813d-1537d449dde5",
+      "username": "_smoketest_1786164076",
+      "passwordHash": "Pb7KXwEmSGP5KrOwTz1UBcbf70GNaBLU7u11awFA1GmLgiKbbbAw5Sd5huLnAxSpIbMann2Wo25Gax40uiU1hg==",
+      "salt": "cOYVmRjnloSlkee41q8VCw==",
+      "role": "user",
+      "enabled": true,
+      "createdAt": "2026-08-08T04:41:18.153Z",
+      "updatedAt": "2026-08-08T04:41:18.153Z",
+      "lastLoginAt": "2026-08-08T04:41:18.408Z"
+    },
+    {
+      "id": "9720cc23-80b0-498e-a477-ef9d0bd606bf",
+      "username": "_smoke2_1786164128",
+      "passwordHash": "1ILqXoFbzL6mEd6RdbsxkEDH9ztv9JCHkClT4DSsyAMAuP4WJMn+OdmbiRcZVt5TvjkdKnv7Xz9JaZYfcomuzg==",
+      "salt": "skaBpQhAvd3kP67xcCKcPw==",
+      "role": "user",
+      "enabled": true,
+      "createdAt": "2026-08-08T04:42:10.036Z",
+      "updatedAt": "2026-08-08T04:42:10.036Z",
+      "lastLoginAt": "2026-08-08T04:42:10.199Z"
+    },
+    {
+      "id": "20417456-7e54-435a-9e65-dcf75f16d7a8",
+      "username": "_smoke3_1786164173",
+      "passwordHash": "eQUyG7XCEO5v1CBIgTkcTRlDpX/oSSo0G/FZyzuoJNwdVYdLjskPULDRPP1HGWR34mhq8Gcw/fGepSkGyKzkyw==",
+      "salt": "WSWmljaWHBLd/6q8GaBV7w==",
+      "role": "user",
+      "enabled": true,
+      "createdAt": "2026-08-08T04:42:55.131Z",
+      "updatedAt": "2026-08-08T04:42:55.131Z",
+      "lastLoginAt": "2026-08-08T04:42:55.514Z"
+    },
+    {
+      "id": "1c2a57e7-01b1-495e-b5a3-7d60d87a5524",
+      "username": "_smoke3_1786164278",
+      "passwordHash": "BGiyZDf8XXS1tZrztWtr43NlLs1hyl6/brqjfOLbTkQ3e4WJD2QUqCsOU4NtN/UaDzE39zq7p0tngQZ+T7xVTg==",
+      "salt": "0WtD5S+lheXsNL5oKMekAw==",
+      "role": "user",
+      "enabled": true,
+      "createdAt": "2026-08-08T04:44:39.237Z",
+      "updatedAt": "2026-08-08T04:44:39.237Z",
+      "lastLoginAt": "2026-08-08T04:44:39.411Z"
     }
   ]
 }
