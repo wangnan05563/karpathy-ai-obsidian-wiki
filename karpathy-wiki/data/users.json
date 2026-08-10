@@ -1,147 +1,37 @@
 {
   "users": [
     {
-      "id": "d5bb622b-6774-43b0-a119-90a8e5f25e21",
+      "id": "6b26d8c2-ad3a-4c85-b646-d5d2a0271995",
       "username": "admin",
-      "passwordHash": "hmy7so/Z73gLbpAx44JkJdIP6ycbUMJiECKGgyQ8Jm/gb2soPlSc/63eiKpvRQyw3Kxo5KaksWe6UX50m4YYbw==",
-      "salt": "t4l+bC+s/KQqpXRgPd4Erg==",
+      "passwordHash": "0ET3pWRTqmzeUoK+KBq+VWcYP9jp9QRsSvohaIMV4D6iwXdRRXQEHbIHL5SEsiqnBm/7/JdTDmQrSVBtj4vo4g==",
+      "salt": "4qJ64mjsBkJgvUiSmampLw==",
       "role": "admin",
       "enabled": true,
-      "createdAt": "2026-07-31T07:31:13.914Z",
-      "updatedAt": "2026-07-31T07:31:13.914Z",
-      "lastLoginAt": "2026-08-08T04:06:49.973Z"
+      "createdAt": "2026-07-22T14:36:08.935Z",
+      "updatedAt": "2026-07-22T14:36:08.935Z",
+      "lastLoginAt": "2026-07-31T02:34:22.873Z"
     },
     {
-      "id": "298c775b-29ba-4729-bafa-5eaacfcce6f0",
+      "id": "22c928ed-69e4-49a4-af4b-03db826137a4",
       "username": "user",
-      "passwordHash": "i6mdz/ZP5PA3i+Pp/yYY7AA2oEKdAWt13ZdrhxKZW71QvPLsETzXojI1shqaU6XuD18I6t5Z3HIGRWTtL9x8Lg==",
-      "salt": "eV10C/PrkUENQwDTFdP/7A==",
+      "passwordHash": "QEeBPF58EbGcrIpIMjziuPWPJbIPJnvWpKmx34GSnOlp3NUm/Q29AOteKJ/FsodRBCFstFXAk0Y4C1EDsRqjAQ==",
+      "salt": "+D9huUfP+Arlp+17LDIC6Q==",
       "role": "user",
       "enabled": true,
-      "createdAt": "2026-07-31T07:31:13.914Z",
-      "updatedAt": "2026-07-31T07:31:13.914Z",
-      "lastLoginAt": "2026-08-05T18:43:49.216Z"
+      "createdAt": "2026-07-22T14:36:08.935Z",
+      "updatedAt": "2026-07-22T14:36:08.935Z",
+      "lastLoginAt": "2026-07-23T03:48:25.419Z"
     },
     {
-      "id": "7fde6c38-f670-4371-b1eb-3798a728e227",
+      "id": "1fcf236b-a28c-414c-8f60-1a6f63683659",
       "username": "guest",
-      "passwordHash": "cEwVASXDaJd8IOwyNLhTMwN+L0FwuWG18tF8zTSAxWDLmKWiyEnpGVkTlSVodaJvqwqbh1n88kCqkRCJfIF9dQ==",
-      "salt": "q6PcY7uIqfLV1p3g/zboqQ==",
+      "passwordHash": "yyFJ6eKz7CDq7NCglWF8mE/D/ORlaorZZJJcjtYCCIjh/zG7dfEdMavUBGzYyjbNHNoLQI7Bfwjng8EOKaI/DQ==",
+      "salt": "I2NAWmUDfrOh264mF5hPXg==",
       "role": "guest",
       "enabled": true,
-      "createdAt": "2026-07-31T07:31:13.914Z",
-      "updatedAt": "2026-07-31T07:31:13.914Z",
-      "lastLoginAt": "2026-08-06T09:17:14.146Z"
-    },
-    {
-      "id": "44b4bd8e-7352-4e9d-9e5a-d04724a9fcd1",
-      "username": "05563",
-      "passwordHash": "nAIxXWCZr4Q/GxrDJZjZA/YA1XJsHAMJH1lFRa1Ky7nMwoVeehB08NGWyiyl4ea4WFbhUxIAHxlZSlMn5xABTA==",
-      "salt": "oAlbRgRIwnHC9+L1SJGEZg==",
-      "role": "user",
-      "enabled": true,
-      "createdAt": "2026-08-05T14:12:32.398Z",
-      "updatedAt": "2026-08-05T14:12:32.398Z",
-      "lastLoginAt": "2026-08-06T05:05:50.748Z"
-    },
-    {
-      "id": "63f2b9bc-3419-4c7c-af9c-5c63dbd2c955",
-      "username": "auto_05563_1785954916",
-      "passwordHash": "2wPLIGiDrK21Ic5t0MBP1kkjpVeEy8HecGayR6GzSpsdEyDYydws/0MicJ8/8lX9rjHB3lFy0YohubFLKBRtxg==",
-      "salt": "itMqg0eC0Siw5I30bp2/RA==",
-      "role": "user",
-      "enabled": true,
-      "createdAt": "2026-08-05T18:35:34.353Z",
-      "updatedAt": "2026-08-05T18:35:34.353Z",
-      "lastLoginAt": "2026-08-05T18:35:34.474Z"
-    },
-    {
-      "id": "68be1d12-3e57-4b51-8f85-c66ac5e6e8de",
-      "username": "auto_05563_1785955021",
-      "passwordHash": "jMAxTsl9R8iRHPd5nGSq7akzWX9TfJi8icwTeW92jNpkPoNhJnGeeM4QEd+7L+XywV0QH3L6pYWJoZHCS7lEBg==",
-      "salt": "SNj166bWx5zYJFiPxcqETA==",
-      "role": "user",
-      "enabled": true,
-      "createdAt": "2026-08-05T18:37:16.089Z",
-      "updatedAt": "2026-08-05T18:37:16.089Z",
-      "lastLoginAt": "2026-08-05T18:37:16.223Z"
-    },
-    {
-      "id": "aa23c5f3-8705-4525-a75c-269d8912dc47",
-      "username": "auto_05563_1785955376",
-      "passwordHash": "+dnTpy3NWgBaTjDzYIFU4sFpR0j+WNwdBPxLHOdrZwmdevbl6oywxPVIQrjUMK2SQ0PEHf/+KMVNXXx1c/1M9w==",
-      "salt": "S2tr+oW12G2b+dpyVZdKrQ==",
-      "role": "user",
-      "enabled": true,
-      "createdAt": "2026-08-05T18:43:12.288Z",
-      "updatedAt": "2026-08-05T18:43:12.288Z",
-      "lastLoginAt": "2026-08-05T18:43:12.635Z"
-    },
-    {
-      "id": "0d38e0f4-0ea6-476e-852c-8d4d9a90f330",
-      "username": "auto_05563_1785955446",
-      "passwordHash": "UyLQYuh5tmvuOdMIXZVShLrd6yKretyUd4w9+8HBlxmz+KMAo7voGcIlNx2lNgsxAJjm5oZfeloyzm67VJRlZw==",
-      "salt": "1d88mtTgZGdZ+hV2BP8S0Q==",
-      "role": "user",
-      "enabled": true,
-      "createdAt": "2026-08-05T18:44:22.348Z",
-      "updatedAt": "2026-08-05T18:44:22.348Z",
-      "lastLoginAt": "2026-08-05T18:44:22.467Z"
-    },
-    {
-      "id": "a4cbd561-cd9d-4705-b219-184acd51e44c",
-      "username": "auto_05563_1785974583",
-      "passwordHash": "0hyAAMg5bsaqzN25ITAYkOm83neOs/pDpQPxapLtXRwCZhEVedj+UTKzSG/R5+++huuqrRBdgBllyLjkO/lCvg==",
-      "salt": "nL8XwuEUjOE3PJN6frJDKA==",
-      "role": "user",
-      "enabled": true,
-      "createdAt": "2026-08-06T00:03:22.998Z",
-      "updatedAt": "2026-08-06T00:03:22.998Z",
-      "lastLoginAt": "2026-08-06T00:03:23.124Z"
-    },
-    {
-      "id": "487d0c2f-6606-4082-813d-1537d449dde5",
-      "username": "_smoketest_1786164076",
-      "passwordHash": "Pb7KXwEmSGP5KrOwTz1UBcbf70GNaBLU7u11awFA1GmLgiKbbbAw5Sd5huLnAxSpIbMann2Wo25Gax40uiU1hg==",
-      "salt": "cOYVmRjnloSlkee41q8VCw==",
-      "role": "user",
-      "enabled": true,
-      "createdAt": "2026-08-08T04:41:18.153Z",
-      "updatedAt": "2026-08-08T04:41:18.153Z",
-      "lastLoginAt": "2026-08-08T04:41:18.408Z"
-    },
-    {
-      "id": "9720cc23-80b0-498e-a477-ef9d0bd606bf",
-      "username": "_smoke2_1786164128",
-      "passwordHash": "1ILqXoFbzL6mEd6RdbsxkEDH9ztv9JCHkClT4DSsyAMAuP4WJMn+OdmbiRcZVt5TvjkdKnv7Xz9JaZYfcomuzg==",
-      "salt": "skaBpQhAvd3kP67xcCKcPw==",
-      "role": "user",
-      "enabled": true,
-      "createdAt": "2026-08-08T04:42:10.036Z",
-      "updatedAt": "2026-08-08T04:42:10.036Z",
-      "lastLoginAt": "2026-08-08T04:42:10.199Z"
-    },
-    {
-      "id": "20417456-7e54-435a-9e65-dcf75f16d7a8",
-      "username": "_smoke3_1786164173",
-      "passwordHash": "eQUyG7XCEO5v1CBIgTkcTRlDpX/oSSo0G/FZyzuoJNwdVYdLjskPULDRPP1HGWR34mhq8Gcw/fGepSkGyKzkyw==",
-      "salt": "WSWmljaWHBLd/6q8GaBV7w==",
-      "role": "user",
-      "enabled": true,
-      "createdAt": "2026-08-08T04:42:55.131Z",
-      "updatedAt": "2026-08-08T04:42:55.131Z",
-      "lastLoginAt": "2026-08-08T04:42:55.514Z"
-    },
-    {
-      "id": "1c2a57e7-01b1-495e-b5a3-7d60d87a5524",
-      "username": "_smoke3_1786164278",
-      "passwordHash": "BGiyZDf8XXS1tZrztWtr43NlLs1hyl6/brqjfOLbTkQ3e4WJD2QUqCsOU4NtN/UaDzE39zq7p0tngQZ+T7xVTg==",
-      "salt": "0WtD5S+lheXsNL5oKMekAw==",
-      "role": "user",
-      "enabled": true,
-      "createdAt": "2026-08-08T04:44:39.237Z",
-      "updatedAt": "2026-08-08T04:44:39.237Z",
-      "lastLoginAt": "2026-08-08T04:44:39.411Z"
+      "createdAt": "2026-07-22T14:36:08.935Z",
+      "updatedAt": "2026-07-22T14:36:08.935Z",
+      "lastLoginAt": "2026-07-27T16:27:43.843Z"
     }
   ]
 }
