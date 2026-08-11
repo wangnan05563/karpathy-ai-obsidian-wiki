@@ -1013,3 +1013,207 @@
 | 语义锚点防假阳性 | `frontend_review_static_check.groups[].required_patterns` 选稳定锚点 |
 | 配置三处同步 | `_step_engine.py` 注册 + config.yaml + defaults.yaml + examples 四处一致 |
 
+# 第十四轮复盘：IndexedDB 写入前剥离 Vue/Pinia 响应式代理（前端静态守卫派生）
+
+> 基于「`frontend/src/services/userConfig.ts` 的 `saveUserConfig` 直传 Vue/Pinia `reactive` 代理 → IndexedDB 的 `structuredClone` 抛 `DataError: [object Array] could not be cloned` → 写事务 abort 被 try/catch 仅 `console.warn` 掩盖 → 四类本地配置（AI / 搜索 / 工具 / 输入框）UI 正常、刷新全丢」的真实经验复盘。
+> 与第十三轮（规范→测试派生链）互补：本轮聚焦**"前端运行时静默丢数据"类缺陷如何派生为配置化静态守卫**——把 CODING-IDB-REACTIVE-CLONE（前端 FR-081 / 后端 BR-088 review-scope）的"reactive 代理直传 IndexedDB 必须整树深拷贝"判断逻辑，落地为 `idb_reactive_clone_check` 步骤类型。
+> 全程用 **Sequential Thinking** 推导：先定位"静默"根因（proxy 无法被 structuredClone 克隆）→ 再界定窗口上下文启发式（写入点上方 N 行内是否出现深拷贝指示符）→ 最后抽象为与业务解耦、参数全配置化的扫描契约。
+> 配套新增 `idb_reactive_clone_check` 动态引擎步骤类型与 `idb_reactive_clone_check` 配置块（见 SKILL.md 与 defaults.yaml / config.yaml / examples），**零硬编码模式与路径**。
+
+## 背景：被测对象与约束
+
+被改动的是一个**前端本地配置服务层**（按用户命名空间读写 IndexedDB：AI / 搜索 / 工具 / 输入框配置）：
+
+- `frontend/src/services/userConfig.ts`：`saveUserConfig<T>(kind, userId, value)` 经 `dbPut('usercfg::<kind>::<userId>', value)` 写 IndexedDB；旧实现直接传 store 的 `reactive`/`ref` 返回值（嵌套对象仍是代理）。
+- Vue `reactive`/`ref` 返回 Proxy；IndexedDB `put` 内部 `structuredClone` 序列化 Proxy 失败 → `DataError: [object Array] could not be cloned`（或 `[object Object]`）。
+- 写发生在 IDB 事务回调里，proxy 克隆失败使事务 abort，外层 `try/catch` 仅 `console.warn` → **UI 正常、配置刷新全丢**（静默）。
+- `toRaw()` 只剥顶层、嵌套代理仍失败；`structuredClone(reactiveObj)` 同样失败——两条"伪剥离"路径都无效。
+
+约束条件：
+
+- 沙箱 **Chromium 未安装、PyYAML 未安装**，浏览器 E2E 与部分依赖 PyYAML 的脚本无法运行；此类"写入即丢"缺陷在浏览器里也**无明显报错**，单测/构建更无法捕获。
+- 全部参数（扫描目录 / 写入点模式 / 响应式指示符 / 安全深拷贝指示符 / 伪剥离模式 / severity）必须配置化，**禁止在脚本或 prompt 中硬编码**。
+- 必须与既有 `frontend_review_static_check`（双模式）保持**注册表 + 配置块**同构，新增守卫不改引擎主流程。
+
+---
+
+## 维度一：成功执行步骤（Successful Steps）
+
+| 步骤 | 操作 | 产物 / 验证点 | 复用本技能的哪个能力 |
+|------|------|---------------|----------------------|
+| 1 | **修复根因（整树深拷贝）** | `saveUserConfig` 写入前 `dbPut(key, clone(value))`，`clone<T> = JSON.parse(JSON.stringify(x))`；嵌套对象全剥代理 | CODING-IDB-REACTIVE-CLONE R-1；前端 FR-081 |
+| 2 | **隔离单测验证修复** | 9 条 `inputBoxSettings-isolation` 测试：唯一 userId 命名空间、断言写入后读取一致（直传 proxy 会失败）；沿用第九轮纪律 | `indexeddb_test_isolation` + fake-indexeddb（多轮 flush） |
+| 3 | **静态守卫防回归** | 配置化 `idb_reactive_clone_check` 扫描 IDB 写入点，核对写入值若源自 store state ref / reactive() 已整树深拷贝；判 `toRaw(` 伪剥离违规 | 新增 `idb_reactive_clone_check` 步骤类型（同构 frontend_review_static_check） |
+| 4 | **范围路由判定** | 纯前端改动（.vue / frontend/src/stores / 客户端 IndexedDB 写入）声明范围不匹配并建议走 wiki-frontend-code-review，不硬套后端规则 | 后端 BR-088（review-scope） |
+| 5 | **全量套件 + 干净重启** | `vitest run` 全绿；按第十轮端到端编排杀孤儿 :3000 → 重启 → 冒烟 | 第十轮端到端编排 |
+
+关键发现：**"静默丢配置"在浏览器/构建/单测里都无报错信号**——`structuredClone` 抛错发生在 IDB 事务内部，被 try/catch 吞成 warn。唯一的可靠信号是"运行时单测断言写入后读取一致" + "静态守卫确保每次写入点都 clone"。二者互补，缺一不可。
+
+---
+
+## 维度二：不确定性与失败点（Uncertainties / Failures）
+
+1. **proxy 克隆失败静默**：`dbPut(reactiveObj)` 的 `structuredClone` 抛 `DataError`，但事务回调外的 `try/catch` 只 `console.warn`，开发与测试都看不到失败 → 配置"看起来存了，刷新没了"。
+   - 应对：写入前 `JSON.parse(JSON.stringify(x))` 整树深拷贝为 plain object（剥尽嵌套代理）；structuredClone 对 plain object 才安全。
+2. **`toRaw()` 伪剥离误导**：团队曾以为 `toRaw(reactiveObj)` 即可，但 `toRaw` 只剥**顶层**，嵌套数组/对象仍是代理 → 仍 `[object Array] could not be cloned`。
+   - 应对：静态守卫把 `toRaw(` 列为 forbidden_unsafe_patterns（R-2），命中即违规；文档明确"必须整树深拷贝"。
+3. **`structuredClone(reactiveObj)` 误判安全**：有人改用 `structuredClone(reactiveObj)` 试图克隆，但 structuredClone 同样无法克隆 Proxy → 仍失败。
+   - 应对：把 `structuredClone(` 排除在 safe_clone_indicators 之外，由"响应式来源 + 未见安全深拷贝"分支（R-1）自然覆盖其违规。
+4. **静态守卫假阳性（primitive ref 误伤）**：`dbPut('theme', currentTheme.value)` 中 `.value` 是 primitive，本不需要 clone。若窗口内恰有 `reactive(` 又无 clone 指示符，会误报。
+   - 应对：`reactive_indicators` 收敛为对象级信号（reactive( / toRefs( / toRef( / defineStore(）+ 写入点本行 `reactive_arg_regex`（store./state./this./.value/reactiveStore）；primitive `.value` 单独不触发（需配合窗口内 reactive 来源）。仍保留 scan_window_lines / 指示符全参数化以便调阈值。
+5. **窗口上下文截断（clone 在函数更上方）**：若深拷贝指示符距写入点超过 `scan_window_lines`（默认 40），守卫漏检。
+   - 应对：`scan_window_lines` 参数化；且推荐"在写入点同行的参数里 clone（如 `dbPut(key, clone(v))`）"这一惯用法，使守卫 100% 命中；超窗口属罕见风格，漏检可经运行时单测兜底。
+
+---
+
+## 维度三：可抽象的固定流程与判断逻辑（Abstractable Fixed Process + Judgment）
+
+### 固定流程（IndexedDB 写入前剥离响应式代理）
+
+```
+任一前端源码改动触及 IndexedDB 写入点（dbPut / saveUserConfig / idbPut / store.put / transactions.add）
+  ├─ 评审/测试：写入值若源自 store state ref / reactive()
+  │     → 必须写入前整树深拷贝（JSON.parse(JSON.stringify(x)) / clone(x)）（R-1）
+  │     → 禁 toRaw( 当深剥离（R-2）；禁 structuredClone(reactiveObj)（R-3）
+  │     → 静态守卫 idb_reactive_clone_check 落地（窗口上下文启发式，参数全配置）
+  │     → 真实写入单测兜底（indexeddb_test_isolation：断言写入后读取一致）
+  ├─ 封装函数内部统一 clone（防御性）：saveUserConfig 内部 dbPut 前 clone，调用方无需感知（FR-081-4 Suggestion）
+  ├─ 纯前端改动（.vue / frontend/src/stores / 客户端 IDB 写入）
+  │     → 范围判定走 wiki-frontend-code-review，不硬套后端规则（BR-088）
+  └─ 收口：全量套件 → 干净重启（杀孤儿 :3000）→ 冒烟
+```
+
+### 判断逻辑（可参数化的核心决策，经 Sequential Thinking 推导）
+
+- **S1 — proxy 无法被 structuredClone 克隆是根因**：Vue `reactive`/`ref` 返回 Proxy，IndexedDB `put` 内部 `structuredClone` 序列化 Proxy 必抛 `[object Array] could not be cloned`；读写 IDB 的 Proxy 克隆失败事务 abort → 必须写入前整树深拷贝为 plain object（R-1）。
+- **S2 — 伪剥离判违规**：`toRaw(` 仅剥顶层（R-2）、`structuredClone(reactiveObj)` 同样失败（R-3）；二者均不能替代整树深拷贝，静态守卫列 forbidden / 排除出 safe_clone。
+- **S3 — 窗口上下文启发式**：对每个 IDB 写入点，取其上方 `scan_window_lines` 行 + 本行作上下文窗口，检查是否含 safe_clone_indicators；含响应式来源（reactive_indicators / reactive_arg_regex）但无安全深拷贝 → 命中 R-1 违规。**阈值全参数化**（scan_window_lines / 指示符）。
+- **S4 — 静态守卫与运行时单测互补**：静态守卫是防回归的廉价门禁（不依赖浏览器/服务），但窗口截断/primitive ref 边界需运行时单测（`indexeddb_test_isolation`）兜底——单测断言"写入后读取一致"。
+- **S5 — 范围路由判定**：纯前端改动（含客户端 IndexedDB 写入）声明范围不匹配并建议走 wiki-frontend-code-review，禁止把"reactive-proxy-in-IDB 静默丢配置"误当后端关键写问题（BR-088，对齐第十三轮 review-scope）。
+- **S6 — 配置化优先（与第十三轮一致）**：新增守卫只在 `_step_engine.py` 注册 handler（registry 模式，只读 cfg）+ YAML 配置块 + examples；不改引擎主流程、不硬编码模式/路径。
+
+---
+
+## 维度四：适用与不适用场景（Applicability）
+
+### 适用场景
+
+- **前端经 IndexedDB 写入 Vue/Pinia 对象状态**：`services/*UserConfig*.ts` / `*store*.ts` 经 `dbPut` / `saveUserConfig` / `idbPut` / `store.put` / `transactions.add` 写代理对象；用 `idb_reactive_clone_check` 防回归，对应 CODING-IDB-REACTIVE-CLONE / FR-081。
+- **运行时静默丢数据类缺陷**：类型检查/构建/浏览器 E2E 都无报错信号（try/catch 吞错）、仅"刷新全丢"的缺陷，需静态守卫 + 真实写入单测双保险。
+- **沙箱无浏览器 / 无 PyYAML 环境**：`idb_reactive_clone_check` 纯 grep 源码、无需启动服务或浏览器，回退成本低。
+- **多用户本地配置命名空间**：与第七轮 BYOK（`usercfg::<kind>::<userId>`）配合，确保每用户配置既隔离又不被 proxy 克隆失败静默丢弃。
+
+### 不适用场景
+
+- **localStorage / sessionStorage 写入**：经 JSON 序列化，Proxy 会被 JSON.stringify 自动剥为 plain（不会抛错），无需此守卫；仅 IndexedDB（structuredClone 路径）需。
+- **IDB 读取返回**：IndexedDB `get` 返回的是 plain object，不存在 proxy 克隆问题；守卫只针对**写入**路径。
+- **已是 plain object 的写入**：字面量 / 从 `JSON.parse` 或 `toRaw` 全树后的普通对象写入 IDB，无需 clone；守卫靠 reactive_indicators 收敛，不误伤 plain 写入。
+- **纯后端 / 纯服务端落盘**：不涉及 Vue proxy，走 `backend_logic_unit_test` / `backend_review_static_check`；IndexedDB 写入属前端客户端，由前端技能评审（BR-088）。
+- **纯前端 UI 动画 / 交互变更（无 IDB 写入）**：本守卫不适用，应走既有 Playwright 浏览器测试。
+
+---
+
+## 与既有协议 / 规则衔接
+
+| 本复盘要素 | 衔接的配置 / 协议 / 规则 |
+|-----------|--------------------------|
+| IDB 写入前整树深拷贝 | 新增 `idb_reactive_clone_check` 步骤类型 + `idb_reactive_clone_check` 配置块（config.yaml / defaults.yaml / examples）；CODING-IDB-REACTIVE-CLONE R-1 / FR-081-1 |
+| 禁 toRaw( 伪剥离 | `forbidden_unsafe_patterns: [toRaw(]` → CODING-IDB-REACTIVE-CLONE R-2 / FR-081-2 |
+| 禁 structuredClone(reactiveObj) | 排除出 safe_clone_indicators，由 R-1 分支覆盖 → CODING-IDB-REACTIVE-CLONE R-3 / FR-081-3 |
+| 封装函数内部统一 clone | `saveUserConfig` 内部 dbPut 前 clone → FR-081-4 Suggestion |
+| 真实写入单测兜底 | `indexeddb_test_isolation` + fake-indexeddb（第九轮）；断言写入后读取一致 |
+| 范围路由判定 | 后端 BR-088（review-scope）/ 第十三轮"静态守卫双模式" |
+| 配置化 / 注册表同构 | 第十三轮 J-CONFIG-FIRST；`_step_engine.py` 注册 + config.yaml + defaults.yaml + examples 四处一致 |
+| 端到端收口 | 第十轮 `spa_live_deploy_check` / `service_manage` / 杀孤儿 :3000 干净重启 |
+
+# 第十五轮复盘：后端编码标准静态守卫扩展（BR-089~092）——"规范即配置"派生链的收口泛化
+
+> 与第十三轮（规范→测试派生链：从 CODING 规则派生 frontend_review_static_check）、第十四轮（前端派生链：reactive-proxy-in-IDB → idb_reactive_clone_check）互补：本轮聚焦**后端侧 4 条历史事故提炼规范的测试派生收口**——把 `CODING-ROUTE-RETURN-COMPLETENESS` / `CODING-RESPONSE-HOOK-SAFE` / `CODING-COMPRESSION-DEFAULT-OFF` / `CODING-USER-STORE-INIT`（对应后端 BR-089~092）的判断逻辑，扩展进既有 `backend_review_static_check` 步骤类型（registry 模式，零硬编码）的 `groups[]`，实现"新增后端规范 = 在 YAML 加一组、不改引擎"的泛化收口。
+>
+> 本轮含 **with Sequential Thinking** 标注：维度三的判断逻辑（S1~S6）经结构化推导得出，明确"派生映射 / 守卫只标需人工复核的构造 / 参数全配置 / 注册表复用 / 跨技能编号一致 / safe-delete 合规"六条可复用决策。
+
+## 维度一：成功执行步骤（Successful Steps）
+
+| 步骤 | 操作 | 产物 / 验证点 | 复用本技能的哪个能力 |
+|------|------|---------------|----------------------|
+| 1 | **事故→规范→BR 映射** | 4 起历史事故（登录漏 return 双发响应 / compression onSend 钩子挂死 / 压缩默认注册 / users.json 空壳）各提炼 1 条 CODING 规则，顺延编号为 BR-089~092（避免与既有 BR-088 冲突） | wiki-code-dev CODING-*；wiki-backend-code-review BR-089~092 |
+| 2 | **扩展静态守卫组** | 在 `backend_review_static_check.groups[]` 新增 4 组：`route_return_completeness` / `response_hook_safe` / `compression_default_off` / `user_store_init`，只标"需人工复核的构造"（reply.code( / onSend 钩子 / register(compress / loadUsers 等） | 既有 `backend_review_static_check` 步骤类型（registry，_step_engine.py 已支持 groups[]） |
+| 3 | **零硬编码参数化** | 4 组全部 `patterns` / `scan_dirs` / `file_glob` / `severity` / `regex` / `rule_ref` 来自配置；新增后端规范只需在 YAML 加一组，引擎主流程不变 | J-CONFIG-FIRST（第十三轮）；`_step_engine.py` registry 模式 |
+| 4 | **三处 YAML 同步** | `config.yaml` / `defaults.yaml` / `examples/config.enabled.example.yaml` 同步新增 4 组（examples 此前缺 `backend_review_static_check` 段，本轮补齐并 `enabled: true`） | 第十三轮"配置四处一致"纪律 |
+| 5 | **版本表 + 本复盘闭环** | SKILL.md 版本表置顶 `v2.13.0`；本第十五轮 4 维度复盘收口 | 第十轮端到端编排（版本表即门禁记录） |
+
+关键发现：**静态守卫无法"确定性"检出这四类缺陷**（是否漏 return、钩子是否 fail-open、压缩是否条件注册、加载是否兜底——都需要 AST/语义判断），只能"标出需要人工复核的高风险构造"。因此这 4 组一律 `severity: warn` + 提示语要求逐分支/逐钩子人工确认，不作为阻断。这与 `swallowed_critical_write` 组（标 saveUsers 等须复核是否吞错）的既有范式一致。
+
+---
+
+## 维度二：不确定性与失败点（Uncertainties / Failures）
+
+1. **漏 return 无法静态判定**：`reply.code(` 既出现在"漏 return"分支，也出现在"已 return reply.code(...)"的正确分支。纯 grep 无法区分 → 守卫只能标出所有 `reply.code(/reply.status(` 供人工逐分支核对。
+   - 应对：`route_return_completeness` 组 `severity: warn`，message 明确要求"逐分支确认已显式 return/throw"。
+2. **钩子可能本就 fail-open**：`setSerializer` / `contentTypeParser` 等响应钩子在很多项目里是安全且必要的，标出不等于违规。
+   - 应对：`response_hook_safe` 组 `warn` + 提示"确认内部 try/catch fail-open 且无 await 重计算"，由评审者判断是否真有风险。
+3. **压缩可能已在 if 内**：`register(compress` 命中不代表"无条件注册"——它可能已包在 `if (config.compress.enable)` 内。
+   - 应对：`compression_default_off` 组 `warn` + 提示"确认默认关闭且条件注册"，人工看上下文。
+4. **JSON.parse( 误伤面广**：`user_store_init` 组标 `JSON.parse(` 会命中一切 JSON 解析（含正常业务），远超"关键数据加载兜底"范围。
+   - 应对：pattern 同时含 `loadUsers` / `loadConfig` 作为更精准锚点 + 整体 `warn`；提示"确认区分 not-found 与 corrupt 并兜底回退默认 + 备份 + log.warn"。
+5. **safe-delete 沙箱对静态守卫的影响**：静态守卫步骤是**纯 grep 读源码**（不写不删），天然符合 safe-delete 钩子 fail-closed 工作模式（仅放行新建目录整目录写入 / 移动到全新路径）；配置 YAML 的编辑属"向既有文件写新内容"（Edit/Write），非 unlink/rm/覆盖式重命名，沙箱内放行。故本扩展**无 safe-delete 风险**，也不引入跨进程 TCP 冒烟依赖（守卫在引擎进程内完成）。
+
+---
+
+## 维度三：可抽象的固定流程与判断逻辑（Abstractable Fixed Process + Judgment）
+
+### 固定流程（从历史事故派生后端静态守卫组）
+
+```
+任一历史事故经复盘确认根因
+  ├─ wiki-code-dev 提炼 1 条 CODING-* 规则（Scope / Rules / Configuration Parameters 三段式）
+  ├─ wiki-backend-code-review 顺延编号 BR-08x（避免与既有编号冲突）
+  │     → SKILL.md Quick-Check + .rules-index + historical-incidents + review-config + references/ rule 文件 五处一致
+  ├─ wiki-auto-testing 扩展 backend_review_static_check.groups[]
+  │     → 仅标"需人工复核的高风险构造"（不追求确定性判定），severity=warn
+  │     → patterns / scan_dirs / file_glob / severity / regex / rule_ref 全来自 YAML（J-CONFIG-FIRST）
+  │     → 复用 _step_engine.py 既有 registry handler，不改引擎主流程
+  ├─ 三处 YAML 同步（config.yaml / defaults.yaml / examples/config.enabled.example.yaml）
+  └─ 收口：SKILL.md 版本表置顶 vX.Y.0 + 本复盘追加一轮 4 维度（with Sequential Thinking）
+```
+
+### 判断逻辑（可参数化的核心决策，经 Sequential Thinking 推导）
+
+- **S1 — 事故→规范→BR 1:1 映射且编号顺延**：每起事故对应恰好一条 CODING 规则与一条 BR，编号顺延（本轮回填 BR-089~092，接在 BR-088 review-scope 之后），避免与既有 `BR-ESM-04` / `BR-076~088` 冲突。映射表须在三技能间一致。
+- **S2 — 静态守卫只标"需人工复核的构造"，不追求确定性判定**：漏 return / 钩子未 fail-open / 压缩无条件注册 / 加载未兜底均属语义缺陷，纯 grep 无法判定；守卫职责是"标出高风险构造 + 提示人工逐分支核对"，故一律 `warn`。这与第十三/十四轮"静态守卫是廉价门禁、运行时单测兜底"的定位一致。
+- **S3 — 参数全配置、零硬编码（J-CONFIG-FIRST）**：`patterns` / `scan_dirs` / `file_glob` / `severity` / `regex` / `rule_ref` 全在 YAML；新增后端规范 = 加一组，引擎主流程与 `_step_engine.py` 不动。泛化能力来自 registry 模式而非特判。
+- **S4 — 复用既有 registry handler，无引擎代码变更**：`backend_review_static_check` 的 handler 本就遍历 `groups[]` 做 grep，新增 4 组自动被覆盖——这是第十三轮建立的"配置化步骤类型泛化"的直接收益，证明派生链已闭环。
+- **S5 — 跨技能编号一致性是硬约束**：BR-089~092 必须同时出现在 wiki-backend-code-review 的 SKILL.md / .rules-index.md / historical-incidents.md / review-config.md / references/ 5 处，且 wiki-auto-testing 的 `rule_ref` 与之对齐；Task #21 还要镜像 `.trae` 副本。编号漂移会让"规范→测试"链路断点。
+- **S6 — safe-delete 合规：守卫读源码、配置写新内容**：静态守卫步骤纯 grep（读），不触发 safe-delete 拦截；YAML 编辑是 Edit/Write 既有文件（非 unlink/rm/重命名已存在），沙箱放行。故本扩展在 safe-delete + 跨进程 TCP 拦截双重约束下均可落地，无需额外冒烟。
+
+---
+
+## 维度四：适用与不适用场景（Applicability）
+
+### 适用场景
+
+- **Fastify/TS 后端存在 4 类潜在缺陷**：路由多分支漏 return、全局响应钩子未 fail-open、压缩中间件硬编码注册、关键数据文件加载未兜底——用 `backend_review_static_check` 4 组做 PR 级门禁，零运行时依赖。
+- **已采纳对应 CODING 规则的项目**：任何把 `CODING-ROUTE-RETURN-COMPLETENESS` 等纳入编码规范的项目，可直接复用这 4 组（pattern 可按项目微调，仍走配置）。
+- **多项目泛化**：`_step_engine.py` registry + YAML 配置块天然跨项目；新后端项目接入只需改 `scan_dirs` / `file_glob`，逻辑不变。
+
+### 不适用场景
+
+- **非 Fastify 后端（如 Express/Koa）**：`reply.code(` 模式不会命中（Express 用 `res.status().json()`），`route_return_completeness` 组自然空转；如需覆盖须改 pattern（仍走配置，不硬编码引擎）。
+- **纯前端改动**：这 4 组是后端守卫，前端对应为 FR-082/FR-083（认证超时兜底 / loading 复位），应由 wiki-frontend-code-review 评审（BR-088 review-scope 范围路由判定）。
+- **构造本就合规的情况**：钩子已 fail-open、压缩已条件注册等——守卫 `warn` 仅提示，评审者确认后忽略，不阻断 CI。
+- **需要确定性判定的场景**：若要求"自动确认漏 return"，纯 grep 守卫力不从心，须升级为 AST/语义分析（超出本轮静态守卫范围，属未来增强）。
+
+---
+
+## 与既有协议 / 规则衔接
+
+| 本复盘要素 | 衔接的配置 / 协议 / 规则 |
+|-----------|--------------------------|
+| 4 起事故→4 条 CODING 规则 | wiki-code-dev `references/`：route-return-completeness / response-hook-safe / compression-default-off / user-store-init 四个 `CODING-*` rule 文件 |
+| 顺延编号 BR-089~092 | wiki-backend-code-review SKILL.md / .rules-index.md / historical-incidents.md / review-config.md / references/ 五处一致 |
+| 扩展 4 组静态守卫 | `backend_review_static_check.groups[]`：`route_return_completeness` / `response_hook_safe` / `compression_default_off` / `user_store_init`（v2.13.0） |
+| 零硬编码 / 参数全配置 | J-CONFIG-FIRST（第十三轮）；`config.yaml` / `defaults.yaml` / `examples/config.enabled.example.yaml` 三处同步 |
+| 复用 registry handler | `_step_engine.py` 既有 `backend_review_static_check` handler（遍历 groups[]），无引擎代码变更 |
+| 跨进程/safe-delete 合规 | 第十二/十轮 safe-delete 钩子 fail-closed 工作模式；守卫纯 grep 读源码、配置写新内容，均无风险 |
+| 端到端收口 | 第十轮 `spa_live_deploy_check` / `service_manage` / 杀孤儿 :3000 干净重启；SKILL.md 版本表 v2.13.0 |
+

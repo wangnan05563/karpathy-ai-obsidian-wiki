@@ -268,6 +268,20 @@
 | `byok_per_user_override.override_must_be_pure` | `true` | 覆盖逻辑须纯函数（无副作用、不污染服务端共享 config） |
 | `byok_per_user_override.empty_override_falls_back` | `true` | 空 / 默认工具配置视为未提供覆盖，回退服务端共享配置（不清空） |
 
+## 服务端权限隔离
+
+> 对应 references/isolation-guard-rule.md（CODING-ISOLATION-01 / CODING-ISOLATION-02）。全局 `preHandler` 只注入 `currentUser` 不拒绝未认证请求，导致大量写接口零守卫（游客可越权写 / 篡改共享密钥）；且限流 / 审计 IP 若只用 `request.ip`（代理下为代理 IP）或只用 `X-Forwarded-For`（可伪造）会误判或被绕过。整改引入 auth 感知守卫工厂（单租户直通）+ 服务端 ownerId 盖章（不信任客户端 body）+ 限流复合键。规则文件仅描述模式，所有参数集中管理。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `isolation_guard.enabled` | `true` | 是否启用服务端权限隔离审查（auth 感知守卫 + ownerId 盖章 + 限流复合键） |
+| `isolation_guard.admin_permission` | `users` | `requireAdmin` 校验的权限键（管理员角色），`requirePermission(permission, ttl)` 入参 |
+| `isolation_guard.pass_through_when_auth_disabled` | `true` | `auth.enabled=false`（单租户）时守卫一律放行，保持"关认证=全管理员"部署形态 |
+| `isolation_guard.guard_factory` | `createIsolationGuards` | 守卫工厂函数名（auth 感知：enabled=false 直通） |
+| `isolation_guard.required_on_write_endpoints` | `requireAdmin` | 写端点默认注入的守卫（共享配置 / 清理 / 归档 / 隧道 / vault / schema / 工具配置 / ingest 配置等） |
+| `isolation_guard.client_ip_composite_key` | `request.ip\|xffFirst` | 限流 / 审计 IP 复合键模板（socket 对端 IP 不可伪造 + XFF 首段），防 XFF 伪造绕过 |
+| `isolation_guard.trust_proxy` | `false` | 是否信任代理（保持 false 防 XFF 伪造绕过限流） |
+
 ## 流式回答增量持久化与续答
 | `streaming_resume.enabled` | `true` | 是否启用流式回答增量持久化与续答审查（前端流式 UI） |
 | `streaming_resume.persist_debounce_ms` | `1500` | 流式分片增量落盘防抖毫秒 |
@@ -513,3 +527,70 @@
 | `idb_reactive_clone.forbidden_unsafe_patterns` | `toRaw(,structuredClone(` | 命中即判违规的"伪剥离"写法（toRaw 只剥顶层 / structuredClone 无法克隆代理） |
 | `idb_reactive_clone.recommended_clone` | `JSON.parse(JSON.stringify(x))` | 推荐深拷贝范式（纯数据模型）；含 Date/函数/undefined 改用 toRaw+递归 |
 | `idb_reactive_clone.severity` | `critical` | 直传 reactive 代理导致静默丢配置的违规级别 |
+
+## 认证/异步请求超时兜底（CODING-AUTH-REQUEST-TIMEOUT）
+
+> 对应 references/auth-request-timeout-rule.md（R-1~R-2 → FR-082）。登录/会话校验等关键异步请求必须带 AbortController + 可配置超时，超时须明确文案且可重试，禁无超时悬挂导致按钮卡死。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `auth_request_timeout.enabled` | `true` | 启用认证/异步请求超时兜底审查 |
+| `auth_request_timeout.timeout_ms` | `30000` | 关键请求超时阈值（从配置读取，禁止硬编码字面量） |
+| `auth_request_timeout.margin_multiplier` | `1.5` | 前端阈值相对后端超时的余量倍数（前端 > 后端，避免提前断） |
+| `auth_request_timeout.required_pattern` | `AbortController\|AbortSignal.timeout` | 认证/关键请求须出现的超时包裹模式 |
+| `auth_request_timeout.severity` | `critical` | 无超时悬挂导致按钮卡死的违规级别 |
+
+## 异步操作 loading 复位（CODING-AUTH-LOADING-RESET）
+
+> 对应 references/auth-loading-reset-rule.md（R-1~R-2 → FR-083）。登录/提交等进入等待态的交互须在 try/finally 复位 loading，覆盖成功/失败/超时/abort 全路径，禁永久「登录中」灰显。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `auth_loading_reset.enabled` | `true` | 启用异步 loading 复位审查 |
+| `auth_loading_reset.set_pattern` | `loading\s*=\s*true\|submitting\s*=\s*true` | 进入等待态的赋值模式 |
+| `auth_loading_reset.reset_required_in` | `finally` | 复位语句须出现在 finally 或 .finally 中 |
+| `auth_loading_reset.severity` | `major` | 遗漏复位导致按钮卡死的违规级别 |
+
+## 路由 return 完整性（CODING-ROUTE-RETURN-COMPLETENESS）
+
+> 对应 references/route-return-completeness-rule.md（R-1~R-2 → BR-089）。Fastify 路由 handler 每个分支必须 return/reply，漏 return 落入函数末尾触发双发响应 ERR_STREAM_WRITE_AFTER_END / 前端超时。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `route_return_completeness.enabled` | `true` | 启用路由 return 完整性审查 |
+| `route_return_completeness.reply_api` | `reply.send,reply.code,reply.status` | 视为已响应的 reply 调用 |
+| `route_return_completeness.severity` | `critical` | 漏 return 导致双发响应 / 前端超时的违规级别 |
+
+## 响应/序列化钩子安全（CODING-RESPONSE-HOOK-SAFE）
+
+> 对应 references/response-hook-safe-rule.md（R-1~R-2 → BR-090）。onSend/onResponse 等全局钩子不得阻塞/抛错，须 fail-open（异常原样放行），否则挂死所有 API。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `response_hook_safe.enabled` | `true` | 启用响应钩子安全审查 |
+| `response_hook_safe.hook_names` | `onSend,onResponse,setSerializer,contentTypeParser` | 视为全局响应钩子的注册点 |
+| `response_hook_safe.require_fail_open` | `true` | 钩子主体须被 try/catch 包裹且异常放行 |
+| `response_hook_safe.severity` | `critical` | 钩子挂死全量 API 的违规级别 |
+
+## 响应压缩默认关闭（CODING-COMPRESSION-DEFAULT-OFF）
+
+> 对应 references/compression-default-off-rule.md（R-1~R-2 → BR-091）。@fastify/compress 等必须默认关闭、条件注册，阈值（min 字节数/级别）参数化；与 CODING-RESPONSE-HOOK-SAFE 互补。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `compression.enabled` | `false` | 压缩默认关闭（显式开启才注册） |
+| `compression.threshold_bytes` | `1024` | 小于此字节数的响应不压缩（配置化） |
+| `compression.level` | `6` | zlib 压缩级别（配置化） |
+| `compression.disable_env` | `WIKI_DISABLE_COMPRESS` | 全局硬关闭开关环境变量名 |
+| `compression.severity` | `major` | 压缩无条件注册/硬编码阈值的违规级别 |
+
+## 用户库初始化完整性（CODING-USER-STORE-INIT）
+
+> 对应 references/user-store-init-rule.md（R-1~R-2 → BR-092）。users.json 等加载须区分 not-found 与 corrupt 并备份回退默认，禁静默清零；首次运行须写出合法非空 JSON。与 CODING-CRITICAL-WRITE-NO-SWALLOW / CODING-FILE-CORRUPTION-GUARD 互补。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `user_store_init.enabled` | `true` | 启用用户库初始化完整性审查 |
+| `user_store_init.critical_files` | `users.json,config.json` | 须保证非空默认的关键数据文件 |
+| `user_store_init.backup_on_corrupt` | `true` | 损坏/空壳文件须先备份再回退 |
+| `user_store_init.severity` | `critical` | 空壳/损坏未兜底导致登录失败的违规级别 |

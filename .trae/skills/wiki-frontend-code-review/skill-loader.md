@@ -67,6 +67,8 @@
 | FR79 | Button Style | [references/button-style-frontend-rule.md](references/button-style-frontend-rule.md) | — | *.vue (含 .edit-btn.confirm / .edit-btn.cancel / 确认 / 取消 / type="primary" / 主题变量 / 成对按钮) | 0 | 3 |
 | FR80 | Editbox Width | [references/editbox-width-frontend-rule.md](references/editbox-width-frontend-rule.md) | — | views/Query.vue, *.vue (含 .msg-content-wrapper.editing / .msg-edit / flex-end / align-items:stretch / width:100% / 编辑态撑满) | 0 | 3 |
 | FR81 | IDB Reactive Clone | [references/idb-reactive-clone-frontend-rule.md](references/idb-reactive-clone-frontend-rule.md) | — | services/*UserConfig*.ts, *store*.ts (含 dbPut / saveUserConfig / idbPut / store.put / reactive / toRaw / structuredClone / [object Array] could not be cloned) | 3 | 4 |
+| FR82 | Auth Request Timeout | [references/auth-request-timeout-frontend-rule.md](references/auth-request-timeout-frontend-rule.md) | — | stores/auth.ts, *store*.ts, api/auth.ts, views/Login.vue (含 login / fetch / AbortController / AbortSignal.timeout / 登录中 / 登录超时 / 超时) | 2 | 0 |
+| FR83 | Auth Loading Reset | [references/auth-loading-reset-frontend-rule.md](references/auth-loading-reset-frontend-rule.md) | — | views/Login.vue, *store*.ts, *.vue (含 loading=true / submitting=true / try / finally / 登录中 / 灰显) | 2 | 0 |
 
 ## 2. Quick Routing Table
 
@@ -128,6 +130,8 @@
 | *.vue + .edit-btn.confirm / .edit-btn.cancel / 确认 / 取消 / type="primary" / 成对按钮 / 主题变量 | button-style-frontend-rule (FR79) | theming (if 主题色), icon-and-navigation-rule (if 图标按钮) |
 | *.vue + .msg-content-wrapper.editing / .msg-edit / flex-end / align-items:stretch / width:100% / 编辑态撑满 / 输入框宽度 | editbox-width-frontend-rule (FR80) | responsive-layout (if 响应式) |
 | services/*UserConfig*.ts / *store*.ts + dbPut / saveUserConfig / idbPut / store.put / reactive( / toRaw( / structuredClone( / [object Array] could not be cloned / 深拷贝 / clone( | idb-reactive-clone-frontend-rule (FR81) | persistence-boundary-rule (if 客户端持久化), runtime-data-privacy-frontend-rule (FR63, if IndexedDB 命名空间) |
+| stores/auth.ts / *store*.ts / api/auth.ts + login / fetch / AbortController / AbortSignal.timeout / 登录中 / 登录超时 | auth-request-timeout-frontend-rule (FR82) | async-reliability-frontend-rule (AR-1~AR-4, if SSE/定时器) |
+| views/Login.vue / *.vue + loading=true / submitting=true / try / finally / 登录中 / 灰显 | auth-loading-reset-frontend-rule (FR83) | — |
 
 ## 3. Keyword Scanning Guide
 
@@ -201,3 +205,5 @@ ormalize |
 | button-style-frontend-rule | .edit-btn.confirm, .edit-btn.cancel, 确认, 取消, type="primary", 成对按钮, 主题变量, el-button |
 | editbox-width-frontend-rule | .msg-content-wrapper.editing, .msg-edit, flex-end, align-items:stretch, width:100%, 编辑态撑满, 输入框宽度, 编辑框 |
 | idb-reactive-clone-frontend-rule | dbPut, saveUserConfig, idbPut, store.put, reactive(, toRaw(, structuredClone(, [object Array] could not be cloned, JSON.parse(JSON.stringify, 深拷贝, clone(, 静默丢配置 |
+| auth-request-timeout-frontend-rule | login, fetch, AbortController, AbortSignal.timeout, 登录中, 登录超时, 超时, 重试, await fetch |
+| auth-loading-reset-frontend-rule | loading, submitting, try, finally, 登录中, 灰显, 复位, resetLoading |

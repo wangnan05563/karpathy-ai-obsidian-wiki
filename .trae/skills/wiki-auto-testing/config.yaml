@@ -2260,6 +2260,44 @@ backend_review_static_check:
       message: "发现 execFile 调用，确认已 await 或改用 execFileSync（异步当同步是 BR-075 类缺陷）"
       rule_ref: "BR-075 / CODING-CHILD-PROCESS-SYNC"
       severity: "warn"
+    - name: "route_return_completeness"
+      patterns:
+        - "reply.code("
+        - "reply.status("
+      regex: false
+      message: "发现 reply.code( / reply.status( 响应构造，须逐分支确认已显式 return/throw；漏 return 致 Fastify 隐式 reply.send 双发响应 / 前端超时（BR-089 / CODING-ROUTE-RETURN-COMPLETENESS）"
+      rule_ref: "BR-089 / CODING-ROUTE-RETURN-COMPLETENESS"
+      severity: "warn"
+    - name: "response_hook_safe"
+      patterns:
+        - "addHook('onSend'"
+        - "addHook(\"onSend\""
+        - "addHook('onResponse'"
+        - "addHook(\"onResponse\""
+        - "setSerializer"
+        - "contentTypeParser"
+      regex: false
+      message: "发现全局响应钩子（onSend/onResponse/setSerializer/contentTypeParser），须确认内部 try/catch fail-open（异常原样放行）且无 await 重计算阻塞全量响应（BR-090 / CODING-RESPONSE-HOOK-SAFE）"
+      rule_ref: "BR-090 / CODING-RESPONSE-HOOK-SAFE"
+      severity: "warn"
+    - name: "compression_default_off"
+      patterns:
+        - "register(compress"
+        - "@fastify/compress"
+        - "fastify-compress"
+      regex: false
+      message: "发现压缩中间件注册，须确认默认关闭且条件注册（if config.compress.enable），阈值/级别/白名单来自配置而非硬编码（BR-091 / CODING-COMPRESSION-DEFAULT-OFF）"
+      rule_ref: "BR-091 / CODING-COMPRESSION-DEFAULT-OFF"
+      severity: "warn"
+    - name: "user_store_init"
+      patterns:
+        - "loadUsers"
+        - "loadConfig"
+        - "JSON.parse("
+      regex: false
+      message: "发现关键数据加载（loadUsers/loadConfig/JSON.parse），须确认区分 not-found 与 corrupt/空壳并兜底回退默认 + 备份原文件 + log.warn，禁静默清零（BR-092 / CODING-USER-STORE-INIT）"
+      rule_ref: "BR-092 / CODING-USER-STORE-INIT"
+      severity: "warn"
   # 超时（毫秒，配置契约保留）
   timeout_ms: 120000
 
@@ -2481,3 +2519,48 @@ indexeddb_test_isolation:
     - "indexedDB.deleteDatabase"
   # fake-indexeddb 异步落盘（onsuccess 是 macrotask）须 flush 的轮数（单次 flush 不足）
   flush_rounds: 10
+
+# --- IndexedDB 写入前剥离响应式代理静态守卫（第十四轮复盘，本项目默认值） ---
+# 配置化扫描前端源码中的 IndexedDB 写入点，核对写入值若源自 store state ref / reactive()
+# 是否在写入前整树深拷贝，并对"伪剥离"写法（toRaw( / structuredClone(reactiveObj)）判违规。
+# 把 CODING-IDB-REACTIVE-CLONE（前端 FR-081）落地为可执行静态检查；路径已对齐本项目 karpathy-wiki。
+idb_reactive_clone_check:
+  # 是否启用 IndexedDB 写入前响应式代理剥离静态守卫
+  enabled: false
+  # 扫描目录（相对项目根；本项目前端在 karpathy-wiki/frontend/src）
+  scan_dirs:
+    - "karpathy-wiki/frontend/src"
+  # 文件 glob（TS / Vue 源码）
+  file_glob: "*.{ts,vue}"
+  # IndexedDB 写入点模式（命中即须核对入参是否已深拷贝；userConfig.ts 的 saveUserConfig 已修复为 clone）
+  scan_patterns:
+    - "dbPut"
+    - "saveUserConfig"
+    - "idbPut"
+    - "store.put"
+    - "transactions.add"
+  # 响应式来源指示符（窗口内出现即视为写入值可能为 Vue/Pinia 代理对象）
+  reactive_indicators:
+    - "reactive("
+    - "toRefs("
+    - "toRef("
+    - "defineStore("
+  # 写入点本行的响应式来源正则（store/state/this 访问、.value 取 ref、reactiveStore）
+  reactive_arg_regex: "(store\\.|state\\.|this\\.|\\.value\\b|reactiveStore)"
+  # 安全深拷贝指示符：写入前对 reactive 值整树深拷贝的范式（clone<T> / JSON.parse(JSON.stringify)）
+  safe_clone_indicators:
+    - "JSON.parse(JSON.stringify"
+    - "clone("
+    - "deepClone("
+    - "cloneDeep("
+  # 伪剥离模式（toRaw( 仅剥顶层、命中即违规）
+  forbidden_unsafe_patterns:
+    - "toRaw("
+  # 写入点上方扫描窗口行数
+  scan_window_lines: 40
+  # 缺失安全深拷贝的 severity（直传 reactive 代理导致静默丢配置，critical）
+  severity_missing_clone: "error"
+  # 伪剥离写法的 severity
+  severity_unsafe: "error"
+  # 关联规则引用
+  rule_ref: "FR-081 / CODING-IDB-REACTIVE-CLONE"

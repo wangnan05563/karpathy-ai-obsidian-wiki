@@ -156,6 +156,51 @@ route_response_branch_coverage:
         content: ""
       expected_status: 400
 
+backend_review_static_check:
+  # 启用：后端编码标准静态守卫（第十五轮复盘 / BR-089~BR-092）
+  enabled: true
+  # 扫描后端源码目录（本项目对齐 karpathy-wiki/api/src）
+  scan_dirs:
+    - "karpathy-wiki/api/src"
+  file_glob: "*.ts"
+  # 内置四组：路由 return 完整性 / 响应钩子安全 / 压缩默认关闭 / 用户库初始化完整性
+  # 命中即提示人工复核对应分支/钩子/注册/加载是否已按规范兜底（全部参数来自配置，零硬编码）。
+  groups:
+    - name: "route_return_completeness"
+      description: "reply.code(/reply.status( 响应构造须逐分支显式 return/throw，漏 return 致双发响应"
+      severity: "warn"
+      rule_ref: "BR-089"
+      patterns:
+        - "reply.code("
+        - "reply.status("
+    - name: "response_hook_safe"
+      description: "全局响应钩子（onSend/onResponse/setSerializer/contentTypeParser）须 try/catch fail-open 且无 await 重计算"
+      severity: "warn"
+      rule_ref: "BR-090"
+      patterns:
+        - "addHook('onSend'"
+        - "addHook(\"onSend\""
+        - "addHook('onResponse'"
+        - "addHook(\"onResponse\""
+        - "setSerializer"
+        - "contentTypeParser"
+    - name: "compression_default_off"
+      description: "压缩中间件须默认关闭且条件注册，阈值/级别来自配置而非硬编码"
+      severity: "warn"
+      rule_ref: "BR-091"
+      patterns:
+        - "register(compress"
+        - "@fastify/compress"
+        - "fastify-compress"
+    - name: "user_store_init"
+      description: "关键数据加载（loadUsers/loadConfig/JSON.parse）须区分 not-found 与 corrupt 并兜底回退默认"
+      severity: "warn"
+      rule_ref: "BR-092"
+      patterns:
+        - "loadUsers"
+        - "loadConfig"
+        - "JSON.parse("
+
 frontend_review_static_check:
   # 启用：前端编码标准静态守卫（第十三轮复盘 / FR-077~FR-080）
   enabled: true
@@ -200,3 +245,39 @@ frontend_review_static_check:
       required_patterns:
         - "msg-content-wrapper"
         - "msg-edit"
+
+idb_reactive_clone_check:
+  # 启用：IndexedDB 写入前剥离 Vue/Pinia 响应式代理静态守卫（第十四轮复盘 / FR-081）
+  enabled: true
+  # 扫描前端源码目录（本项目对齐 karpathy-wiki/frontend/src）
+  scan_dirs:
+    - "karpathy-wiki/frontend/src"
+  file_glob: "*.{ts,vue}"
+  # IndexedDB 写入点模式（命中即须核对入参是否已深拷贝）
+  scan_patterns:
+    - "dbPut"
+    - "saveUserConfig"
+    - "idbPut"
+    - "store.put"
+    - "transactions.add"
+  # 响应式来源指示符（窗口内出现即视为写入值可能为 Vue/Pinia 代理对象）
+  reactive_indicators:
+    - "reactive("
+    - "toRefs("
+    - "toRef("
+    - "defineStore("
+  # 写入点本行的响应式来源正则（store/state/this 访问、.value 取 ref、reactiveStore）
+  reactive_arg_regex: "(store\\.|state\\.|this\\.|\\.value\\b|reactiveStore)"
+  # 安全深拷贝指示符（JSON.parse(JSON.stringify) / clone( 等；userConfig.ts 的 saveUserConfig 已修复为 clone）
+  safe_clone_indicators:
+    - "JSON.parse(JSON.stringify"
+    - "clone("
+    - "deepClone("
+    - "cloneDeep("
+  # 伪剥离模式（toRaw( 仅剥顶层，命中即违规）
+  forbidden_unsafe_patterns:
+    - "toRaw("
+  scan_window_lines: 40
+  severity_missing_clone: "error"
+  severity_unsafe: "error"
+  rule_ref: "FR-081 / CODING-IDB-REACTIVE-CLONE"

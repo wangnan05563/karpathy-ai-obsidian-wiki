@@ -120,5 +120,13 @@ Karpathy-Wiki 项目的通用编码规范与开发准则。规则与具体业务
 | 涉及成对操作按钮样式一致性（确认/取消幽灵按钮 / 主题变量 / 单主操作） | [references/button-style-consistency-rule.md](references/button-style-consistency-rule.md) |
 | 涉及消息气泡进入编辑态撑满问答列宽（align-items:stretch / width:100% 覆盖已发送窄宽） | [references/editbox-width-rule.md](references/editbox-width-rule.md) |
 | 涉及 Vue 3 / Pinia state 写入 IndexedDB（reactive 代理无法被 structuredClone 克隆 → `[object Array] could not be cloned` 静默丢数据 / toRaw 只剥顶层 / 须整树深拷贝） | [references/idb-reactive-clone-rule.md](references/idb-reactive-clone-rule.md) |
+| 涉及服务端权限隔离（auth 感知守卫工厂 createIsolationGuards / 写端点 requireAdmin 注入 / auth.enabled=false 单租户直通 / 服务端 ownerId 盖章不信任客户端 body） | [references/isolation-guard-rule.md](references/isolation-guard-rule.md) |
+| 涉及限流/审计真实客户端 IP（clientIpFromRequest 复合键 request.ip\|xffFirst / 防 XFF 伪造 / trustProxy=false） | [references/isolation-guard-rule.md](references/isolation-guard-rule.md) |
+| 涉及认证/关键异步请求超时兜底（登录/会话校验无超时悬挂 / AbortController + 可配置阈值 / 超时文案可重试） | [references/auth-request-timeout-rule.md](references/auth-request-timeout-rule.md) |
+| 涉及异步操作 loading 复位（登录/提交 handler 须在 try/finally 复位 loading / 禁永久「登录中」灰显） | [references/auth-loading-reset-rule.md](references/auth-loading-reset-rule.md) |
+| 涉及路由 return 完整性（每个分支必须 return/reply / 漏 return 触发双发响应 ERR_STREAM_WRITE_AFTER_END） | [references/route-return-completeness-rule.md](references/route-return-completeness-rule.md) |
+| 涉及响应/序列化钩子安全（onSend/onResponse 不得阻塞/抛错挂死全量 API / 须 fail-open） | [references/response-hook-safe-rule.md](references/response-hook-safe-rule.md) |
+| 涉及响应压缩默认关闭（@fastify/compress 默认 off / 条件注册 / 阈值参数化） | [references/compression-default-off-rule.md](references/compression-default-off-rule.md) |
+| 涉及用户库初始化完整性（users.json 空壳/损坏须备份回退默认 / 禁静默清零 / 首次运行非空默认） | [references/user-store-init-rule.md](references/user-store-init-rule.md) |
 | 需要参考历史复盘/工作流模板 | [references/development-workflow.md](references/development-workflow.md) · [references/retrospective-synthesis.md](references/retrospective-synthesis.md)（四维度复盘综合索引：事故→规则→审查→测试闭环） |
 | 不确定加载哪些 | 全部加载（约 50KB） |

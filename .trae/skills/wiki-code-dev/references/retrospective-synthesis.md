@@ -50,6 +50,7 @@
 | 24 | 成对操作按钮（确认/取消）样式不一致误导主次 | 同组按钮共享 base 样式，差异仅 hover 强调；配色用主题变量；type=primary 仅留给唯一主操作 | 功能测试只验证点击行为，忽略样式层级；硬编码色值不随主题 | 成对按钮基础样式一致；区分经 hover；主题变量；单主操作 | 适用：弹窗/内联编辑/表单确认取消；不适用：分处不同上下文的独立按钮 | CODING-BUTTON-STYLE-CONSISTENCY → FR-079 / [button-style-consistency-rule.md](button-style-consistency-rule.md) |
 | 25 | 消息进入编辑态编辑框停留已发送气泡窄宽，文字频繁换行 | 编辑容器 align-items:stretch 撑满整列；.msg-edit width:100%；textarea width:100% 且内边距与首问一致 | 编辑框继承 user 气泡 flex-end+max-width 窄宽；体验远差于首问输入框 | 编辑态覆盖已发送对齐、撑满列宽；控件全宽 | 适用：内联编辑已发送消息的同容器 UI；不适用：独立全宽编辑页/弹窗 | CODING-EDITBOX-WIDTH → FR-080 / [editbox-width-rule.md](editbox-width-rule.md) |
 | 26 | Vue/Pinia `reactive` 代理直传 IndexedDB → `DataError: [object Array] could not be cloned` 静默丢配置 | 写入前整树深拷贝（`JSON.parse(JSON.stringify(x))` / `clone<T>`）剥离代理；`saveUserConfig` 内部统一 clone 防御 | 失败静默（IDB 事务回调抛错被外层 `try/catch` 仅 warn）；`toRaw` 只剥顶层、嵌套仍是代理；`structuredClone` 也无法克隆代理 | 凡 `dbPut`/`saveUserConfig` 等 IDB 写入点，入参若源自 store ref/reactive 必须已 clone；禁止 toRaw/structuredClone 当深剥离 | 适用：Vue 3 + Pinia + IndexedDB 落盘（或任何 structuredClone 持久化）；不适用：localStorage(JSON 序列化不受 proxy 影响)/纯服务端/已是 plain object/IDB 读取 | CODING-IDB-REACTIVE-CLONE → FR-081 / [idb-reactive-clone-rule.md](idb-reactive-clone-rule.md) |
+| 27 | API 写端点零守卫（游客越权改共享密钥 / 读写删他人数据）+ 限流 IP 只用 `request.ip` 或只用 XFF（代理误判 / 伪造绕过） | 写端点注入 auth 感知守卫工厂 `createIsolationGuards`（`auth.enabled=false` 单租户直通）；服务端 `ownerId` 以受信上下文盖章、忽略客户端 body；限流 / 审计 IP 用复合键 `request.ip\|xffFirst` 防 XFF 伪造 | 全局 `preHandler` 只注入 currentUser 不拒绝；单租户部署若守卫不直通会全 401；反向代理下 `request.ip` 取代理 IP、XFF 可客户端伪造 | 写端点声明式注入 `preHandler: guards.requireAdmin`；守卫 auth 感知直通单租户；`ownerId` 来自 currentUser 不容客户端可控；限流 IP 统一 `clientIpFromRequest` 复合键、trustProxy=false | 适用：含"需登录才能写"共享状态的多用户 / 单租户混合部署；不适用：纯公开只读无认证 API | CODING-ISOLATION → BR-ISOLATION / [isolation-guard-rule.md](isolation-guard-rule.md) |
 
 > 更多既有规则（Tauri、PowerShell、媒体生成、安装器、文件名管线、迁移脚本等）见 SKILL.md 路由表与各 `*-rule.md`。本表聚焦近几轮对话新提炼的标准。
 
@@ -59,7 +60,7 @@
 
 跨上述问题可抽取出 5 条通用判断，供新代码 / 新审查直接套用：
 
-- **J-ISOLATION** — 多用户 / 多账户 / 多租户数据，必须以「用户/账户 id 命名空间」隔离，禁止共享可写单例；跨边界复用时先校验归属再写入。
+- **J-ISOLATION** — 多用户 / 多账户 / 多租户数据，必须以「用户/账户 id 命名空间」隔离，禁止共享可写单例；跨边界复用时先校验归属再写入。服务端侧落地为：写端点注入 **auth 感知守卫**（`createIsolationGuards`，单租户 `auth.enabled=false` 直通、绝不破坏既有"关认证=全管理员"形态）、`ownerId` 以受信上下文（`request.currentUser`）盖章、绝不信任客户端 body；限流 / 审计 IP 用复合键 `request.ip|xffFirst` 防 XFF 伪造（trustProxy=false）。对应 CODING-ISOLATION → BR-ISOLATION。
 - **J-NO-FALLBACK-SECRET** — 用户自带密钥场景，缺密钥直接拒绝（400），禁止回落到共享/默认密钥；密钥只走请求体，不落盘/不回显/不记日志。
 - **J-PURE-OVERRIDE** — 配置/参数覆盖抽为**纯函数**（`??`/`?.` 合并，无 `!`/`as`），空/默认覆盖须回退原值，绝不能清空服务端共享能力。
 - **J-FRESH-DIR-DEPLOY** — 受限环境部署写**全新目录**、不原地覆盖；spaRoot 启动时算一次，写完须重启；孤儿进程须先杀再起。

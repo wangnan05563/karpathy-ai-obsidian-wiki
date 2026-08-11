@@ -99,6 +99,11 @@ See [references/.rules-index.md](references/.rules-index.md) for the complete li
 | 归档内容取源解耦 | getSession, threadsPersist, 请求体, 内容解耦, 误报过期, 服务端会话, trust_client_content |
 | 编辑重发后端契约 | PUT /api/conversations/:id, body.messages, upsert, merge, append, 全量替换, 幂等, existing.messages, 编辑重发, 悬空答案, removeMessagesFrom |
 | 审查范围判定 | frontend/, .vue, frontend/src/stores, Pinia, reactive, IndexedDB 客户端写入, 范围不匹配, 跨技能路由, wiki-frontend-code-review, BR-088 |
+| 服务端权限隔离 | preHandler, requireAdmin, requireAuth, createIsolationGuards, ownerId, owner_id, isPublicPath, X-Forwarded-For, clientIpFromRequest, request.ip, 401, 403, admin, RBAC, auth.enabled, trustProxy, 限流复合键, 服务端盖章 |
+| 路由 return 完整性 | reply.send, return reply, 双发响应, ERR_STREAM_WRITE_AFTER_END, 漏 return, 路由分支, async handler, 隐式 reply |
+| 响应钩子安全 | onSend, onResponse, setSerializer, contentTypeParser, 全局钩子, 阻塞, 抛错, fail-open, 挂死, 全量 API |
+| 响应压缩默认关闭 | @fastify/compress, register(compression), compress.enable, 条件注册, 默认关闭, 阈值, WIKI_DISABLE_COMPRESS |
+| 用户库初始化完整性 | loadUsers, users.json, 空壳, 0 字节, 损坏, JSON.parse, 回退默认, 备份, 静默清零 |
 
 ## Generic Safety Net
 
@@ -659,6 +664,50 @@ No issues found.
 
 对应 wiki-code-dev 复盘维度④（适用 / 不适用边界）：每条规则都有适用场景与不适用场景，跨技能复用规则时须注明本项目/本端适用边界。
 
+### 路由 return 完整性（BR-089）
+
+| 规则 | 说明 |
+|------|------|
+| BR-089-1 | 路由 handler 每个分支（含提前退出点 `if (!ok) return reply.code(400).send(...)`）都必须显式 `return` / `throw`，不得有"执行完逻辑却无 return"的分支落入函数末尾——Fastify 在 handler 返回 `undefined` 时会隐式调用 `reply.send()`，与已有响应冲突触发 `ERR_STREAM_WRITE_AFTER_END` 双发响应或使前端收到空响应/超时 |
+| BR-089-2 | `async` handler 若任一分支未 `return`，Promise 解析为 `undefined`，Fastify 隐式 `reply.send()`，须确认无"漏 return"分支；可借助 `reply` 收口或显式 `return reply.send()`（扩展 BR-ESM-04 端点可达性） |
+
+对应 wiki-code-dev CODING-ROUTE-RETURN-COMPLETENESS，基于「登录路由漏 return 触发双发响应 / 前端登录请求超时」复盘。
+
+### 响应/序列化钩子安全（BR-090）
+
+| 规则 | 说明 |
+|------|------|
+| BR-090-1 | 全局 `onSend` / `onResponse` / `setSerializer` / `contentTypeParser` 等响应生命周期钩子内部必须 `try/catch` 包裹，异常时原样放行（返回原始 `payload` / `done()`），不得让单条响应异常冒泡为全量 500 或阻塞整条连接——此类钩子在**每一条**响应路径执行，一旦挂死会使**所有** API 请求失败（fail-open） |
+| BR-090-2 | 全局 `onSend` 内禁止对大响应体做 `await` 重压缩 / 重序列化等昂贵阻塞操作；如确需，须在受控范围内（阈值配置化）且不阻塞关键路径 |
+
+对应 wiki-code-dev CODING-RESPONSE-HOOK-SAFE，基于「compression.ts 的 onSend 钩子挂死所有 API」复盘。
+
+### 响应压缩默认关闭（BR-091）
+
+| 规则 | 说明 |
+|------|------|
+| BR-091-1 | 响应压缩（`@fastify/compress` 等）必须**默认关闭**，仅当 `config.compress.enable === true` 时才 `if (...)` 包裹注册；禁止 `app.register(compress)` 无条件写死（与 BR-090 互补：压缩是响应钩子挂死的高频来源） |
+| BR-091-2 | 压缩最小字节数、压缩率/级别、白名单 content-type 均来自 `config.compress.*`，禁止硬编码 `1024` / `0.3` / `['application/json']` 等字面量；支持 `WIKI_DISABLE_COMPRESS=1` 全局硬关闭 |
+
+对应 wiki-code-dev CODING-COMPRESSION-DEFAULT-OFF，基于「@fastify/compress 无条件注册 + onSend 挂死全量 API」复盘（压测验证关闭须发 ≥100 紧请求）。
+
+### 用户库初始化完整性（BR-092）
+
+| 规则 | 说明 |
+|------|------|
+| BR-092-1 | `loadUsers` 等读取关键数据文件：ENOENT → 返回合法默认结构；内容为空串 / 0 字节 / `JSON.parse` 抛错 → 备份原文件（`users.json.corrupt-<ts>`）+ 回退默认 + `log.warn`；禁止抛错中断登录 / 禁止静默清零（与 BR-077 文件损坏防护同一纵深） |
+| BR-092-2 | 初始化 / 修复写盘必须写出合法非空 JSON（`JSON.stringify(default, null, 2)`），不得写出空串 / 半截内容；结合 BR-076 写失败须传播 |
+
+对应 wiki-code-dev CODING-USER-STORE-INIT，基于「data/users.json 被写成 0 字节空壳导致登录失败」复盘（与 BR-076 / BR-077 互补：前者管"写不得吞错"，本规则管"初始化不得落成空壳 / 损坏须兜底"）。
+
+### 服务端权限隔离（BR-ISOLATION）
+
+| 规则 | 说明 |
+|------|------|
+| BR-ISOLATION-01 | 写端点（改服务端共享状态 / 用户数据）必须注入 auth 感知守卫 `preHandler: guards.requireAdmin`（或 `requireAuth`）；守卫工厂 `createIsolationGuards` 须判断 `auth.enabled`，`false`（单租户）时一律放行，禁止对单租户部署引入 401（保持"关认证=全管理员"形态） |
+| BR-ISOLATION-02 | 带归属资源落盘时 `ownerId` 必须由 `request.currentUser.userId`（受信上下文）写入，忽略并覆盖客户端 `body.ownerId`；读取按当前用户过滤，归属不匹配返回 404（禁 200 携他人数据 / 禁 403 暴露存在性） |
+| BR-ISOLATION-03 | 限流 / 审计客户端 IP 须用复合键 `clientIpFromRequest`（`request.ip\|xffFirst`，socket 对端 IP 不可伪造 + XFF 首段）；`trust_proxy` 保持 false，禁止直用 `request.ip`（代理下为代理 IP）或仅用 XFF（可伪造） |
+
 ## Related Skills
 
 | Skill | 协作场景 |
@@ -684,6 +733,8 @@ No issues found.
 | v2.7.0 | 2026-08-08 | 新增 BR-081~086 规则（归档落盘文件名唯一性 / 客户端日期串安全解析 / 整数序号校验 / Wikilink 注入清洗 / 创建型写入空内容拒绝 / 归档内容取源解耦）。Feature Scan 表新增 6 类触发词，Quick-Check Rules 追加 BR-081~086 段，config/review-config.md 追加 6 组参数段（generated_filename / safe_date_parse / integer_index / wikilink / empty_content / persistence_client_content）。基于「归档路由重构」四维度复盘（文件名碰撞静默丢数据 / 非法 ts → RangeError 500 / 非整数 messageIndex → undefined 访问 500 / refs 换行破坏 wikilink / 空内容 no-op 落盘 / 依赖服务端会话 100% 误报过期），对应 wiki-code-dev CODING-GENERATED-FILENAME-UNIQUENESS / CODING-SAFE-CLIENT-DATE-PARSE / CODING-INTEGER-INDEX-VALIDATION / CODING-WIKILINK-SANITIZATION / CODING-EMPTY-CONTENT-REJECTION / CODING-PERSISTENCE-CLIENT-CONTENT-DECOUPLING（前端门控同步见 FR-076）。 |
 | v2.8.0 | 2026-08-08 | 新增 BR-087（编辑重发后端会话落盘契约）：会话 upsert 端点（PUT /api/conversations/:id）须将 `body.messages` 视为权威全量替换（幂等），禁止与服务端既有 messages 做 merge/append（BR-087-1）；upsert 仅保留服务端特有元数据、消息体以请求体为唯一来源、缺失回退 `[]` 而非 `existing.messages`（BR-087-2）；并发/重试以请求体 messages 为最终态（BR-087-3）。基于「编辑后重新发送」复盘——前端 trim 尾随 AI 答案 + 重新插入用户消息整体重发（FR-077 / CODING-EDIT-RESEND），服务端若 append 会让被裁悬空答案复活。Feature Scan 表新增 Edit-Resend 触发词，Quick-Check Rules 追加 BR-087 段，config/review-config.md 追加 conversation_upsert_contract 参数段。对应 wiki-code-dev CODING-EDIT-RESEND 后端侧。 |
 | v2.9.0 | 2026-08-08 | 新增 BR-088（审查范围判定）：待审变更完全是前端（`.vue` / `frontend/src/stores/*.ts` / 客户端 IndexedDB 写入 / Pinia reactive 代理剥离）时须声明范围不匹配并建议切到 wiki-frontend-code-review，禁止硬套后端规则（如把前端 reactive-proxy-in-IDB 静默丢配置误当后端关键写问题，归属应为前端 FR-081 / CODING-IDB-REACTIVE-CLONE）（BR-088-1）；跨端规则按文件位置选对应技能核、不双重复核（BR-088-2）；pending-change 先按 `git diff --name-only` 文件位置判定主技能（BR-088-3）。Feature Scan 表新增「审查范围判定」触发词，Quick-Check Rules 追加 BR-088 段。对齐 wiki-code-dev 复盘维度④（适用 / 不适用边界），并明确本次「输入框隔离设置」改动属纯前端、应由前端技能评审。 |
+| v2.10.0 | 2026-08-08 | 新增 BR-ISOLATION 规则（服务端权限隔离）：写端点须注入 auth 感知守卫工厂 `createIsolationGuards`（auth.enabled=false 单租户直通，保持"关认证=全管理员"形态，BR-ISOLATION-01）；带归属资源落盘 `ownerId` 须以 `request.currentUser` 受信上下文盖章、忽略客户端 body、读取归属不匹配返回 404（BR-ISOLATION-02）；限流/审计客户端 IP 须用复合键 `clientIpFromRequest`（`request.ip\|xffFirst`）防 XFF 伪造、trustProxy=false（BR-ISOLATION-03）。Feature Scan 表新增「服务端权限隔离」触发词，Quick-Check Rules 追加 BR-ISOLATION 段，config/review-config.md 追加 server_side_isolation 参数段，references/server-side-isolation-rule.md 新增。对应 wiki-code-dev CODING-ISOLATION，基于「权限隔离审查（游客越权写 / 共享密钥篡改 / 限流 IP 误判绕过）」复盘。 |
+| v2.11.0 | 2026-08-10 | 新增 BR-089~092 四组后端规范复盘规则（基于「登录卡死 / 登录超时 / compression onSend 挂死 / users.json 空壳」四维度复盘，含 Sequential Thinking）：BR-089（路由 return 完整性）路由 handler 每个分支必须显式 return/throw，漏 return 落入函数末尾触发双发响应 ERR_STREAM_WRITE_AFTER_END / 前端超时（BR-089-1/2）；BR-090（响应/序列化钩子安全）全局 onSend/onResponse 须 try/catch fail-open，异常原样放行不得挂死全量 API（BR-090-1）/ 禁止钩子内昂贵阻塞（BR-090-2）；BR-091（压缩默认关闭）压缩中间件默认不注册、仅当 config.compress.enable 才 if 包裹注册、阈值参数化（BR-091-1/2）；BR-092（用户库初始化完整性）loadUsers 区分 not-found 与 corrupt/空壳并备份回退默认、禁静默清零（BR-092-1）/ 初始化写盘须合法非空（BR-092-2，与 BR-076/077 互补）。Feature Scan 表新增 4 类触发词，Quick-Check Rules 追加 BR-089~092 段，config/review-config.md 追加 4 组参数段，references 新增 4 个 rule 文件。对应 wiki-code-dev CODING-ROUTE-RETURN-COMPLETENESS / CODING-RESPONSE-HOOK-SAFE / CODING-COMPRESSION-DEFAULT-OFF / CODING-USER-STORE-INIT，并与 wiki-auto-testing `backend_review_static_check` 的 route_return_completeness / response_hook_safe / compression_default_off / user_store_init 四组（零硬编码）配置对齐。 |
 
 > 完整版本历史见 [references/changelog.md](references/changelog.md)
 

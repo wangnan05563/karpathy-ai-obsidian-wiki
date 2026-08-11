@@ -1046,6 +1046,30 @@ SSE 事件按类型推送，前端分发到 store：
 
 > 适用：`frontend/src/services/*UserConfig*.ts` / `*store*.ts`（将 store state 写入 IndexedDB 的 `dbPut` / `saveUserConfig` / `idbPut` / `store.put`），以及任何 `reactive()` 对象落盘路径。不适用：localStorage（`JSON.stringify` 序列化到字符串、不受代理影响）、纯服务端（无 Vue reactive）、写入值已是 `JSON.parse` 反序列化的 plain object、IndexedDB 读取（`dbGet` 返回 plain）。
 
+## 认证/异步请求超时兜底审查参数（FR-082）
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `auth_request_timeout_frontend.enabled` | `true` | 启用本组规则（FR-082） |
+| `auth_request_timeout_frontend.timeout_ms` | `30000` | 关键请求（登录/会话校验）超时阈值，从配置读取，禁止硬编码字面量 |
+| `auth_request_timeout_frontend.margin_multiplier` | `1.5` | 前端阈值相对后端超时的余量倍数（前端 > 后端，避免提前断） |
+| `auth_request_timeout_frontend.required_pattern` | `AbortController\|AbortSignal.timeout` | 认证/关键请求须出现的超时包裹模式 |
+| `auth_request_timeout_frontend.severity_no_timeout` | `critical` | FR-082-1 无超时悬挂导致按钮卡死违规级别 |
+| `auth_request_timeout_frontend.severity_no_retry` | `suggestion` | FR-082-2 超时无明确可重试文案违规级别 |
+
+> 适用：登录 / 会话校验 / 任何"用户点击后进入等待态"的关键异步请求（`stores/auth.ts` / `api/auth.ts` / `views/Login.vue` 的 `login` / `fetch` 调用点）。不适用：纯本地同步计算、明确标注 fire-and-forget 的非阻塞心跳探针。
+
+## 异步操作 loading 复位审查参数（FR-083）
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `auth_loading_reset_frontend.enabled` | `true` | 启用本组规则（FR-083） |
+| `auth_loading_reset_frontend.set_pattern` | `loading\s*=\s*true\|submitting\s*=\s*true` | 进入等待态的赋值模式 |
+| `auth_loading_reset_frontend.reset_required_in` | `finally` | 复位语句须出现在 `try/finally` 或 Promise `.finally` 中 |
+| `auth_loading_reset_frontend.severity` | `major` | FR-083-1 遗漏复位导致按钮卡死违规级别 |
+
+> 适用：任何设置 `loading=true` / `submitting=true` 后发起异步请求、且需复位的交互（登录 / 提交 / 保存配置 / 发送消息 / 上传）。不适用：纯展示 loading（骨架屏）由生命周期钩子自动管理、无禁用态切换的纯查询。
+
 ## 审查流程优化（Review Process Optimization）
 
 > 以下判定步骤适用于每次评审，旨在降低误报与漏报。规则文件与脚本不硬编码阈值，所有参数从本文件读取。

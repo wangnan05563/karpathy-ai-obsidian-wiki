@@ -926,3 +926,63 @@ Tauri 1.x 不适用，设 `enabled` 为 `false`。
 | `review_scope.route_to_frontend_skill` | `wiki-frontend-code-review` | 范围不匹配时建议切换的前端评审技能名 |
 | `review_scope.cross_edge_rules` | `BYOK,SESSION-ISOLATION,STREAMING-RESUME,TEST-ISOLATION,EDIT-RESEND,IDB-REACTIVE-CLONE` | 前后端各有对应编号的跨端规则；按文件位置选其一核，不双重复核 |
 | `review_scope.severity_misroute` | `suggestion` | 纯前端改动硬套后端规则的违规级别（如把前端 reactive-proxy-in-IDB 误当后端关键写问题，归属应为前端 FR-081 / CODING-IDB-REACTIVE-CLONE） |
+
+## 服务端权限隔离审查参数（BR-ISOLATION）
+
+> 对应"权限隔离审查"复盘（CODING-ISOLATION，wiki-code-dev references/isolation-guard-rule.md）。全局 `preHandler` 只注入 `currentUser` 不拒绝未认证请求，导致写接口零守卫（游客越权写 / 篡改共享密钥）；限流 / 审计 IP 若只用 `request.ip`（代理下为代理 IP）或只用 `X-Forwarded-For`（可伪造）会误判或被绕过。整改引入 auth 感知守卫工厂 + 服务端 ownerId 盖章 + 限流复合键。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `server_side_isolation.enabled` | `true` | 是否启用服务端权限隔离审查（auth 感知守卫 + ownerId 盖章 + 限流复合键） |
+| `server_side_isolation.admin_permission` | `users` | `requireAdmin` 校验的权限键（管理员角色），`requirePermission(permission, ttl)` 入参 |
+| `server_side_isolation.pass_through_when_auth_disabled` | `true` | `auth.enabled=false`（单租户）时守卫一律放行，保持"关认证=全管理员"部署形态，禁止对单租户引入 401 |
+| `server_side_isolation.guard_factory` | `createIsolationGuards` | 守卫工厂函数名（auth 感知：enabled=false 直通） |
+| `server_side_isolation.required_on_write_endpoints` | `requireAdmin` | 写端点默认注入的守卫（共享配置 / 清理 / 归档 / 隧道 / vault / schema / 工具配置 / ingest 配置等） |
+| `server_side_isolation.owner_id_source` | `request.currentUser.userId` | 服务端 ownerId 盖章的受信来源（禁止客户端 `body.ownerId` 直接落盘） |
+| `server_side_isolation.owner_mismatch_status` | `404` | 归属不匹配时返回状态码（禁 200 携他人数据 / 禁 403 暴露存在性） |
+| `server_side_isolation.client_ip_composite_key` | `request.ip\|xffFirst` | 限流 / 审计 IP 复合键模板（socket 对端 IP 不可伪造 + XFF 首段） |
+
+## 路由 return 完整性审查参数（BR-089）
+
+> 对应"登录路由漏 return 双发响应"复盘（CODING-ROUTE-RETURN-COMPLETENESS，wiki-code-dev references/route-return-completeness-rule.md）。Fastify 路由 handler 任一分支漏 return 会隐式触发 `reply.send()`，与已有响应冲突导致 `ERR_STREAM_WRITE_AFTER_END` 双发响应或前端收到空响应/超时。每个 `if/else` 分支与提前退出点都必须显式 `return`/`throw`。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `route_return_completeness.enabled` | `true` | 是否启用路由 return 完整性审查 |
+| `route_return_completeness.reply_api` | `reply.send,reply.code,reply.status` | 视为已响应的 reply 调用集合 |
+| `route_return_completeness.severity` | `critical` | 漏 return 导致双发响应 / 前端超时的违规级别 |
+
+## 响应钩子安全审查参数（BR-090）
+
+> 对应"compression onSend 钩子挂死"复盘（CODING-RESPONSE-HOOK-SAFE，wiki-code-dev references/response-hook-safe-rule.md）。全局 `onSend`/`onResponse`/`setSerializer`/`contentTypeParser` 在每条响应路径执行，一旦阻塞或抛错会使所有 API 挂起或 500；须全程 `try/catch` fail-open（异常原样放行），禁 `await` 重计算。与 BR-091 互补。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `response_hook_safe.enabled` | `true` | 是否启用响应钩子安全审查 |
+| `response_hook_safe.hook_names` | `onSend,onResponse,setSerializer,contentTypeParser` | 视为全局响应钩子的注册点 |
+| `response_hook_safe.require_fail_open` | `true` | 钩子主体须被 try/catch 包裹且异常放行 |
+| `response_hook_safe.severity` | `critical` | 钩子挂死全量 API 的违规级别 |
+
+## 压缩默认关闭审查参数（BR-091）
+
+> 对应"压缩默认注册致钩子挂死"复盘（CODING-COMPRESSION-DEFAULT-OFF，wiki-code-dev references/compression-default-off-rule.md）。响应压缩中间件必须默认关闭、仅 `config.compress.enable===true` 时条件注册（`if` 包裹），阈值/级别/白名单全来自配置，禁硬编码。压测验证关闭须发 ≥100 紧请求确认无拦截生效。与 BR-090 互补。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `compression.enabled` | `false` | 压缩默认关闭（显式开启才注册） |
+| `compression.threshold_bytes` | `1024` | 小于此字节数的响应不压缩（配置化） |
+| `compression.level` | `6` | zlib 压缩级别（配置化） |
+| `compression.disable_env` | `WIKI_DISABLE_COMPRESS` | 全局硬关闭开关环境变量名 |
+| `compression.severity` | `major` | 压缩无条件注册 / 硬编码阈值的违规级别 |
+
+## 用户库初始化完整性审查参数（BR-092）
+
+> 对应"users.json 空壳致登录失败"复盘（CODING-USER-STORE-INIT，wiki-code-dev references/user-store-init-rule.md）。`loadUsers`/`loadConfig` 须区分 not-found（→默认）与 corrupt/空壳（→备份+回退默认+`log.warn`），禁静默清零；初始化写盘须合法非空 JSON。与 BR-076/BR-077 互补。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `user_store_init.enabled` | `true` | 是否启用用户库初始化完整性审查 |
+| `user_store_init.critical_files` | `users.json,config.json` | 须保证非空默认的关键数据文件 |
+| `user_store_init.backup_on_corrupt` | `true` | 损坏/空壳文件须先备份再回退 |
+| `user_store_init.severity` | `critical` | 空壳/损坏未兜底导致登录失败的违规级别 |
+| `server_side_isolation.trust_proxy` | `false` | 是否信任代理（保持 false 防 XFF 伪造绕过限流）；与 `rate_limit.trust_proxy` 同源 |

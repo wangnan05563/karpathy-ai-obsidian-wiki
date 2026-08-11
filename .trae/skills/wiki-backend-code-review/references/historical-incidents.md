@@ -21,6 +21,10 @@
 | BR-038~047 | — | Tauri 2.x 桌面应用集成 | Tauri 2.x 桌面应用集成历史问题复盘提炼（构建脚本、capability 配置、PowerShell stderr 处理） |
 | BR-061 | CODING-059 | PowerShell 长时进程管道陷阱 | PowerShell 中运行 vue-tsc/orchestrator.py 等长时进程时，管道导致 EPIPE broken pipe 错误（退出码 -1） |
 | BR-062 | CODING-060 | 功能回滚最小化 | 恢复已删除代码时，按删除反向顺序用 Edit 精准替换，禁止 Write 重写整个文件 |
+| BR-089 | CODING-ROUTE-RETURN-COMPLETENESS | 登录路由漏 return 双发响应 | auth.ts 登录路由某分支漏 return，Fastify 隐式再发响应导致前端登录异常/超时 |
+| BR-090 | CODING-RESPONSE-HOOK-SAFE | compression onSend 钩子挂死 | compression.ts 的 onSend 钩子未 fail-open，异常/阻塞使所有 API 全部挂死 |
+| BR-091 | CODING-COMPRESSION-DEFAULT-OFF | 压缩默认注册致钩子挂死 | @fastify/compress 默认注册且 enable 被忽略，onSend 异常挂死所有 API |
+| BR-092 | CODING-USER-STORE-INIT | users.json 空壳致登录失败 | data/users.json 落成 0 字节，loadUsers JSON.parse 抛错未兜底 → 登录失败无告警 |
 
 ## 事故编号含义
 
