@@ -19,7 +19,7 @@
 每条 finding 严格按以下字段顺序呈现，字段间用 `|` 分隔：
 
 ```
-File:line | Rule code | Severity | Problem | Fix | Verification
+File:line | Rule code | Severity | Problem | Fix | Verification | Applicability
 ```
 
 - **File:line**：触发文件相对项目根路径 + 行号（如 `frontend/src/types.ts:30`）。
@@ -28,6 +28,11 @@ File:line | Rule code | Severity | Problem | Fix | Verification
 - **Problem**：一句话描述问题本质（必要时附代表性片段）。
 - **Fix**：建议修复动作（可附最小代码示例引用）。
 - **Verification**：验证修复是否生效的命令/步骤（如 `git ls-files 'frontend/src/**/*.js'`、`npx vue-tsc --noEmit && npx vite build`、跨文件比对 types.ts）。
+- **Applicability（可选）**：该规则在此改动上的**适用 / 不适用**边界标注（如 `适用：多账户会话；不适用：单账户`），与 wiki-code-dev 复盘维度④对齐；纯适用场景可省略。
+
+### 配置化与泛化维度（Config-driven & Generalization）
+
+凡涉及「硬编码颜色值 / 硬编码主题或预设数量 / 前端硬编码机器路径 / 非泛化特判」的发现，须显式标注为**配置化/泛化**类问题，并指向 `config/review-config.md` 的对应参数（如 `theme_color_mapping_frontend.forbidden_color_formats`、`packaging_config_rule.*`），修复动作要求改为配置键 / CSS 变量 / 后端 API 动态获取（对应 CODING-CONFIG-DRIVEN / J-CONFIG-FIRST）。
 
 ### 示例
 
@@ -45,6 +50,14 @@ frontend/src/views/Query.vue:88 | FR-061-1 | 🔴 Critical | src/ 下存在编�
 列出本次变更中做得好的点（正面反馈），至少 1 条；若无则写"本次无特别亮点"。例如：
 - `vite.config.ts` 已显式 `resolve.extensions` 且 `.ts` 在 `.js` 之前。
 - done 事件新字段已加法且可选，向后兼容。
+- 新增主题/预设均从后端 API 动态获取，前端零硬编码。
+
+### 📐 适用性说明（Applicability）
+
+在 findings 之后、Verdict 之前，用 1-2 句说明本次变更范围内各规则的**适用 / 不适用**边界（与 wiki-code-dev 复盘维度④一致）。例如：
+- `FR-069`（多账户会话隔离）：本次改动含账户切换，适用；单账户部署不适用，已排除。
+- `FR-068`（SPA 部署完整性）：本次未触发部署，不适用，仅作配置合规性确认。
+此区块确保评审结论不把"规则噪声"误判为缺陷，也明确哪些规则在本题面下被主动跳过。
 
 ### 总体结论（Overall Verdict Line）
 

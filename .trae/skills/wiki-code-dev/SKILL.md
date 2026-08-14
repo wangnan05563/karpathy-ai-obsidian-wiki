@@ -122,11 +122,26 @@ Karpathy-Wiki 项目的通用编码规范与开发准则。规则与具体业务
 | 涉及 Vue 3 / Pinia state 写入 IndexedDB（reactive 代理无法被 structuredClone 克隆 → `[object Array] could not be cloned` 静默丢数据 / toRaw 只剥顶层 / 须整树深拷贝） | [references/idb-reactive-clone-rule.md](references/idb-reactive-clone-rule.md) |
 | 涉及服务端权限隔离（auth 感知守卫工厂 createIsolationGuards / 写端点 requireAdmin 注入 / auth.enabled=false 单租户直通 / 服务端 ownerId 盖章不信任客户端 body） | [references/isolation-guard-rule.md](references/isolation-guard-rule.md) |
 | 涉及限流/审计真实客户端 IP（clientIpFromRequest 复合键 request.ip\|xffFirst / 防 XFF 伪造 / trustProxy=false） | [references/isolation-guard-rule.md](references/isolation-guard-rule.md) |
+| 涉及配置驱动与泛化（零硬编码元规则：所有阈值/路径/端口/正则/白名单/severity/扫描范围一律配置化，registry 模式替代特判，跨业务泛化） | [references/config-driven-generic-rule.md](references/config-driven-generic-rule.md) |
 | 涉及认证/关键异步请求超时兜底（登录/会话校验无超时悬挂 / AbortController + 可配置阈值 / 超时文案可重试） | [references/auth-request-timeout-rule.md](references/auth-request-timeout-rule.md) |
 | 涉及异步操作 loading 复位（登录/提交 handler 须在 try/finally 复位 loading / 禁永久「登录中」灰显） | [references/auth-loading-reset-rule.md](references/auth-loading-reset-rule.md) |
+| 涉及受保护接口必须带鉴权封装调用（裸 fetch 调 requireAuth 端点 → 401 静默失效 / apiFetch 读 localStorage token 不依赖 Pinia / 给公开端点加 requireAuth 须审计调用方） | [references/auth-request-fetch-rule.md](references/auth-request-fetch-rule.md) |
+| 涉及包管理器 store 卫生（safe-delete 钩子打断 pnpm 主目录探测致 store 散落盘根 / 显式 store-dir 收敛 / 孤儿 .pnpm-store 检测清理 / CI 前置断言） | [references/pnpm-store-hygiene-rule.md](references/pnpm-store-hygiene-rule.md) |
 | 涉及路由 return 完整性（每个分支必须 return/reply / 漏 return 触发双发响应 ERR_STREAM_WRITE_AFTER_END） | [references/route-return-completeness-rule.md](references/route-return-completeness-rule.md) |
 | 涉及响应/序列化钩子安全（onSend/onResponse 不得阻塞/抛错挂死全量 API / 须 fail-open） | [references/response-hook-safe-rule.md](references/response-hook-safe-rule.md) |
 | 涉及响应压缩默认关闭（@fastify/compress 默认 off / 条件注册 / 阈值参数化） | [references/compression-default-off-rule.md](references/compression-default-off-rule.md) |
 | 涉及用户库初始化完整性（users.json 空壳/损坏须备份回退默认 / 禁静默清零 / 首次运行非空默认） | [references/user-store-init-rule.md](references/user-store-init-rule.md) |
+| 涉及常驻组件生命周期隔离（v-show 常驻保留后台状态 / watch(visible) 切回恢复定位 / watch(auth.user?.id) 重置会话态 / 重型 DOM 用 v-if=visible 懒渲染 / vue-tsc 模板收窄） | [references/persistent-component-lifecycle-rule.md](references/persistent-component-lifecycle-rule.md) |
+| 涉及 ObjectURL 生命周期（createObjectURL 后必须 revokeObjectURL，常驻组件尤甚） | [references/media-object-url-rule.md](references/media-object-url-rule.md) |
+| 涉及音频播放可靠性（合成失败 res.ok≠200 与 a.play() 被浏览器自动播放策略拦截须分文案 / 切换曲目重置 position·duration） | [references/audio-playback-reliability-rule.md](references/audio-playback-reliability-rule.md) |
+| 涉及部署产物验证（环境有自动部署钩子、目录高频轮转，须读磁盘最新 public_live_<ts> 而非两次 HTTP 请求校验 bundle） | [references/deploy-verify-disk-rule.md](references/deploy-verify-disk-rule.md) |
+| 涉及毛玻璃 backdrop-filter 包含块陷阱（backdrop-filter!=none 元素成为 fixed 后代 containing block，多主题下 glass 主题失固定、浅色正常 → 主题间不一致，命中 FR-040） | [references/backdrop-filter-containing-block-rule.md](references/backdrop-filter-containing-block-rule.md) |
+| 涉及双主题统一 --m-* 变量架构（主题相关样式全走 --m-* 变量，:root 默认 + .theme-light 局部覆盖，切换主题只挂根容器类、组件零分支） | [references/dual-theme-variable-rule.md](references/dual-theme-variable-rule.md) |
+| 涉及文件流出端点鉴权门（fail-closed 401 / 匿名拒绝 / 单租户直通显式） | [references/download-endpoint-auth-rule.md](references/download-endpoint-auth-rule.md) |
+| 涉及响应头时序（Content-Disposition/Content-Type 须在成功读取后设置 / 错误路径不携带附件头） | [references/response-header-ordering-rule.md](references/response-header-ordering-rule.md) |
+| 涉及 Content-Disposition 安全（RFC 5987 filename* 编码 + 头注入字符清洗 / 非 ASCII 中性名兜底） | [references/content-disposition-safe-rule.md](references/content-disposition-safe-rule.md) |
+| 涉及下游/适配器错误码透传（ENOENT/EISDIR/EACCES/EOUTSIDE 映射语义 HTTP 状态 / 禁统一吞 500） | [references/vault-error-code-preserve-rule.md](references/vault-error-code-preserve-rule.md) |
+| 涉及前端下载健壮性（AbortSignal.timeout 可配置 / 重入守卫 / 移动端共享错误提示 / 禁静默失败） | [references/frontend-download-robustness-rule.md](references/frontend-download-robustness-rule.md) |
+| 涉及部署产物关键特征串校验（防被不含该功能的后续构建覆盖 / 全新时间戳目录 + 重启切流） | [references/deploy-mobile-marker-verify-rule.md](references/deploy-mobile-marker-verify-rule.md) |
 | 需要参考历史复盘/工作流模板 | [references/development-workflow.md](references/development-workflow.md) · [references/retrospective-synthesis.md](references/retrospective-synthesis.md)（四维度复盘综合索引：事故→规则→审查→测试闭环） |
 | 不确定加载哪些 | 全部加载（约 50KB） |

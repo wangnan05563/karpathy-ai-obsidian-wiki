@@ -163,8 +163,11 @@ backend_review_static_check:
   scan_dirs:
     - "karpathy-wiki/api/src"
   file_glob: "*.ts"
-  # 内置四组：路由 return 完整性 / 响应钩子安全 / 压缩默认关闭 / 用户库初始化完整性
-  # 命中即提示人工复核对应分支/钩子/注册/加载是否已按规范兜底（全部参数来自配置，零硬编码）。
+  # 内置五组：路由 return 完整性 / 响应钩子安全 / 压缩默认关闭 / 用户库初始化完整性 / PowerShell 端口清理安全
+  # 命中即提示人工复核对应分支/钩子/注册/加载/清理是否已按规范兜底（全部参数来自配置，零硬编码）。
+  # 注：process_cleanup_safe 组扫描 PowerShell 启动脚本（scripts/*.ps1）。后端 step 引擎 file_glob 用
+  # fnmatch（不支持 *.{ts,ps1} brace 扩展），故启用该组时须以独立 step 覆盖 scan_dirs:
+  # ["karpathy-wiki/scripts"]、file_glob: "*.ps1"，避免污染其余 4 组（它们只扫 *.ts）。
   groups:
     - name: "route_return_completeness"
       description: "reply.code(/reply.status( 响应构造须逐分支显式 return/throw，漏 return 致双发响应"
@@ -200,6 +203,12 @@ backend_review_static_check:
         - "loadUsers"
         - "loadConfig"
         - "JSON.parse("
+    - name: "process_cleanup_safe"
+      description: "PowerShell 启动/重启脚本清理占用端口旧进程须 Stop-Process -Force + try/catch（非致命），禁止裸 taskkill 作清理主键（其 stderr 在 $ErrorActionPreference='Stop' 下触发 NativeCommandError 中止脚本）"
+      severity: "warn"
+      rule_ref: "BR-093"
+      patterns:
+        - "taskkill"
 
 frontend_review_static_check:
   # 启用：前端编码标准静态守卫（第十三轮复盘 / FR-077~FR-080）
@@ -245,6 +254,64 @@ frontend_review_static_check:
       required_patterns:
         - "msg-content-wrapper"
         - "msg-edit"
+    - name: "auth_fetch_wrapped"
+      # 受保护端点必须走带鉴权封装：禁止裸 fetch 调 requireAuth 端点（命中即 401 静默失效）
+      description: "请求后端 requireAuth 受保护端点（/api/config、/api/ai/config 等）必须统一经带鉴权封装 apiFetch 调用，禁止裸 fetch 不带 Authorization 头（命中即 401 静默失效）；required_patterns 守护 apiFetch 封装不被误删"
+      severity: "error"
+      rule_ref: "FR-084 / BR-094 / CODING-AUTH-REQUEST-FETCH"
+      forbidden_patterns:
+        - "fetch('/api/config')"
+        - "fetch(\"/api/config\")"
+        - "fetch('/api/ai/config')"
+        - "fetch(\"/api/ai/config\")"
+      required_patterns:
+        - "apiFetch"
+    - name: "persistent_component_visible_watch"
+      description: "常驻组件（v-show 后台播放等）须保留 watch(visible) 生命周期钩子，禁止在重构中误删导致切 Tab 播放态/账户态丢失（守护 FR-086 保护性代码不被删）"
+      severity: "warn"
+      rule_ref: "FR-086 / CODING-PERSISTENT-COMPONENT"
+      forbidden_patterns: []
+      required_patterns:
+        - "watch(visible)"
+    - name: "object_url_revoked"
+      description: "TTS / 媒体 ObjectURL 使用须成对保留 URL.revokeObjectURL 释放逻辑，禁止误删导致 ObjectURL 常驻泄漏（守护 FR-087 保护性代码不被删）"
+      severity: "error"
+      rule_ref: "FR-087 / CODING-MEDIA-OBJECT-URL"
+      forbidden_patterns: []
+      required_patterns:
+        - "revokeObjectURL"
+    - name: "audio_autoplay_distinguished"
+      description: "音频播放区分「语音合成失败」与「播放被浏览器拦截」两类文案且保留进度重置逻辑，禁止混报为同一含糊提示（守护 FR-088 保护性代码不被删）"
+      severity: "error"
+      rule_ref: "FR-088 / CODING-AUDIO-PLAYBACK-RELIABILITY"
+      forbidden_patterns: []
+      required_patterns:
+        - "语音合成失败"
+        - "播放被浏览器拦截"
+    - name: "backdrop_filter_fixed_ancestor"
+      description: "毛玻璃 backdrop-filter 包含块陷阱：滚动容器（如 .mobile-content）若带 backdrop-filter，其内嵌 position:fixed 悬浮元素（滚动到顶/到底 FAB、全屏 sheet 遮罩）会被困为绝对定位而随滚动滑走；守护 <Teleport to='.mobile-root'> 逃逸写法不被误删（对应 FR-089 / CODING-BACKDROP-FILTER-CB，多主题下 --m-blur 浅色=none / 毛玻璃=blur 触发主题间不一致）"
+      severity: "error"
+      rule_ref: "FR-089 / CODING-BACKDROP-FILTER-CB"
+      forbidden_patterns: []
+      required_patterns:
+        - "Teleport"
+
+dependency_store_hygiene_check:
+  # 启用：依赖 store 卫生验证（CODING-PNPM-STORE-HYGIENE / 前端 FR-085 / 后端 BR-095）
+  enabled: true
+  # 全局 .npmrc 收敛键
+  store_dir_key: "store-dir"
+  # 统一 store 绝对路径（须按实际环境调整）
+  canonical_store_dir: 'D:\.pnpm-store'
+  # 禁止散落的 store 目录名
+  forbidden_store_dirs:
+    - ".pnpm-store"
+  # 扫描根（相对项目根）
+  scan_root: "karpathy-wiki"
+  # 断言全局 ~/.npmrc 收敛键存在
+  assert_npmrc_store_dir: true
+  severity: "warn"
+  rule_ref: "FR-085 / BR-095 / CODING-PNPM-STORE-HYGIENE"
 
 idb_reactive_clone_check:
   # 启用：IndexedDB 写入前剥离 Vue/Pinia 响应式代理静态守卫（第十四轮复盘 / FR-081）
@@ -281,3 +348,69 @@ idb_reactive_clone_check:
   severity_missing_clone: "error"
   severity_unsafe: "error"
   rule_ref: "FR-081 / CODING-IDB-REACTIVE-CLONE"
+
+# --- 部署产物磁盘验证（spa_live_deploy_check）第十九轮复盘 / BR-096 ---
+# 验证改为「读磁盘最新目录」而非两次 HTTP 请求比对（spaRoot 启动只解析一次，
+# 目录高频轮转下两次 HTTP 校验会读到不同根而误判）。启用磁盘验证 + 重启后端口轮询。
+spa_live_deploy_check:
+  enabled: true
+  live_base_dir: "karpathy-wiki/api"
+  live_dir_pattern: "public_live_"
+  legacy_dir: "public"
+  complete_marker: ".deploy-complete"
+  asset_prefix: "/wiki/"
+  malicious_paths:
+    - "/wiki/../../etc/passwd"
+    - "/wiki/..%2f..%2fapi/data/config.json"
+    - "/wiki//absolute"
+  restart_required: true
+  verify_via_disk: true
+  required_ports:
+    - 3000
+
+# --- 冒烟验证策略（smoke_strategy）第十七轮复盘（沙箱受限环境泛化）---
+# 沙箱跨进程 localhost TCP 被拦截 + app.inject 全量 app 挂起 → 验证优先落在同一进程；
+# 跨进程 TCP 仅在可达 localhost 的真实构建机启用。本仓库采用进程内冒烟（import buildApp
+# + app.ready + 最小 SPA-static app inject），跨进程 TCP 默认关闭。
+smoke_strategy:
+  process_internal_inject:
+    enabled: true
+    env_guard: "WIKI_SMOKE"
+    entry_export: "buildApp"
+    ready_check: "app.ready()"
+    minimal_static_app_paths:
+      - "/"
+      - "/wiki/"
+      - "/wiki/assets/*"
+  tcp_opt_in:
+    enabled: false
+    require_reachable_localhost: true
+    endpoints:
+      - { method: "GET",  path: "/health",     expect_status: 200 }
+      - { method: "POST", path: "/api/cleanup", expect_status: 401 }
+      - { method: "PUT",  path: "/api/schema",  expect_status: 401 }
+  contract_assertions_on_real_host: true
+  inject_smoke_script: "api/_smoke_inject.mjs"
+
+# --- 实时部署流（deploy）第二十一轮复盘 / CODING-SPA-LIVE-DEPLOY ---
+# 真实构建机端到端验证最后一步：构建 → 写全新时间戳目录 → 杀孤儿旧进程 → 重启后端 → 冒烟。
+# 开发态复用已运行服务时 enabled:false（与 build.enabled/startup.enabled 一致）；发布时置 true 跑完整部署流。
+deploy:
+  enabled: true
+  require_dangerously_disable_sandbox: true
+  build_command: "node_modules/vite/bin/vite.js build --outDir ../builds/dist_u{timestamp}"
+  build_run_dir: "karpathy-wiki/frontend"
+  deploy_script: "api/_deploy_live.mjs"
+  deploy_script_args: ["../builds/dist_u{timestamp}"]
+  deploy_run_dir: "karpathy-wiki/api"
+  orphan_port: 3000
+  kill_strategy: "node_process_kill"
+  restart_command: "node node_modules/tsx/dist/cli.mjs src/index.ts"
+  restart_run_dir: "karpathy-wiki/api"
+  restart_sandbox: true
+  verify_via_disk: true
+  verify_complete_marker: ".deploy-complete"
+  deploy_marker: "MobileListen"
+  smoke_endpoints:
+    - { method: "GET", path: "/health", expect_status: 200 }
+    - { method: "GET", path: "/", expect_status: 200 }

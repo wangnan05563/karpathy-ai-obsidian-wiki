@@ -3,9 +3,9 @@
   "adapter": "harness",
   "llm": {
     "provider": "openai",
-    "baseUrl": "https://api.siliconflow.cn/v1/",
-    "model": "Qwen/Qwen3-8B",
-    "apiKeyRef": "DEEPSEEK_API_KEY",
+    "baseUrl": "https://api.openai.com/v1",
+    "model": "gpt-4o-mini",
+    "apiKeyRef": "DEEPSEEK_KEY",
     "stream": false,
     "apiKey": "sk-ivnaisotjdxgffoysxicgjqifxzcgcwidjavnxvsrhjywqvx",
     "apiKeys": {
@@ -76,6 +76,7 @@
   },
   "auth": {
     "enabled": true,
+    "filesReadAuthRequired": true,
     "sessionTtlHours": 24,
     "permissionCacheTtlSec": 300,
     "auditLogPath": "../data/audit.log",

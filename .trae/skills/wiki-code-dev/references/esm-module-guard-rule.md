@@ -41,6 +41,14 @@ const dirname = typeof __dirname !== 'undefined'
   : path.dirname(fileURLToPath(import.meta.url));
 ```
 
+> **例外：SEA 可执行检测（本规则唯一合法用途）**。本规则禁止的是"为获取目录而引用 `__filename`/`__dirname`"。但**检测当前是否处于 SEA（Single Executable Application）打包模式**是 `__filename` 的唯一合法用途，且必须用 `declare const` + `typeof` 守卫保证安全（见实战 `api/src/utils/runtime.ts`）：
+> ```typescript
+> declare const __filename: string | undefined; // 类型层声明：开发 ESM 运行时值 = undefined，SEA CJS = bundle 路径
+> const cjsFilename = typeof __filename === 'undefined' ? undefined : __filename; // ✅ typeof 对未声明变量不抛错，配合 declare 双模式安全
+> export const IS_SEA = Boolean(cjsFilename === process.execPath || (cjsFilename && !fs.existsSync(cjsFilename)));
+> ```
+> 之所以安全：① `declare const` 让 TS 知晓该标识符，避免"真未声明"导致的运行时 `ReferenceError`；② `typeof` 对未声明变量返回 `'undefined'`（不会抛错），而 SEA CJS 下 `__filename` 真实存在、值为 bundle 路径。此用法**不**用于目录派生（目录仍走 `import.meta.url` 派生），仅用于模式判别，可豁免本规则。
+
 **检测方式**：使用 Grep 工具搜索 `__dirname` / `__filename` 在 `.ts` / `.mts` / `.js` / `.mjs` 文件中的引用，命中的全部为违规。
 
 ```powershell

@@ -1,2 +1,0 @@
-timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,Encoding,Hostname,IdleTime,Connect
-1786219391314,55,POST /api/auth/login,429,Too Many Requests,setUp - Login 1-1,text,false,Test failed: code expected to contain /200/,809,228,1,1,http://127.0.0.1:3000/api/auth/login,49,utf-8,DESKTOP-G10O4NL,0,36

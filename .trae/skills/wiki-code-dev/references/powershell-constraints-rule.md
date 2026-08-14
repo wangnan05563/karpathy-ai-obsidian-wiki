@@ -132,6 +132,39 @@ line1`nline2
 
 启动前后端服务、停止旧进程、验证端口监听必须按固定流程，避免端口占用或僵尸进程。详见下方"服务生命周期管理模板"。
 
+### PS-6.1：清理占用端口的旧进程必须 `Stop-Process -Force` + `try/catch`，禁止裸 `taskkill`
+
+**严重级别**：critical
+
+启动/重启脚本在 `[1/4]` 清理旧进程阶段，必须用 `Stop-Process -Id $procId -Force` 且**包裹 `try/catch`** 使清理成为非致命步骤；**禁止以裸 `taskkill` 作为清理主键**。
+
+**为什么**：
+- 在 `$ErrorActionPreference = "Stop"` 下，`taskkill` 的 stderr（如"错误: 无法终止 PID X (属于 PID Y 子进程)的进程" / "进程已退出"）会被 PowerShell 包装为 `NativeCommandError` 并**中止整个脚本**（即本次会话报的 `[ERROR] Start failed`）。
+- `taskkill /F /T /PID` 对"属于其他进程子进程"的 PID 会**直接拒绝**，无法清理。
+- `Stop-Process -Force` 无此限制；配合 `try/catch` 后，进程已退出/被回收时静默跳过，端口释放交由后续 `Wait-PortReady`（模板 C）探测确认——清理失败绝不应阻断启动。
+
+**残留进程兜底**：多个 `tsx watch` / `vite` 竞争同一端口时，均未成功 `LISTENING`，端口扫描（`Get-NetTCPConnection`）返回空但进程仍在运行。此时用 `Get-CimInstance Win32_Process` 按命令行匹配（`*dev:api*` / `*tsx*src/index.ts` / `*vite*bin/vite`）兜底清理；该路径仍用 `taskkill /F /T` 但**必须 `2>&1 | Out-Null` + `try/catch` + 仅以 `$LASTEXITCODE -eq 0` 判定成功**，绝不让其 stderr 冒泡中止脚本。
+
+**错误示例**：
+```powershell
+# ❌ 裸 taskkill 主键 + 无 try/catch：stderr 在 $ErrorActionPreference='Stop' 下中止脚本
+taskkill /F /T /PID $procId
+```
+
+**正确示例**：
+```powershell
+# ✅ Stop-Process -Force + try/catch，清理非致命
+try { Stop-Process -Id $procId -Force -ErrorAction Stop } catch { }
+# 残留兜底（命令行匹配），taskkill 仅作兜底且吞掉 stderr
+foreach ($p in $strayProcs) {
+  try { taskkill /F /T /PID $p.ProcessId 2>&1 | Out-Null } catch { }
+  if ($LASTEXITCODE -eq 0) { Write-Log "已清理残留进程 (PID $($p.ProcessId))" }
+}
+```
+
+**适用**：Windows PowerShell 服务启动/重启脚本清理占用端口的进程。
+**不适用**：Bash / Zsh 启动脚本（stderr 不触发终止错误，裸 `kill`/`fuser` 可接受）；纯单命令无清理需求的脚本。
+
 ## 服务生命周期管理模板
 
 ### 模板 A：停止占用端口的旧进程
@@ -144,7 +177,13 @@ $conns = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Silent
 if ($conns) {
   $procId = $conns.OwningProcess | Select-Object -First 1
   Write-Host "端口 $Port 被进程 $procId 占用，停止中..."
-  Stop-Process -Id $procId -Force
+  # 清理旧进程必须是「非致命」步骤：进程可能已退出/被回收，Stop-Process 在
+  # $ErrorActionPreference='Stop' 下仍可能抛错，故用 try/catch 包裹，失败静默跳过，
+  # 端口释放与否交由后续 Wait-PortReady 探测确认（见 模板 C）。
+  # 禁止用裸 taskkill：taskkill 的 stderr（"进程已退出/属于子进程"）在
+  # $ErrorActionPreference='Stop' 下被包装为 NativeCommandError 中止整个脚本；
+  # 且 taskkill /F /T 对"属于其他进程子进程"的 PID 直接拒绝。
+  try { Stop-Process -Id $procId -Force -ErrorAction Stop } catch { }
   # 等待端口释放
   Start-Sleep -Seconds 1
 } else {

@@ -52,7 +52,37 @@
 | 26 | Vue/Pinia `reactive` 代理直传 IndexedDB → `DataError: [object Array] could not be cloned` 静默丢配置 | 写入前整树深拷贝（`JSON.parse(JSON.stringify(x))` / `clone<T>`）剥离代理；`saveUserConfig` 内部统一 clone 防御 | 失败静默（IDB 事务回调抛错被外层 `try/catch` 仅 warn）；`toRaw` 只剥顶层、嵌套仍是代理；`structuredClone` 也无法克隆代理 | 凡 `dbPut`/`saveUserConfig` 等 IDB 写入点，入参若源自 store ref/reactive 必须已 clone；禁止 toRaw/structuredClone 当深剥离 | 适用：Vue 3 + Pinia + IndexedDB 落盘（或任何 structuredClone 持久化）；不适用：localStorage(JSON 序列化不受 proxy 影响)/纯服务端/已是 plain object/IDB 读取 | CODING-IDB-REACTIVE-CLONE → FR-081 / [idb-reactive-clone-rule.md](idb-reactive-clone-rule.md) |
 | 27 | API 写端点零守卫（游客越权改共享密钥 / 读写删他人数据）+ 限流 IP 只用 `request.ip` 或只用 XFF（代理误判 / 伪造绕过） | 写端点注入 auth 感知守卫工厂 `createIsolationGuards`（`auth.enabled=false` 单租户直通）；服务端 `ownerId` 以受信上下文盖章、忽略客户端 body；限流 / 审计 IP 用复合键 `request.ip\|xffFirst` 防 XFF 伪造 | 全局 `preHandler` 只注入 currentUser 不拒绝；单租户部署若守卫不直通会全 401；反向代理下 `request.ip` 取代理 IP、XFF 可客户端伪造 | 写端点声明式注入 `preHandler: guards.requireAdmin`；守卫 auth 感知直通单租户；`ownerId` 来自 currentUser 不容客户端可控；限流 IP 统一 `clientIpFromRequest` 复合键、trustProxy=false | 适用：含"需登录才能写"共享状态的多用户 / 单租户混合部署；不适用：纯公开只读无认证 API | CODING-ISOLATION → BR-ISOLATION / [isolation-guard-rule.md](isolation-guard-rule.md) |
 
+### 本轮新增（2026-08-10 会话）：BR-089~093 对应规则索引
+
+| # | 历史问题 | ① 成功步骤（有效动作） | ② 失败点 / 环境约束 | ③ 抽象的固定流程与判断 | ④ 适用 / 不适用 | 规则 |
+|---|---------|----------------------|---------------------|------------------------|----------------|------|
+| 28 | 登录/统计接口偶发超时或空响应（Fastify handler 多分支漏 return → 双发响应 `ERR_STREAM_WRITE_AFTER_END` / 前端超时） | 逐分支显式 `return reply.send()`；`async` handler 统一收口；用 `reply` 对象收口 | 漏 return 落底触发双发响应；多分支校验/提前退出点易漏写 return | 路由 handler 每个分支/提前退出点必须 return/throw；async handler 禁止隐式 undefined 落底 | 适用：多分支校验/提前退出路由；不适用：纯 preHandler / 已 throw 交错误处理器 | CODING-ROUTE-RETURN-COMPLETENESS → BR-089 / [route-return-completeness-rule.md](route-return-completeness-rule.md) |
+| 29 | 响应 `onSend`/`onResponse` 钩子异常或阻塞使**所有** API 挂死（压缩钩子内部异常） | 钩子主体全程 `try/catch` fail-open（异常原样放行）；禁止 await 重计算；逐路由挂载避开全局挂死 | 全局 `onSend` 在本 Fastify 版本会使所有响应挂起（onResponse 不触发）；压缩失败体损坏 | 响应生命周期钩子须 fail-open + 不阻塞；压缩等可选能力默认关闭 | 适用：任何 onSend/onResponse/setSerializer/contentTypeParser；不适用：纯同步无钩子路径 | CODING-RESPONSE-HOOK-SAFE → BR-090 / [response-hook-safe-rule.md](response-hook-safe-rule.md) |
+| 30 | 启用 `@fastify/compress` 后 API 响应体损坏/0 字节（Windows Node 22/24 zlib 流不稳定 → 前端 `JSON.parse` 失败 "Unexpected end of JSON input"） | 弃用流式压缩，改为同步 `gzipSync`/`brotliCompressSync` 对已序列化 payload 压缩；默认关闭压缩（`WIKI_ENABLE_COMPRESSION=1` 显式开启）；阈值参数化 | `@fastify/compress` 流式在 ≥1KB 时间歇返回损坏/空体且与 Node 版本无关；默认开启压缩=线上 API 全不可用 | 压缩中间件必须默认关闭 + 条件注册；阈值/级别/白名单 content-type 全来自配置；与 RESPONSE-HOOK-SAFE 互补 | 适用：任何响应压缩中间件；不适用：纯静态资源（sendFile 绕过 onSend） | CODING-COMPRESSION-DEFAULT-OFF → BR-091 / [compression-default-off-rule.md](compression-default-off-rule.md) |
+| 31 | 登录时 `users.json` 读取/写入在沙箱被拦截或空壳导致登录失败 | 读取区分 ENOENT（默认初始化）与 corrupt（备份 `.corrupt-<ts>` + 回退默认 + `log.warn`）；写入 best-effort `try/catch` 不阻塞登录；首次运行写出合法非空 JSON | 沙箱 safe-delete 钩子拦截 saveUsers；损坏文件被静默清零；空壳 JSON 触发解析失败 | loadUsers/loadConfig 区分 not-found/corrupt 并兜底回退默认 + 备份；关键写失败须可观测（与 BR-076/077 同一纵深） | 适用：users.json/config.json 等可写关键数据；不适用：纯日志/可丢失缓存 | CODING-USER-STORE-INIT → BR-092 / [user-store-init-rule.md](user-store-init-rule.md) |
+| 32 | 启动脚本清理旧进程时 `taskkill` stderr 在 `$ErrorActionPreference='Stop'` 下触发 `NativeCommandError` 中止整个脚本（`[ERROR] Start failed`） | 端口清理用 `Stop-Process -Id $id -Force` 配合 `try/catch`（清理为非致命步骤）；残留进程用 `Get-CimInstance` 命令行匹配兜底；杀进程失败静默跳过 | `taskkill` 对"属于其他进程子进程"的 PID 直接拒绝；其 stderr 被 PowerShell 包装为终止错误；裸 `taskkill` 无 try/catch 会让清理步骤变致命 | 服务启动前清理旧进程必须用 `Stop-Process -Force` + `try/catch`（非致命）；禁止裸 `taskkill` 当清理主键；残留进程走命令行匹配兜底 | 适用：PowerShell 服务启动/重启脚本清理占用端口进程；不适用：Bash/Zsh（stderr 不触发终止错误）/ 纯单命令 | CODING-PS-PROCESS-CLEANUP（PS-6 增强） → BR-093 / [process-cleanup-backend-rule.md](../../wiki-backend-code-review/references/process-cleanup-backend-rule.md) |
+
 > 更多既有规则（Tauri、PowerShell、媒体生成、安装器、文件名管线、迁移脚本等）见 SKILL.md 路由表与各 `*-rule.md`。本表聚焦近几轮对话新提炼的标准。
+
+### 本轮新增（2026-08-11 会话）：FR-084~085 / BR-094~095 对应规则索引
+
+| # | 历史问题 | ① 成功步骤（有效动作） | ② 失败点 / 环境约束 | ③ 抽象的固定流程与判断 | ④ 适用 / 不适用 | 规则 |
+|---|---------|----------------------|---------------------|------------------------|----------------|------|
+| 33 | 前端受保护接口裸 `fetch` 调 `requireAuth` 端点（如 `GET /api/config`、`GET /api/ai/config`）→ 后端返 401，AI 伙伴选项消失 + 控制台「加载配置失败：HTTP 401」静默失效 | 新增 `apiFetch`（读 `localStorage` token 注入 `Authorization`，不依赖 Pinia），全站 18 处裸 `fetch` → `apiFetch` 迁移；bootstrap 期先于 auth store 就绪即可带 token | 鉴权封装若依赖 Pinia/auth store 会陷入 bootstrap 期鸡生蛋；裸 fetch 失败静默（仅控制台），比崩溃更隐蔽；给公开端点加 `requireAuth` 是破坏性变更 | 受保护端点与"带 token 封装"是契约对，缺任一即 401；封装须从非 Pinia 源（localStorage）读 token；收紧 `requireAuth` 须审计全部前端调用方 | 适用：任何后端挂 `requireAuth` 的前端调用；不适用：显式公开端点（publicPaths 白名单）、纯静态资源 | CODING-AUTH-REQUEST-FETCH → FR-084 / BR-094 / [auth-request-fetch-rule.md](auth-request-fetch-rule.md) |
+| 34 | pnpm store 散落项目/盘根（safe-delete 钩子打断 pnpm 主目录探测的 rename 临时操作 → EPERM → pnpm 退化为当前盘根建 `.pnpm-store`），缓存污染工作区且 node_modules 解析不到统一 store | 全局 `.npmrc` 显式写 `store-dir=D:\.pnpm-store` 收敛；`pnpm store path` 验证返回统一路径；确认孤儿无 `node_modules/.modules.yaml` 引用后删除 | WorkBuddy safe-delete 沙箱钩子 fail-closed 拦截 rename/覆盖/rm；pnpm 探测 home 可写性用的 rename 被拦即退化；删除受钩子约束须走放行路径 | 包管理器 store 须显式 `store-dir` 收敛（禁依赖自动探测）；定期检测/清理孤儿 `.pnpm-store`；CI/环境初始化断言 store-dir 收敛 | 适用：受限文件系统环境 + 严格 store 包管理器（pnpm）；不适用：纯 npm/yarn、已显式收敛且无孤儿的环境 | CODING-PNPM-STORE-HYGIENE → FR-085 / BR-095 / [pnpm-store-hygiene-rule.md](pnpm-store-hygiene-rule.md) |
+
+### 本轮新增（2026-08-12 会话）：下载特性缺陷 + 部署覆盖危机 对应规则索引
+
+> 本轮针对 Request-G「文档下载」特性暴露的 8 类缺陷（code-review #1–#8）+ SPA 部署移动端覆盖危机，做四维度复盘，固化为 wiki-code-dev 6 条规则 + FR-091~094 + BR-097~101 + wiki-auto-testing `route_response_branch_coverage` 多路由分支覆盖。全部 config 驱动、零硬编码。
+
+| # | 历史问题 | ① 成功步骤（有效动作） | ② 失败点 / 环境约束 | ③ 抽象的固定流程与判断 | ④ 适用 / 不适用 | 规则 |
+|---|---------|----------------------|---------------------|------------------------|----------------|------|
+| 35 | 文档下载端点（文件流出）缺 auth 门禁 → 游客越权下载 vault 任意文件 | 读端点注入 `readPreHandler = filesReadAuthRequired && guards.enabled ? requireAuth : undefined`（fail-closed）；单租户 `auth.enabled=false` 直通显式、不与 `filesReadAuthRequired` 混淆 | 全局 `preHandler` 只注入 currentUser 不拒绝；单租户直通若盖过显式门禁会全 401；缺凭证须 401 而非 400 | 文件流出端点默认 fail-closed；`filesReadAuthRequired` 门禁优先于单租户直通；auth 感知守卫工厂统一收口 | 适用：任何 download/export/attachment 文件流出端点；不适用：已显式声明 public 的只读静态资源 | CODING-DOWNLOAD-AUTH → BR-097 / [download-endpoint-auth-rule.md](download-endpoint-auth-rule.md) |
+| 36 | 下载附件名 RFC 5987 缺失 / header 注入（CWE-113）/ 控制字符 / 非 ASCII / 扩展名丢失 | `buildAttachmentHeader(relPath)` 输出 `attachment; filename="<legacy>"; filename*=UTF-8''<encoded>`；控制字符清洗 + `'()*` 百分号转义；非 ASCII 只进 `filename*` | 非法文件名拼进 Content-Disposition 可注入换行篡改响应头；legacy 字段含非 ASCII 破坏解析；路径安全化后丢弃扩展名致下载文件无类型 | 附件头须 RFC 5987 `filename*` + legacy 兜底；控制字符/引号清洗；`'()*` 转义；保留原始扩展名（path 安全后取 extname） | 适用：任何 `Content-Disposition: attachment` 文件名拼接；不适用：纯 inline 无文件名响应 | CODING-CONTENT-DISPOSITION-SAFE → BR-098 / BR-101 / FR-094 / [content-disposition-safe-rule.md](content-disposition-safe-rule.md) |
+| 37 | vault 读取错误码（EISDIR/EACCES/EPERM/ENOENT/EOUTSIDE）被吞 / 错误映射丢失语义 | `mapVaultReadError` 按 `err.code` 映射：EISDIR→400、EACCES+EPERM→403、ENOENT→404、EOUTSIDE→400、未知→500 保留 message | catch 统一返回 500 丢失语义（目录被当 500、越权被当 500）；前端无法据此区分处理 | catch 必须按 `err.code` 映射语义 HTTP 状态；仅未知错误→500 且保留 message；与 BR-076 同一纵深 | 适用：任何读取 vault/文件系统并 catch 的端点；不适用：纯内存/无错误码来源 | CODING-VAULT-ERRCODE-PRESERVE → BR-099 / [vault-error-code-preserve-rule.md](vault-error-code-preserve-rule.md) |
+| 38 | 响应头顺序错乱（Content-Disposition/Content-Type 在读取成功前即设置 / 错误路径仍带附件头）→ half-response / 信息泄漏 | 头仅在读取成功后设置；错误路径绝不带 Content-Disposition；成功读完后一次性 set | 提前 set 附件头后读取失败 → 已发附件头 + 错误体混杂；错误路径带附件头误导客户端 | 附件响应头（Content-Disposition/Content-Type）只在读取成功后设置；错误路径不带 Content-Disposition（防 half-response） | 适用：任何流式/文件下载响应；不适用：纯 JSON API（无附件头） | CODING-RESP-HEADER-ORDER → BR-100 / [response-header-ordering-rule.md](response-header-ordering-rule.md) |
+| 39 | 前端下载无超时/中断/防重入 + 移动端静默失败（错误不展示，用户以为没反应） | `AbortSignal.timeout(config.download_frontend.timeout_ms)`；in-flight 防重入锁；移动端+桌面共享错误展示（禁静默）；共享 `downloadVaultFile` | 大文件/弱网下下载挂死无超时；重复点击叠加请求；移动端 catch 吞错无提示 | 前端下载统一带超时 + 防重入锁；移动端与桌面共享错误展示；统一封装 `downloadVaultFile` | 适用：任何前端触发下载/导出；不适用：纯服务端生成、无用户交互触发 | CODING-FE-DOWNLOAD-ROBUST → FR-091~094 / [frontend-download-robustness-rule.md](frontend-download-robustness-rule.md) |
+| 40 | 部署后移动端特性串缺失（覆盖危机：`resolveSpaRoot` 按时间戳选最新，曾被不含移动端的旧构建覆盖 → 重启线上切回无移动端版） | 部署前确认 frontend 源码含移动端；build 到全新 `dist_u<ts>`；`_deploy_live.mjs` → `public_live_<ts>`；重启后端；冒烟校验 bundle 含 `MobileListen`/`MobileShell`/`聆听` | 沙箱全量写回滚 → 构建须 `dangerouslyDisableSandbox`；孤儿 :3000；后续不含移动端的构建覆盖最新时间戳 | 部署后校验线上 bundle 含关键特性串（marker 列表 config 化）；写全新目录 + 重启 + 冒烟三位一体 | 适用：本沙箱 SPA 部署 + 含特性开关/移动端分支的构建；不适用：无特性分支的纯静态部署 | CODING-DEPLOY-MARKER-VERIFY → DM-1~DM-2 / [deploy-mobile-marker-verify-rule.md](deploy-mobile-marker-verify-rule.md) |
 
 ---
 
@@ -69,6 +99,7 @@
 - **J-SYNC-BOUNDARY** — 子进程调用按"要同步结果 / 要异步事件"二选一 API：需同步结果用 `execFileSync`（带超时）或 `await` Promise，禁止把异步 `execFile` 当同步用；可用性检测用能力命令（如 `ffmpeg -version`）而非冗余探针。
 - **J-NO-SILENT-FAIL** — 关键写失败必须传播（throw / log+throw），禁止空 catch 假成功；关键文件读取须区分 not-found 与 corrupt，损坏须备份+回退默认，禁止静默清零。
 - **J-NO-HARDCODE** — 超时/阈值一律从配置键读取，禁止硬编码字面量（如 30000）；多层超时自下而上递增 ×1.5（与 BR-053 一致）。
+- **J-CONFIG-FIRST** — 所有可变参数（超时/阈值/端口/路径/正则/白名单/severity 文案/扫描范围/端点清单/payload 模板）集中在配置层（coding-standards-config.md / review-config.md / defaults.yaml / config.yaml / examples），代码与规则文件只读取不内联；新增规范 = 在配置加一组（registry 模式），引擎主流程不动；配置分层为「默认值 + 项目覆盖 + 示例」三层；同一参数跨四技能命名一致、编号顺延不漂移。对应 CODING-CONFIG-DRIVEN → 各技能 config 层（零硬编码元规则）。
 - **J-DERIVED-KEY-UNIQUENESS** — 落盘文件名若由分组键（日期+shortId 等）派生，**非全局唯一**，须追加随机后缀（长度配置化）后再落盘；冲突判定走唯一性校验，禁止依赖派生键自身唯一性。
 - **J-SAFE-DATE** — 服务端解析客户端日期串禁止 `new Date(str).toISOString()`（非法串抛 RangeError）；统一走安全解析覆盖 null/未定义/非字符串/无效日期，回退配置默认值。
 - **J-INTEGER-INDEX** — 客户端传下标访问数组前，须 `Number.isInteger` 校验；非法/缺失即拒绝（状态码配置化），校验在数组访问前短路，禁止把非整数当下标导致 undefined 访问 500。
@@ -80,6 +111,14 @@
 - **J-BUTTON-STYLE** — 同一操作组成对按钮共享一致基础样式，区分仅经 hover/active 强调；配色引用主题变量禁止硬编码；`type="primary"` 仅留给唯一真正主操作，避免双主操作误导。
 - **J-EDITBOX-WIDTH** — 消息气泡进入编辑态须以 `align-items:stretch` / `width:100%` 覆盖已发送态的 `flex-end` 窄宽、撑满问答列；编辑控件自身 `width:100%`、内边距与首问输入框对齐。
 - **J-IDB-REACTIVE-CLONE** — 凡将 store state ref / `reactive()` 对象经 `dbPut`/`put`/`add` 写入 IndexedDB 的路径，写入前必须整树深拷贝为 plain object（`JSON.parse(JSON.stringify(x))` 或 `clone<T>`）；`toRaw()` 只剥顶层、嵌套代理仍会失败，`structuredClone` 同样无法克隆代理，二者均不可当作深剥离；IDB 读取返回 plain、localStorage 经 JSON 序列化不受影响。
+- **J-AUTH-FETCH-WRAP** — 后端 `requireAuth` 受保护端点与前端"带 token 的 HTTP 封装"是**契约对**：缺任一端都 401。前端须有且仅有**一个**带鉴权封装（如 `apiFetch`），从 `localStorage` 读 Bearer token 注入 `Authorization`、不依赖 Pinia（bootstrap 期 auth store 未就绪时仍可用）；所有受保护端点调用一律走它，禁止裸 `fetch` 不带 token。后端把原先公开端点收紧为 `requireAuth` 是**破坏性变更**，必须审计全部前端调用方确认已迁移（对应 CODING-AUTH-REQUEST-FETCH → FR-084 / BR-094）。
+- **J-PNPM-STORE-HYGIENE** — 受限文件系统环境（safe-delete 沙箱钩子 fail-closed 拦截 rename/覆盖/rm）下，pnpm 主目录探测会被打断导致其退化为在当前盘根建 `.pnpm-store`；必须**显式**在全局 `.npmrc` 写 `store-dir` 收敛到统一路径（禁依赖自动探测），并定期检测/清理与统一 store 不一致的孤儿目录；CI/环境初始化须断言 `store-dir` 收敛（对应 CODING-PNPM-STORE-HYGIENE → FR-085 / BR-095 / wiki-auto-testing `dependency_store_hygiene_check`，参数全配置零硬编码）。
+- **J-DOWNLOAD-AUTH** — 文件流出端点（download/export/attachment）默认 **fail-closed**：`auth.enabled=false` 单租户直通，但显式 `filesReadAuthRequired` 门禁必须优先于单租户直通；缺凭证即 401，绝不回落到"关认证=全放行"。守卫统一走 auth 感知工厂（与 CODING-ISOLATION 同类）。对应 CODING-DOWNLOAD-AUTH → BR-097。
+- **J-CONTENT-DISPOSITION-SAFE** — 附件文件名拼进 `Content-Disposition` 须 RFC 5987 `filename*`（UTF-8 编码）+ legacy `filename` 兜底；控制字符（`\x00-\x1f\x7f`）/引号清洗；`'()*` 百分号转义；非 ASCII 只进 `filename*`（防 CWE-113 header 注入）；保留原始扩展名（path 安全化后取 extname，禁丢弃）。对应 CODING-CONTENT-DISPOSITION-SAFE → BR-098 / BR-101 / FR-094。
+- **J-ERRCODE-PRESERVE** — catch 必须按 `err.code` 映射语义 HTTP 状态（EISDIR→400 / EACCES+EPERM→403 / ENOENT→404 / EOUTSIDE→400 / 未知→500 且保留 message），禁止把一切读取错误吞成 500 丢失语义。与 BR-076 同一纵深（关键错误可观测）。对应 CODING-VAULT-ERRCODE-PRESERVE → BR-099。
+- **J-RESP-HEADER-ORDER** — 附件响应头（Content-Disposition/Content-Type）**只在读取成功后**设置；错误路径绝不带 Content-Disposition（防 half-response / 错误体混入附件头）。对应 CODING-RESP-HEADER-ORDER → BR-100。
+- **J-FE-DOWNLOAD-ROBUST** — 前端下载统一 `AbortSignal.timeout(config.download_frontend.timeout_ms)`；in-flight 防重入锁；移动端与桌面**共享**错误展示（禁静默失败）；统一封装 `downloadVaultFile`。对应 CODING-FE-DOWNLOAD-ROBUST → FR-091~094。
+- **J-DEPLOY-MARKER-VERIFY** — 部署后校验线上 bundle 含关键特性串（如 `MobileListen`/`MobileShell`/`聆听`，列表 config 化）；写全新目录 + 重启后端 + 冒烟三位一体，防覆盖危机。对应 CODING-DEPLOY-MARKER-VERIFY → DM-1~DM-2。
 
 ---
 
@@ -114,6 +153,83 @@
 ### ④ 适用与不适用
 - **适用**：本沙箱（safe-delete fail-closed、无持久日志、可后台起 tsx）、含持久化/多账户的测试、CI 增量测试。
 - **不适用**：纯静态页面、无后端 service 的纯前端改动（无部署/重启环节）、纯同步无状态单测（无需命名空间/flush）。
+
+### 本轮新增（2026-08-12 会话）：测试流程优化 — `route_response_branch_coverage` 多路由分支覆盖
+
+> 针对下载/读端点的 fail-closed 门禁与错误码映射，把"逐分支断言"固化为可配置步骤类型。扩展 `wiki-auto-testing` 引擎支持**多路由 + 每路由独立 token_env + required_headers 断言**，保留旧单路由配置兼容。本轮还强化了"沙箱端口/孤儿进程"测试纪律。
+
+#### ① 成功执行步骤（有效测试流程）
+1. **多路由分支覆盖配置化**：`route_response_branch_coverage.routes[]` 列出 4 个读端点（`/api/files/download`、`/api/files`、`/api/files/tree`、`/api/files/pages`），每路由 `branch_cases` 描述匿名→401、缺参→400、合法→200（+`required_headers` 校验 `Content-Disposition`）、目录非文件→400、越界→400/404。
+2. **fail-closed 断言**：匿名分支不注入 `Authorization` → 断言 401；带 `token_env` 取 Bearer 注入 → 断言成功分支。auth 门禁与单租户直通差异由此可测。
+3. **头断言**：`valid_binary` 分支除 `required_status` 外校验 `Content-Disposition` 响应头存在（验证 RFC 5987 附件头 + header 顺序）。
+4. **引擎向后兼容**：`_handle_route_response_branch_coverage` 优先读 `routes[]`，缺失则回退旧 `route_name`/`method`/`branch_cases` 单路由形态。
+
+#### ② 不确定性与失败点
+- **沙箱跨进程 localhost TCP 被拦截**：沙箱内新起服务能 `LISTENING` 但同沙箱另一 node/curl `connect` 超时 → 勿在沙箱做跨进程 HTTP 冒烟；须带 `dangerouslyDisableSandbox:true` 才能对真实机 :3000 做端到端。
+- **孤儿 :3000 进程**：`run_in_background` 任务被回收后底层 tsx 变孤儿继续伺服旧代码 → 新启动 `EADDRINUSE`；须先取监听 PID 杀之再起（系统级工具 netstat/taskkill 被安全策略禁用 → 改用 Node `process.kill`）。
+- **`buildApp()` 重构**：`main()` 拆为 `buildApp()`（不 listen）+ `main()`（listen+信号）；`WIKI_SMOKE=1` 守卫跳过 helmet/rateLimit 使 `app.inject` 可正常进程内冒烟。
+- **YAML 仅语法校验不足**：flow mapping（`{ path: ... }`）与缩进需 `yaml.safe_load` 实测解析（已验证 4 路由 14 分支通过）。
+
+#### ③ 可抽象的固定流程与判断
+```
+端点分支覆盖（route_response_branch_coverage）：
+  routes[]:
+    每路由 {route_name, method, token_env, branch_cases[]}
+    branch_cases[]: {name, description, params, expected_status, required_fields[], required_headers[]}
+  执行：
+    匿名分支 → 不注入 Authorization → 断言 expected_status(常 401)
+    认证分支 → os.environ[token_env] 取 Bearer 注入 → 断言 expected_status + required_fields + required_headers
+    超时 = timeout_ms/1000（统一经 config，禁硬编码）
+  兼容：routes 缺失 → 回退 legacy route_name/method/branch_cases
+端口/进程纪律：
+  跨进程冒烟须 dangerouslyDisableSandbox；杀:3000 孤儿用 process.kill（禁系统级工具）；
+  buildApp() 重构 + WIKI_SMOKE 守卫 → 进程内 inject 冒烟 5/5 通过
+```
+
+#### ④ 适用与不适用
+- **适用**：本沙箱（safe-delete、跨进程 TCP 拦截、系统级工具禁用）、Fastify 端点 fail-closed 门禁 + 错误码映射的可配置分支断言、CI 增量端点测试。
+- **不适用**：纯前端 UI 动画（无端点分支）、无需鉴权的公开只读端点（匿名分支无意义）、纯同步无状态单测。
+
+---
+
+## 最近一轮编码/调试专项复盘（2026-08-10 会话：6 项已修复问题）
+
+> 本轮修复 6 个真实问题：① build-exe.ps1 图标注入 / rcedit 移除；② 移除未引用的 rcedit devDependency；③ 登录 `users.json` EPERM；④ 开发启动 `__filename is not defined in ES module scope`；⑤ 统计接口"Unexpected end of JSON input"（压缩空体）；⑥ 启动脚本 `taskkill` 中止。以下从四维度复盘，结论已固化为 wiki-code-dev 规则 + BR-089~093 / FR-082~083 + wiki-auto-testing 静态守卫。
+
+### ① 成功执行步骤（有效动作）
+1. **先定位根因再改**：用启动日志 + 错误栈区分是 ESM 全局缺失 / 压缩钩子挂死 / `taskkill` stderr，而非盲目重试。
+2. **ESM 路径修复**：`runtime.ts` 用 `declare const __filename` + `typeof __filename === 'undefined'` 守卫，兼容开发（ESM+tsx）与 SEA（CJS bundle）双模式资源路径解析。
+3. **压缩修复**：弃用 `@fastify/compress` 流式，改为同步 `gzipSync`/`brotliCompressSync` 对已序列化 payload 压缩，并默认关闭（`WIKI_ENABLE_COMPRESSION=1` 显式开启）。
+4. **users.json 修复**：读取区分 not-found/corrupt 兜底 + 写入 best-effort `try/catch`，避免 safe-delete 拦截导致登录失败。
+5. **启动脚本修复**：端口清理改 `Stop-Process -Force` + `try/catch` 使清理非致命；残留进程走 `Get-CimInstance` 命令行匹配兜底。
+
+### ② 不确定性与失败点
+- 沙箱 safe-delete 钩子 fail-closed 拦截 `saveUsers` 覆盖写 → 登录写盘"假成功/失败"。
+- `@fastify/compress` 流式在 Windows Node 22/24 对 ≥1KB 响应间歇返回损坏/0 字节体（与 Node 版本无关，环境级 zlib 流不稳）。
+- 本 Fastify 版本**全局 `onSend` 钩子会使所有响应挂起**（onResponse 不触发）→ 任何响应钩子都须 fail-open 且默认关闭。
+- PowerShell `$ErrorActionPreference='Stop'` 下 `taskkill` 的 stderr 被包装为 `NativeCommandError` 中止脚本；`taskkill /F /T` 对"属于其他进程子进程"的 PID 直接拒绝。
+- ESM 下 `__filename` 在纯 ESM 真未声明时 `typeof` 也安全（需 `declare`），但 SonarQube S6606 建议 `x ?? fallback` 会引入运行时 ReferenceError（CODING-018）。
+
+### ③ 可抽象的固定流程与判断
+```
+ESM 路径解析：
+  IS_SEA = typeof __filename 经 declare 守卫（兼容开发/打包双模式），不得 DIRECT 引用 __filename/__dirname
+响应压缩：
+  默认关闭 + 条件注册；若启用须同步压缩（gzipSync/brotliCompressSync）+ onSend fail-open + 逐路由挂载
+路由 return：
+  每分支/提前退出点显式 return/throw；async handler 禁止隐式 undefined 落底
+关键数据：
+  读取区分 not-found/corrupt 兜底回退默认 + 备份；写入 best-effort 但失败须可观测（log）
+PowerShell 清理端口：
+  Stop-Process -Force + try/catch（非致命）替换裸 taskkill；残留走命令行匹配兜底
+```
+判断逻辑落地为：CODING-ROUTE-RETURN-COMPLETENESS / CODING-RESPONSE-HOOK-SAFE / CODING-COMPRESSION-DEFAULT-OFF / CODING-USER-STORE-INIT / CODING-PS-PROCESS-CLEANUP（PS-6 增强）；审查 BR-089~093、前端 FR-082~083；测试守卫见 wiki-auto-testing `backend_review_static_check` 四组 + `process_cleanup_safe`。
+
+### ④ 适用与不适用
+- **适用**：Fastify 后端路由/响应层、Windows PowerShell 服务脚本、含可写关键数据文件的 Node 服务、ESM+tsx/SEA 双模式项目。
+- **不适用**：纯前端无后端 service 改动（无压缩/路由/端口清理环节）、Bash/Zsh 启动脚本（stderr 不触发终止错误）、CommonJS 项目（`__filename` 正常注入）、纯静态资源伺服（sendFile 绕过 onSend）。
+
+> 备注：问题 ①/②（build-exe 图标注入 + 移除未引用 rcedit devDependency）属构建脚本清理类，无需新增防御性规则，但应在代码评审中检查"依赖与脚本引用一致性"（package.json 的 devDependency 须被脚本实际使用，无死依赖）。
 
 ---
 

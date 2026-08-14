@@ -1070,6 +1070,214 @@ SSE 事件按类型推送，前端分发到 store：
 
 > 适用：任何设置 `loading=true` / `submitting=true` 后发起异步请求、且需复位的交互（登录 / 提交 / 保存配置 / 发送消息 / 上传）。不适用：纯展示 loading（骨架屏）由生命周期钩子自动管理、无禁用态切换的纯查询。
 
+## 受保护接口必须带鉴权封装调用审查参数（FR-084）
+
+> auth-request-fetch-frontend-rule.md 参数。所有请求后端 `requireAuth` 受保护端点（如 `GET /api/config`、`GET /api/ai/config`）必须统一经带鉴权封装的共享 HTTP 客户端（本项目 `apiFetch`）调用，禁止业务代码里裸 `fetch` 不带 token；封装须从非 Pinia 源读 token；给公开端点加 `requireAuth` 是破坏性变更须审计前端调用方。对应 wiki-code-dev CODING-AUTH-REQUEST-FETCH / 后端 BR-094。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `auth_request_fetch_frontend.enabled` | `true` | 启用本组规则（FR-084） |
+| `auth_request_fetch_frontend.protected_endpoint_patterns` | `/api/config`,`/api/ai/config` | 受保护端点路径片段（命中裸 fetch 即违规），来自配置不硬编码 |
+| `auth_request_fetch_frontend.wrapper_symbol` | `apiFetch` | 带鉴权封装函数/符号名（存在性守卫 + 替换目标） |
+| `auth_request_fetch_frontend.token_source` | `localStorage` | 封装读取 token 的源（须非 Pinia，避免 bootstrap 期依赖） |
+| `auth_request_fetch_frontend.severity_missing_wrap` | `critical` | FR-084-1 裸 fetch 调受保护端点导致 401 静默失效违规级别 |
+| `auth_request_fetch_frontend.severity_token_source` | `critical` | FR-084-2 封装依赖 Pinia 致 bootstrap 期取 token 失败违规级别 |
+| `auth_request_fetch_frontend.severity_breaking_audit` | `major` | FR-084-3 收紧 requireAuth 未审计调用方违规级别 |
+
+> 适用：`frontend/src/utils/apiBase.ts` 之外的任何 `.vue` / `.ts`（凡请求 `protected_endpoint_patterns` 端点即须走 `wrapper_symbol`）。不适用：显式公开端点（`publicPaths` 白名单）、纯静态资源、`apiFetch` 自身实现。
+
+## 包管理器 store 卫生审查参数（FR-085）
+
+> pnpm-store-hygiene-frontend-rule.md 参数。前端构建（`vite` 经 `node_modules` 解析 pnpm store）依赖健康且收敛的 pnpm store。在 safe-delete 沙箱钩子（fail-closed）等拦截 rename/探测的环境中，pnpm 主目录探测被打断会退化为在当前盘根建 `.pnpm-store`，污染工作区且让 `node_modules` 解析不到统一 store。全局 `.npmrc` 须显式 `store-dir` 收敛，项目/盘根不得存在孤儿 `.pnpm-store`。对应 wiki-code-dev CODING-PNPM-STORE-HYGIENE / 后端 BR-095 / wiki-auto-testing `dependency_store_hygiene_check`。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `pnpm_store_hygiene_frontend.enabled` | `true` | 启用本组规则（FR-085） |
+| `pnpm_store_hygiene_frontend.store_dir_key` | `store-dir` | `.npmrc` 中用于收敛 store 的键名 |
+| `pnpm_store_hygiene_frontend.forbidden_store_dirs` | `.pnpm-store` | 禁止散落的 store 目录名（命中即孤儿） |
+| `pnpm_store_hygiene_frontend.canonical_store_dir` | `D:\.pnpm-store` | 统一 store 绝对路径（与孤儿对比，命中则合法） |
+| `pnpm_store_hygiene_frontend.scan_root` | 项目根 | 扫描孤儿 store 的根目录 |
+| `pnpm_store_hygiene_frontend.severity` | `warn` | 散落缓存/缺收敛键的违规级别（CI 前置可升 error） |
+
+> 适用：前端构建依赖的 pnpm store 收敛；`.npmrc` 的 `store-dir` 收敛键；项目/盘根孤儿 `.pnpm-store` 检测；CI / 环境初始化对 store 收敛的断言。纯 npm/yarn（无严格 content-addressable store 或不受该钩子影响）不适用。
+
+## 常驻组件生命周期隔离审查参数（FR-086）
+
+> persistent-component-lifecycle-frontend-rule.md 参数。移动端聆听页等用 `v-show` 常驻保留后台状态（音频播放 / 长连接 / 计时器 / 流式进度）的组件，须满足切回恢复 / 账户切换重置 / 重型 DOM 懒渲染 / vue-tsc 模板收窄。对应 wiki-code-dev CODING-PERSISTENT-COMPONENT。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `persistent_component_frontend.enabled` | `true` | 启用本组规则（FR-086） |
+| `persistent_component_frontend.severity_watch_visible` | `major` | FR-086-1 watch(visible) 切回恢复缺失违规级别 |
+| `persistent_component_frontend.severity_watch_auth` | `critical` | FR-086-2 watch(auth.user?.id) 重置会话态缺失违规级别 |
+| `persistent_component_frontend.severity_heavy_lazy` | `major` | FR-086-3 重型 DOM 未 v-if=visible 懒渲染违规级别 |
+| `persistent_component_frontend.severity_template_narrow` | `suggestion` | FR-086-4 vue-tsc 模板收窄缺失违规级别 |
+| `persistent_component_frontend.watch_visible_signal` | `visible` | 驱动切回恢复的 watch 信号（props.visible） |
+| `persistent_component_frontend.auth_watch_signal` | `user?.id` | 驱动会话态重置的 auth watch 信号 |
+| `persistent_component_frontend.heavy_dom_lazy_visible` | `true` | 非播放必需重型节点须 `v-if="visible"` 懒渲染 |
+| `persistent_component_frontend.heavy_list_threshold` | `50` | 触发懒渲染的列表项数阈值（低于此值 `v-if` 包裹只增闪烁） |
+| `persistent_component_frontend.template_narrow_exclude_tabs` | `query,browse,ingest,me,listen` | vue-tsc 模板收窄须排除的全部已知 Tab（让 TS 收窄 `activeTab` 为 never） |
+
+> 适用：用 `v-show` 常驻保留后台状态的组件；单 SPA 无 vue-router 手动切换视图；账户切换影响组件内会话态；含数百+ 重型节点的组件。不适用：纯展示 / 生命周期短的组件（用 `v-if` 即可）；使用 vue-router 的项目（路由守卫已处理，模板收窄不适用）；轻量列表（< `heavy_list_threshold` 项）。
+
+## ObjectURL 生命周期审查参数（FR-087）
+
+> media-object-url-frontend-rule.md 参数。前端用 `URL.createObjectURL(blob)` 持有 TTS 音频 / 图片预览 / 文件下载等 Blob 且组件常驻或频繁重建时，create / revoke 须成对、句柄收口单一变量。对应 wiki-code-dev CODING-MEDIA-OBJECT-URL / wiki-auto-testing `frontend_review_static_check` 派生组 `object_url_revoked`。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `media_object_url_frontend.enabled` | `true` | 启用本组规则（FR-087） |
+| `media_object_url_frontend.severity_pair` | `major` | FR-087-1 create/revoke 不成对（常驻组件下内存泄漏）违规级别 |
+| `media_object_url_frontend.severity_handle` | `suggestion` | FR-087-2 句柄未收口单一变量违规级别 |
+| `media_object_url_frontend.handle_var_hint` | `objectUrl` | ObjectURL 句柄收口变量名提示（命中 `createObjectURL` 调用点附近须有同名 revoke） |
+
+> 适用：前端 `URL.createObjectURL` 持有 Blob 且组件常驻或频繁重建；同一资源被反复重新合成 / 替换（如朗读队列逐曲切换）。不适用：一次性短命组件且明确 `onBeforeUnmount` 释放；静态资源用 `<img src>` / 打包资源 URL。
+
+## 音频播放可靠性审查参数（FR-088）
+
+> audio-playback-reliability-frontend-rule.md 参数。前端 `<audio>` / Web Audio 播放用户触发的媒体且合成（后端 / TTS）与播放分两步时，合成失败 vs 播放被拦截文案须分离、切换曲目须重置进度。对应 wiki-code-dev CODING-AUDIO-PLAYBACK-RELIABILITY / wiki-auto-testing `frontend_review_static_check` 派生组 `audio_autoplay_distinguished`。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `audio_playback_frontend.enabled` | `true` | 启用本组规则（FR-088） |
+| `audio_playback_frontend.severity_separate_msg` | `major` | FR-088-1 合成失败与播放拦截文案未分离违规级别 |
+| `audio_playback_frontend.severity_reset_progress` | `suggestion` | FR-088-2 切换曲目/重合成前未重置 position/duration 违规级别 |
+| `audio_playback_frontend.synth_fail_pattern` | `语音合成失败` | 合成失败文案锚点（命中即视为已分离其文案分支） |
+| `audio_playback_frontend.autoplay_block_pattern` | `播放被浏览器拦截` | 播放被拦截文案锚点（与 synth_fail_pattern 区分） |
+| `audio_playback_frontend.reset_progress_on_resynth` | `true` | 重合成前须重置进度（position/duration 清零） |
+
+> 适用：前端 `<audio>` 播放用户触发的媒体且合成与播放分两步；朗读 / TTS 逐曲切换队列；无用户手势的自动播放。不适用：后端直接返回已托管音频文件 URL、前端仅 `<audio src>` 播放；单文件连续播放器（进度保留是期望行为）。
+
+## FR-089 毛玻璃 backdrop-filter 包含块陷阱
+
+> backdrop-filter-containing-block-frontend-rule.md 参数。任何 `backdrop-filter != none`（含 `var()` 解析为非 none）的元素成为其 `position: fixed/absolute` 后代的包含块（CSS Filter Effects / Positioned Layout 规范）；多主题下 `--m-blur` 浅色=`none`、毛玻璃=`blur(Npx)`，同一组件在浅色主题正常、毛玻璃主题 `fixed` 悬浮元素随滚动漂移 → 主题间行为不一致（直接命中 FR-040 多主题一致性）。对应 wiki-code-dev CODING-BACKDROP-FILTER-CB / wiki-auto-testing `frontend_review_static_check` 派生组 `backdrop_filter_fixed_ancestor`。
+
+- **FR-089-1（critical）**：若评审范围涉及含 `backdrop-filter` 的滚动容器（如 `backdrop_filter_frontend.scroll_container_selectors` 命中的 `.mobile-content`）且其内有 `position: fixed` 后代（滚动回顶 FAB / 定位按钮 / 全屏 sheet 遮罩，见 `fixed_descendant_selectors`），核对容器在毛玻璃主题下不会成为该 `fixed` 后代的包含块——修复须从滚动容器移除 `backdrop-filter`/` -webkit-backdrop-filter` 两行，或 `<Teleport to=".mobile-root">` 将 `fixed` 子元素逃逸到毛玻璃祖先之外；禁止让 `fixed` 元素相对滚动容器定位（随滚动失固定）。
+- **FR-089-2（standard）**：若评审范围涉及多主题切换且组件写了主题分支（`theme === ? a : b` / `data-theme` 硬编码 / 为某主题特判改 `backdrop-filter`），核对是否已改为 `--m-*` 变量驱动（与 FR-090 协同），禁止组件级主题分支。
+
+## 毛玻璃 backdrop-filter 包含块审查参数（FR-089）
+
+> backdrop-filter-containing-block-frontend-rule.md 参数。所有选择器 / 变量名 / 模糊值来自本段，零硬编码。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `backdrop_filter_frontend.enabled` | `true` | 启用本组规则（FR-089） |
+| `backdrop_filter_frontend.scroll_container_selectors` | `.mobile-content` | 承载滚动 + 可能含毛玻璃的容器选择器（命中即排查其 fixed 后代） |
+| `backdrop_filter_frontend.fixed_descendant_selectors` | `.mb-scroll-fab`,`.ml-scroll-fab`,`.ml-locate-fab`,`.mq-sheet-mask` | 须视口固定的后代选择器（一旦被毛玻璃祖先包含即失固定） |
+| `backdrop_filter_frontend.blur_variable_name` | `--m-blur` | 主题模糊变量名（其值浅色=none、毛玻璃=blur(Npx) 触发主题间不一致） |
+| `backdrop_filter_frontend.safe_alternatives` | `Teleport` | 合法逃逸写法（将 fixed 子元素 teleport 到毛玻璃祖先之外） |
+| `backdrop_filter_frontend.guard_patterns` | `Teleport` | 重构中不得误删的写法特征（误删会静默 reintroduce 包含块 bug） |
+| `backdrop_filter_frontend.severity_cb` | `critical` | FR-089-1 毛玻璃容器含 fixed 后代共现的违规级别 |
+| `backdrop_filter_frontend.severity_branch` | `standard` | FR-089-2 组件级主题分支的违规级别 |
+
+> 适用：多主题 SPA 滚动容器内嵌 `position: fixed` 悬浮元素（滚动回顶 FAB / 定位按钮 / 全屏 sheet 遮罩）；Tauri 透明窗口毛玻璃面板。不适用：单主题恒模糊（无主题间不一致）；无 fixed 后代的纯背景毛玻璃；本就希望相对容器吸顶（语义正确）；纯 `filter: blur()` 非定位上下文。
+
+## FR-090 双主题统一 --m-* 变量架构
+
+> dual-theme-variable-frontend-rule.md 参数。多主题项目主题相关样式（背景 / 模糊 / 文字 / 边框 / 阴影 / 光晕）须全部走 `--m-*` 变量：`:root` 默认 + `.theme-light` 等局部覆盖；切换主题只挂根容器主题类、改 `--m-*` 取值，组件零主题分支；主题状态集中单一 composable（`localStorage` 持久化 key 参数化）。对应 wiki-code-dev CODING-DUAL-THEME-VAR，与 FR-089 共用变量架构协同。
+
+- **FR-090-1（standard）**：若评审范围涉及主题相关样式（背景 / 模糊 / 文字 / 边框 / 阴影），核对是否引用 `var(--m-*)` 而非字面量；新增主题样式须先在 `var_definition_files` 补 `--m-*` 定义再引用（与 FR-035 主题色变量映射互补：FR-035 针对通用主题色白名单，本规则针对 `--m-*` 双主题专用变量）。
+- **FR-090-2（standard）**：若评审范围涉及主题切换逻辑，核对是否集中单一 composable（`useMobileTheme` 类）、`localStorage` 持久化 key 是否统一（`persist_key`）、默认主题是否参数化（`default_theme`）；禁止主题状态散落多个 store / 组件本地 ref / 硬编码默认。
+- **FR-090-3（standard）**：若评审范围涉及组件 `<style>` / `<script>`，核对无 `theme === ? a : b` / `data-theme` 硬编码分支；主题差异全部收敛到 `--m-*` 取值（与 FR-089-2 协同）。
+
+## 双主题变量架构审查参数（FR-090）
+
+> dual-theme-variable-frontend-rule.md 参数。所有选择器 / 变量名 / key 来自本段，零硬编码。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `dual_theme_var_frontend.enabled` | `true` | 启用本组规则（FR-090） |
+| `dual_theme_var_frontend.theme_variable_prefix` | `--m-` | 主题变量前缀（组件须引用 `var(--m-*)`） |
+| `dual_theme_var_frontend.default_theme` | `light` | 默认主题（composable 缺省取值） |
+| `dual_theme_var_frontend.root_selector` | `.mobile-root` | 挂载主题类的根容器选择器 |
+| `dual_theme_var_frontend.light_theme_selector` | `.theme-light` | 浅色主题类（局部覆盖 `--m-*`） |
+| `dual_theme_var_frontend.var_definition_files` | `mobile-light.css`,`:root` | 变量定义 / 覆盖文件清单（新增主题样式先在此补定义） |
+| `dual_theme_var_frontend.persist_key` | `karpathy-mobile-theme` | 主题持久化 localStorage 键（须单一 composable 管理） |
+| `dual_theme_var_frontend.forbid_component_branch` | `true` | 禁止组件级主题分支（须改为变量驱动） |
+| `dual_theme_var_frontend.severity` | `standard` | FR-090-1~3 违规级别 |
+
+> 适用：多主题 SPA（浅色 / 深色 / 毛玻璃并存）、主题差异大、需零组件改动切换。不适用：单主题；差异极小；第三方库样式；原型阶段。
+
+## FR-091 下载请求超时与可中断
+
+> download-timeout-abort-frontend-rule.md 参数。前端下载二进制/大文件必须带可配置超时（`AbortSignal.timeout`），阈值来自配置；超时/`AbortError` 须提示用户可重试。对应 wiki-code-dev CODING-FE-DOWNLOAD-ROBUST / CODING-CONFIG-TIMEOUT，与 wiki-auto-testing `frontend_review_static_check` 派生组 `download_timeout_abort` 对齐。
+
+- **FR-091-1（major）**：下载 `fetch` 须带 `AbortSignal.timeout`（阈值来自配置 `download_frontend.timeout_ms`，禁止硬编码 `30000` 之类字面量）。
+- **FR-091-2（suggestion）**：超时/`AbortError` 须被 `catch` 捕获并提示「下载超时，可重试」，不得静默吞掉或让按钮永久「下载中」。
+
+## 下载请求超时兜底审查参数（FR-091）
+
+> download-timeout-abort-frontend-rule.md 参数。所有阈值/严重级别来自本段，零硬编码。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `download_frontend.enabled` | `true` | 启用本组规则（FR-091） |
+| `download_frontend.timeout_ms` | `30000` | 下载请求超时阈值（注入 `AbortSignal.timeout`） |
+| `download_frontend.severity_timeout` | `major` | FR-091-1 缺可配置超时的违规级别 |
+| `download_frontend.severity_abort` | `suggestion` | FR-091-2 超时未提示可重试的违规级别 |
+
+> 适用：前端 `fetch` 下载二进制/大文件（下载/媒体/导出）；移动端与桌面端共用下载工具时。不适用：小体量 JSON 查询（已有独立超时/重试策略）。
+
+## FR-092 移动端下载失败不得静默
+
+> download-mobile-silent-guard-frontend-rule.md 参数。移动端下载失败必须显式提示用户（Toast/文案），与桌面端共用同一错误出口；移动端与桌面端复用同一下载工具，不各自实现。对应 wiki-code-dev CODING-FE-DOWNLOAD-ROBUST / FR-DL-3 / FR-DL-4。
+
+- **FR-092-1（major）**：移动端下载失败（`网络/超时/401/404/解析失败`）必须显式提示用户，禁止 `catch` 空块静默吞掉。
+- **FR-092-2（standard）**：`MobileBrowse` 与 `Browse` 复用同一个 `downloadVaultFile`（含超时/重入/错误提示/文件名解析），不各自实现错误处理。
+
+## 移动端下载静默失败审查参数（FR-092）
+
+> download-mobile-silent-guard-frontend-rule.md 参数。所有提示/工具名来自本段，零硬编码。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `download_mobile_silent.enabled` | `true` | 启用本组规则（FR-092） |
+| `download_mobile_silent.severity` | `major` | FR-092-1 移动端静默失败的违规级别 |
+| `download_mobile_silent.shared_util_hint` | `downloadVaultFile` | 移动端/桌面端应复用的下载工具名提示 |
+
+> 适用：`MobileBrowse` / 移动端下载分支；下载失败须用户可见反馈。不适用：纯桌面端且无移动端分支的项目。
+
+## FR-093 下载重入守卫
+
+> download-reentry-guard-frontend-rule.md 参数。下载须有重入守卫（in-flight 锁）防并发重复下载；锁释放须置于 `finally` 避免永久锁死。对应 wiki-code-dev CODING-FE-DOWNLOAD-ROBUST / FR-DL-2。
+
+- **FR-093-1（standard）**：下载须用 in-flight 布尔 / `Set` 锁住进行中下载，重复触发直接忽略或禁用按钮。
+- **FR-093-2（suggestion）**：锁的释放必须置于 `finally`，任何异常路径都不残留锁。
+
+## 下载重入守卫审查参数（FR-093）
+
+> download-reentry-guard-frontend-rule.md 参数。严重级别来自本段，零硬编码。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `download_reentry.enabled` | `true` | 启用本组规则（FR-093） |
+| `download_reentry.severity` | `standard` | FR-093-1 缺重入守卫的违规级别 |
+| `download_reentry.severity_finally` | `suggestion` | FR-093-2 锁未置于 finally 的违规级别 |
+
+> 适用：任何可重复触发下载的 UI（按钮/列表项）；快速连点场景。不适用：单次一次性下载且无重复触发入口。
+
+## FR-094 下载文件名安全解析
+
+> content-disposition-filename-frontend-rule.md 参数。前端经 `fetch`+`blob` 触发保存时，文件名须从 `Content-Disposition` 解析：优先解码 `filename*`（RFC 5987 UTF-8）还原中文名、保留原始扩展名、用于保存前清洗注入/路径字符。对应 wiki-code-dev CODING-CONTENT-DISPOSITION-SAFE / BR-098，与后端 BR-101（扩展名保留）协同。
+
+- **FR-094-1（major）**：须优先读取 `filename*=UTF-8''<encoded>` 并 `decodeURIComponent` 反向解码；无 `filename*` 才回退 `filename`。
+- **FR-094-2（major）**：解析出的文件名须保留 `path.extname`（缺失时按 Content-Type 兜底补扩展名），禁止静默丢失。
+- **FR-094-3（standard）**：用于 `a.download`/写盘前须清洗 CRLF/引号/路径分隔符等，清洗字符集来自配置。
+
+## 下载文件名解析审查参数（FR-094）
+
+> content-disposition-filename-frontend-rule.md 参数。解码/清洗字符集来自本段，零硬编码。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `content_disposition_frontend.enabled` | `true` | 启用本组规则（FR-094） |
+| `content_disposition_frontend.severity_decode` | `major` | FR-094-1 未解码 `filename*` 的违规级别 |
+| `content_disposition_frontend.severity_ext` | `major` | FR-094-2 扩展名丢失的违规级别 |
+| `content_disposition_frontend.severity_sanitize` | `standard` | FR-094-3 未清洗文件名的违规级别 |
+| `content_disposition_frontend.control_chars_regex` | `["\\\x00-\x1f\x7f]` | 用于保存前清洗的注入/控制字符（含 CRLF/引号/路径分隔符） |
+
+> 适用：下载经 `fetch`+`blob` 触发保存、文件名从 `Content-Disposition` 解析的前端；中文/特殊文件名场景。不适用：文件名完全由前端常量决定且已白名单。
+
 ## 审查流程优化（Review Process Optimization）
 
 > 以下判定步骤适用于每次评审，旨在降低误报与漏报。规则文件与脚本不硬编码阈值，所有参数从本文件读取。
@@ -1093,3 +1301,18 @@ SSE 事件按类型推送，前端分发到 store：
 ### 3. 配置驱动（Config-driven）
 
 所有阈值 / 参数 / 严重级别均从本文件读取，**禁止在审查逻辑（规则文件、脚本、prompt）中硬编码**。新增规则须同步在对应"审查参数"段落追加参数表，并默认从 config 引用。若某判定需要新阈值，先加到本文件再在规则中引用。
+
+## 配置化与泛化审查参数（CODING-CONFIG-DRIVEN / J-CONFIG-FIRST）
+
+> 零硬编码元规则的前端侧落地：所有可变参数集中在配置层，代码与规则文件只读取不内联。新增规范 = 在配置加一组（registry），引擎主流程不动。本段是「配置驱动 + 泛化」统一审查透镜的参数（v2.17.0 新增），作为所有 FR 的前置约束。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `config_driven_frontend.enabled` | `true` | 是否启用配置化与泛化审查透镜 |
+| `config_driven_frontend.hardcode.color_signals` | `rgba(,rgb(,#,[0-9a-fA-F]{3,6}` | 硬编码颜色值信号（命中即要求改 CSS 变量，除非匹配 `whitelist_patterns`） |
+| `config_driven_frontend.hardcode.path_signals` | `D:/,C:/,/Users/,/home/,Program Files` | 硬编码机器/安装路径信号（命中即要求改配置或后端 API 提供） |
+| `config_driven_frontend.hardcode.count_signals` | `3,5,10,12` | 硬编码主题/预设/菜单数量字面量信号（命中即要求从配置/API 动态获取） |
+| `config_driven_frontend.hardcode.special_case_signals` | `if (kind ===,switch (` | 非泛化特判信号（命中即建议改为配置组遍历） |
+| `config_driven_frontend.layer_compliance.enabled` | `true` | 是否检查配置三层（默认值/项目覆盖/示例）未被项目特有值污染 |
+| `config_driven_frontend.severity_hardcode_color` | `warning` | 硬编码颜色值的违规级别（密钥级另归 BR-034 等价 Critical） |
+| `config_driven_frontend.severity_hardcode_other` | `warning` | 其他硬编码（路径/数量/特判）的违规级别 |

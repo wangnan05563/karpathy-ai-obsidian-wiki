@@ -594,3 +594,199 @@
 | `user_store_init.critical_files` | `users.json,config.json` | 须保证非空默认的关键数据文件 |
 | `user_store_init.backup_on_corrupt` | `true` | 损坏/空壳文件须先备份再回退 |
 | `user_store_init.severity` | `critical` | 空壳/损坏未兜底导致登录失败的违规级别 |
+
+## PowerShell 端口清理安全（CODING-PS-PROCESS-CLEANUP）
+
+> 对应 references/powershell-constraints-rule.md PS-6.1（→ BR-093）。服务启动/重启脚本清理占用端口的旧进程，必须用 `Stop-Process -Force` + `try/catch`（非致命），禁止裸 `taskkill` 作清理主键（其 stderr 在 `$ErrorActionPreference='Stop'` 下会触发 `NativeCommandError` 中止脚本）。所有参数来自配置，禁止在规则文件中硬编码端口号/进程名。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `process_cleanup_safe.enabled` | `true` | 启用端口清理安全审查 |
+| `process_cleanup_safe.scan_dirs` | `scripts` | 扫描的脚本目录（PowerShell 启动脚本所在处） |
+| `process_cleanup_safe.file_glob` | `*.ps1` | 扫描文件类型 |
+| `process_cleanup_safe.forbidden_patterns` | `taskkill\s` | 禁止作为清理主键的裸 `taskkill` 模式（残留兜底允许但须 try/catch + 吞 stderr） |
+| `process_cleanup_safe.required_patterns` | `Stop-Process` | 端口清理主键须出现的进程终止命令 |
+| `process_cleanup_safe.require_trycatch` | `true` | 进程终止命令须被 try/catch 包裹（清理须非致命） |
+| `process_cleanup_safe.severity` | `critical` | 裸 taskkill 主键 / 无 try/catch 导致启动脚本中止的违规级别 |
+
+## 受保护接口须带鉴权封装调用（CODING-AUTH-REQUEST-FETCH）
+
+> 对应 references/auth-request-fetch-rule.md（R-1~R-3 → FR-084 / BR-094）。所有 `requireAuth` 受保护端点必须统一经带鉴权封装（本项目 `apiFetch`）调用，封装从 `localStorage` 读 token 注入 `Authorization` 头、不依赖 Pinia（bootstrap 期可用）；裸 `fetch` 调受保护端点 → 401 静默失效。给公开端点加 `requireAuth` 是破坏性变更，须审计全部前端调用方。参数全配置化，禁止硬编码受保护端点路径与封装符号名。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `auth_request_fetch.enabled` | `true` | 启用"受保护端点须带鉴权封装"审查 |
+| `auth_request_fetch.protected_endpoint_patterns` | `/api/config,/api/ai/config` | 受保护端点路径片段（命中裸 fetch 即违规），来自配置不硬编码 |
+| `auth_request_fetch.wrapper_symbol` | `apiFetch` | 带鉴权封装函数/符号名（存在性守卫 + 替换目标） |
+| `auth_request_fetch.token_source` | `localStorage` | 封装读取 token 的源（须非 Pinia，避免 bootstrap 期依赖） |
+| `auth_request_fetch.breaking_change_audit` | `true` | 给公开端点加 requireAuth 时是否强制调用方审计（BR-094 配套） |
+| `auth_request_fetch.severity` | `critical` | 裸 fetch 调受保护端点导致 401 静默失效的违规级别 |
+
+## 包管理器 store 卫生（CODING-PNPM-STORE-HYGIENE）
+
+> 对应 references/pnpm-store-hygiene-rule.md（R-1~R-3 → FR-085 / BR-095 / wiki-auto-testing `dependency_store_hygiene_check`）。safe-delete 沙箱钩子（fail-closed）拦截 pnpm 主目录探测的 `rename` 临时操作 → `EPERM` → pnpm 退化为在当前盘根建 `.pnpm-store`，缓存散落。须显式在全局 `.npmrc` 写 `store-dir` 收敛到统一路径，并检测/清理孤儿目录；CI/环境初始化须断言收敛。参数全配置化，禁止硬编码 store 绝对路径到规则文件。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `pnpm_store_hygiene.enabled` | `true` | 启用 store 卫生审查 |
+| `pnpm_store_hygiene.store_dir_key` | `store-dir` | `.npmrc` 中用于收敛 store 的键名 |
+| `pnpm_store_hygiene.forbidden_store_dirs` | `.pnpm-store` | 禁止散落的 store 目录名（命中即孤儿） |
+| `pnpm_store_hygiene.canonical_store_dir` | `D:\.pnpm-store` | 统一 store 绝对路径（与孤儿对比，命中则合法） |
+| `pnpm_store_hygiene.scan_root` | 项目根 | 扫描孤儿 store 的根目录 |
+| `pnpm_store_hygiene.severity` | `warn` | 散落缓存/缺收敛键的违规级别（CI 前置可升 error） |
+
+## 常驻组件生命周期隔离（CODING-PERSISTENT-COMPONENT）
+
+> 对应 references/persistent-component-lifecycle-rule.md（PC-1~PC-4）。`v-show` 常驻以保留后台状态（音频/长连接/计时器）时须按可见性恢复、按账户重置、按可见性懒渲染重型 DOM。所有参数集中管理。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `persistent_component.enabled` | `true` | 启用常驻组件生命周期隔离审查 |
+| `persistent_component.watch_visible_signal` | `visible` | 切回恢复/自动定位所 watch 的 props 信号名 |
+| `persistent_component.auth_watch_signal` | `user?.id` | 账户切换重置所 watch 的 auth 信号（onMounted 仅一次须显式重置） |
+| `persistent_component.heavy_dom_lazy_visible` | `true` | 非播放必需的重型节点须用 `v-if="visible"` 懒渲染（阈值见下） |
+| `persistent_component.heavy_list_threshold` | `50` | 列表节点数 ≥ 此值视为"重型"，建议 `v-if="visible"` 包裹 |
+| `persistent_component.template_narrow_exclude_tabs` | `query,browse,ingest,me,listen` | 移出 v-else-if 链后，placeholder 独立 `v-if` 须排除的全部已知 Tab（让 TS 收窄为 never） |
+| `persistent_component.severity` | `major` | 常驻组件缺 watch(visible)/watch(auth) 重置的违规级别 |
+
+## ObjectURL 生命周期（CODING-MEDIA-OBJECT-URL）
+
+> 对应 references/media-object-url-rule.md（MO-1~MO-2）。`createObjectURL` 须与 `revokeObjectURL` 成对，句柄收口单一变量。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `media_object_url.enabled` | `true` | 启用 ObjectURL 生命周期审查 |
+| `media_object_url.handle_var_hint` | `objectUrl` | ObjectURL 句柄收口变量名（扫描 createObjectURL 附近是否 revokeObjectURL） |
+| `media_object_url.severity` | `warning` | 创建后无释放的违规级别 |
+
+## 音频播放可靠性（CODING-AUDIO-PLAYBACK-RELIABILITY）
+
+> 对应 references/audio-playback-reliability-rule.md（AP-1~AP-2）。合成失败（res.ok≠200/blob 解析）与 a.play() 被浏览器自动播放拦截须分文案；切换曲目重置进度。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `audio_playback.enabled` | `true` | 启用音频播放可靠性审查 |
+| `audio_playback.synth_fail_pattern` | `语音合成失败` | 合成失败文案特征串（命中须与播放拦截文案分离） |
+| `audio_playback.autoplay_block_pattern` | `播放被浏览器拦截` | 播放被自动播放策略拦截文案特征串（命中须与合成失败分离） |
+| `audio_playback.reset_progress_on_resynth` | `true` | 重合成/切换曲目前须重置 position/duration |
+| `audio_playback.severity` | `major` | 两类文案混淆 / 进度未重置的违规级别 |
+
+## 部署产物验证（CODING-DEPLOY-VERIFY-DISK）
+
+> 对应 references/deploy-verify-disk-rule.md（DV-1~DV-2）。环境有自动部署钩子、目录高频轮转时，验证线上 bundle 须读磁盘最新 `public_live_<ts>` 而非两次 HTTP 请求。与 BR-071 / FR-068 协同。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `deploy_verify_disk.enabled` | `true` | 启用"部署验证读磁盘最新目录"策略（规避 HTTP 轮转 404/错版本） |
+| `deploy_verify_disk.live_dir_pattern` | `public_live_` | 时间戳部署目录前缀（与 spa_live_deploy 共用） |
+| `deploy_verify_disk.sort_command` | `ls -dt` | 取最新目录命令模板（数值时间戳降序） |
+| `deploy_verify_disk.asset_bundle_glob` | `assets/index-*.js` | 主 bundle 相对路径 glob |
+| `deploy_verify_disk.severity` | `warning` | 仍用两次 HTTP 请求校验线上 bundle 的违规级别 |
+
+## 毛玻璃 backdrop-filter 包含块陷阱（CODING-BACKDROP-FILTER-CB）
+
+> 对应 references/backdrop-filter-containing-block-rule.md（CB-1~CB-2）。`backdrop-filter != none` 的元素会成为其 `position: fixed/absolute` 后代的 containing block（CSS 规范）；多主题下 `--m-blur` 在浅色为 none、毛玻璃为 blur，导致同一组件主题间"fixed 悬浮"行为不一致（命中 FR-040）。与前端 FR-089 / wiki-auto-testing `frontend_review_static_check` 派生组 `backdrop_filter_fixed_ancestor` 协同。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `backdrop_filter_cb.enabled` | `true` | 启用毛玻璃包含块陷阱审查 |
+| `backdrop_filter_cb.scroll_container_selectors` | `.mobile-content` | 承载滚动 + 可能含毛玻璃的容器选择器（命中即排查其 fixed 后代） |
+| `backdrop_filter_cb.fixed_descendant_selectors` | `.mb-scroll-fab`,`.ml-scroll-fab`,`.ml-locate-fab`,`.mq-sheet-mask` | 须保持视口固定的后代选择器（一旦被毛玻璃祖先包含即失固定） |
+| `backdrop_filter_cb.blur_variable_name` | `--m-blur` | 主题模糊变量名（其值在浅色=none、毛玻璃=blur(Npx) 触发主题间不一致） |
+| `backdrop_filter_cb.safe_alternatives` | `Teleport` | 合法逃逸写法（将 fixed 子元素 teleport 到毛玻璃祖先之外） |
+| `backdrop_filter_cb.guard_patterns` | `Teleport` | 重构中不得误删的写法特征（误删会静默 reintroduce 包含块 bug） |
+| `backdrop_filter_cb.severity` | `critical` | 毛玻璃容器含 fixed 后代（共现）的违规级别 |
+
+## 双主题统一 --m-* 变量架构（CODING-DUAL-THEME-VAR）
+
+> 对应 references/dual-theme-variable-rule.md（DT-1~DT-3）。多主题项目用一套 `--m-*` 变量承载全部主题相关样式，切换主题只挂根容器主题类、改 `--m-*` 取值，组件零主题分支。与前端 FR-090 / CODING-BACKDROP-FILTER-CB 共用变量架构协同。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `dual_theme_var.enabled` | `true` | 启用双主题变量架构审查 |
+| `dual_theme_var.theme_variable_prefix` | `--m-` | 主题变量前缀（组件须引用 `var(--m-*)` 而非字面量） |
+| `dual_theme_var.default_theme` | `light` | 默认主题（composable 缺省取值） |
+| `dual_theme_var.root_selector` | `.mobile-root` | 挂载主题类的根容器选择器 |
+| `dual_theme_var.light_theme_selector` | `.theme-light` | 浅色主题类（局部覆盖 `--m-*` 变量） |
+| `dual_theme_var.var_definition_files` | `mobile-light.css`,`:root` | 变量定义/覆盖文件清单（新增主题样式先在此补定义） |
+| `dual_theme_var.persist_key` | `karpathy-mobile-theme` | 主题持久化 localStorage 键（须单一 composable 管理） |
+| `dual_theme_var.forbid_component_branch` | `true` | 禁止组件级 `theme === ? a : b` 分支（须改为变量驱动） |
+| `dual_theme_var.severity` | `standard` | 组件写死主题字面量 / 主题分支的违规级别 |
+
+## 文件流出端点鉴权门（CODING-DOWNLOAD-AUTH）
+
+> 对应 references/download-endpoint-auth-rule.md（DA-1~DA-3）。任何把 vault 用户数据以文件流 / 下载响应向外暴露的读端点必须挂 `preHandler` 鉴权守卫；缺失配置默认 fail-closed 401。与后端 BR-097 / 前端 FR-084 协同。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `download_auth.enabled` | `true` | 启用文件流出端点鉴权审查 |
+| `download_auth.read_endpoints` | `/api/files/tree`,`/api/files/pages`,`/api/files`,`/api/files/download` | 须挂载守卫的读端点清单（新增端点只改此处，参数化） |
+| `download_auth.files_read_auth_required_key` | `auth.filesReadAuthRequired` | 读鉴权开关配置键（true 时挂 `requireAuth`） |
+| `download_auth.fail_closed_status` | `401` | 守卫缺失 / 未配置时的默认拒绝状态码 |
+| `download_auth.single_tenant_passthrough` | `auth.enabled=false` | 单租户直通条件（显式，不与读鉴权开关混淆） |
+| `download_auth.severity` | `critical` | 漏挂守卫 / fail-open 的违规级别 |
+
+## 响应头时序（CODING-RESP-HEADER-ORDER）
+
+> 对应 references/response-header-ordering-rule.md（RH-1~RH-2）。`Content-Disposition` / `Content-Type` 等响应头须在成功读取内容后、发送体前设置；错误路径只置状态码，不携带附件头。与后端 BR-100 协同。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `resp_header_order.enabled` | `true` | 启用响应头时序审查 |
+| `resp_header_order.headers_after_read` | `Content-Disposition`,`Content-Type` | 须在成功读取后才设置的响应头清单 |
+| `resp_header_order.forbid_header_before_try` | `true` | 禁止在 `try` 读取前设置上述头（防半截响应） |
+| `resp_header_order.severity` | `major` | 错误路径携带附件头 / 头时序错误的违规级别 |
+
+## Content-Disposition 安全（CODING-CONTENT-DISPOSITION-SAFE）
+
+> 对应 references/content-disposition-safe-rule.md（CD-1~CD-3）。进入响应头的文件名须 RFC 5987 `filename*` 编码 + legacy `filename` 兜底，并清洗 CRLF / 引号 / 控制字符防头注入。与后端 BR-098 / 前端 FR-094 协同。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `content_disposition_safe.enabled` | `true` | 启用 Content-Disposition 安全审查 |
+| `content_disposition_safe.use_rfc5987` | `true` | 须输出 `filename*=UTF-8''<encoded>` |
+| `content_disposition_safe.control_chars_regex` | `["\\\x00-\x1f\x7f]` | 须清洗的响应头破坏字符（CRLF / 控制字符） |
+| `content_disposition_safe.quote_char` | `"` | 须转义的引号字符 |
+| `content_disposition_safe.encode_extra_chars` | `'()*` | RFC 5987 attr-char 须额外百分号转义的字符 |
+| `content_disposition_safe.legacy_ascii_only` | `true` | 非 ASCII 文件名禁止直接写入 legacy `filename`（改中性名 + 扩展名兜底） |
+| `content_disposition_safe.severity` | `critical` | 头注入 / 编码缺失的违规级别 |
+
+## 下游错误码透传（CODING-VAULT-ERRCODE-PRESERVE）
+
+> 对应 references/vault-error-code-preserve-rule.md（VE-1~VE-2）。访问 vault/LLM/第三方适配器的 `catch` 须按 `err.code` 分流为语义正确的 HTTP 状态，禁止统一吞成 500。与后端 BR-099 / BR-076 互补。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `errcode_map.enabled` | `true` | 启用错误码透传审查 |
+| `errcode_map.eisdir_status` | `400` | `EISDIR`（下的是目录）映射状态 |
+| `errcode_map.eacces_status` | `403` | `EACCES`/`EPERM` 映射状态 |
+| `errcode_map.enoent_status` | `404` | `ENOENT`（真不存在）映射状态 |
+| `errcode_map.eoutside_status` | `400` | `EOUTSIDE`（路径越界）映射状态 |
+| `errcode_map.unknown_status` | `500` | 未知错误回落状态 |
+| `errcode_map.preserve_message` | `true` | 未知错误保留原始 message（非笼统「服务器错误」） |
+| `errcode_map.severity` | `major` | 统一吞 500 / 丢失语义的违规级别 |
+
+## 前端下载健壮性（CODING-FE-DOWNLOAD-ROBUST）
+
+> 对应 references/frontend-download-robustness-rule.md（FR-DL-1~FR-DL-4）。前端下载 fetch 须 `AbortSignal.timeout`（可配置）、重入守卫、移动端与桌面端共享错误提示（禁静默失败）、复用同一下载工具。与前端 FR-091~FR-093 / CODING-CONFIG-TIMEOUT 协同。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `download_frontend.enabled` | `true` | 启用前端下载健壮性审查 |
+| `download_frontend.timeout_ms` | `30000` | 下载请求超时阈值（注入 `AbortSignal.timeout`） |
+| `download_frontend.shared_util_hint` | `downloadVaultFile` | 移动端/桌面端应复用的下载工具名提示 |
+| `download_frontend.severity_timeout` | `major` | 缺可配置超时的违规级别 |
+| `download_frontend.severity_reentry` | `standard` | 缺重入守卫的违规级别 |
+| `download_frontend.severity_silent` | `major` | 移动端静默失败的违规级别 |
+
+## 部署产物特征串校验（CODING-DEPLOY-MARKER-VERIFY）
+
+> 对应 references/deploy-mobile-marker-verify-rule.md（DM-1~DM-2）。单端口 SPA+API 同体应用部署后须校验产物 bundle 含关键功能特征串，防被不含该功能的后续构建覆盖；配合「全新时间戳目录 + 重启」部署纪律。与后端 BR-096 / 前端 FR-068 互补。
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `deploy_marker_verify.enabled` | `true` | 启用部署产物特征串校验审查 |
+| `deploy_marker_verify.marker_strings` | `MobileListen`,`MobileShell`,`聆听` | 关键功能特征串清单（新增关键功能只改此处） |
+| `deploy_marker_verify.live_dir_pattern` | `public_live_` | 实时部署目录前缀（读磁盘定位最新） |
+| `deploy_marker_verify.bundle_glob` | `assets/index-*.js` | 校验目标 bundle 文件 glob |
+| `deploy_marker_verify.severity` | `critical` | 部署后缺失关键特征串的违规级别 |

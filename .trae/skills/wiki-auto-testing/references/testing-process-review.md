@@ -1217,3 +1217,432 @@
 | 跨进程/safe-delete 合规 | 第十二/十轮 safe-delete 钩子 fail-closed 工作模式；守卫纯 grep 读源码、配置写新内容，均无风险 |
 | 端到端收口 | 第十轮 `spa_live_deploy_check` / `service_manage` / 杀孤儿 :3000 干净重启；SKILL.md 版本表 v2.13.0 |
 
+---
+
+## 第十六轮：从 BR-093 派生 process_cleanup_safe 静态守卫（2026-08-11）
+
+> 本轮基于「启动脚本清理旧进程 taskkill stderr 触发 NativeCommandError 中止脚本」复盘（对应 BR-093 / CODING-PS-PROCESS-CLEANUP / wiki-code-dev PS-6.1），在 `backend_review_static_check` 步骤类型中**新增 1 组配置驱动静态守卫 `process_cleanup_safe`**。以下从四维度复盘该测试流程扩展，含 Sequential Thinking 标注。
+
+### 维度一：成功执行步骤（Successful Steps）
+
+| 步骤 | 操作 | 产物 / 验证点 | 复用本技能的哪个能力 |
+|------|------|---------------|----------------------|
+| 1 | 派生守卫组 | 在 `backend_review_static_check.groups[]` 加 `process_cleanup_safe`（forbidden pattern `taskkill`，`rule_ref: BR-093`），**零引擎代码变更**（registry handler 自动遍历） | 第十三/十五轮建立的 registry + YAML 泛化能力 |
+| 2 | 参数全配置、零硬编码 | patterns / severity / rule_ref 落 `defaults.yaml` / `config.yaml` / `examples/config.enabled.example.yaml` 三处同步；新增规范 = 加一组 | J-CONFIG-FIRST（第十三轮） |
+| 3 | 扫描范围按需放宽 | 启用说明标注：启用本组须将 `scan_dirs` 含 `scripts`、`file_glob` 放宽到 `*.{ts,ps1}`（PowerShell 启动脚本在 `scripts/` 下） | 步骤类型 `scan_dirs` / `file_glob` 配置化 |
+| 4 | safe-delete 合规落地 | 守卫纯 grep 读源码（不触发 safe-delete 拦截）；YAML 编辑为既有文件 Edit，沙箱放行；无需跨进程 TCP 冒烟 | 第十二/十轮 safe-delete 钩子 fail-closed 工作模式 |
+
+关键发现：后端 step 引擎（`_handle_backend_review_static_check`）**仅支持 forbidden patterns（命中即违规），不支持 required_patterns（存在性）**。因此 `process_cleanup_safe` 只能以"taskkill 命中即提示人工复核"表达，无法静态强制"必须 Stop-Process + try/catch"——这与第十五轮 S2「静态守卫只标需人工复核的构造」定位一致。
+
+### 维度二：不确定性与失败点（Uncertainties / Failures）
+
+1. **forbidden-only 语义的边界**：后端守卫只能标"出现 taskkill"，无法标"缺少 Stop-Process/try/catch"。`start-service.ps1` 第 81 行残留兜底 `taskkill /F /T /PID ... 2>&1 | Out-Null` + `try/catch` 是**允许**形态，与"裸 taskkill 主键禁止"难纯静态区分 → 只能 `warn` 级人工复核，不能 `error` 级阻断。
+2. **共享 scan_dirs / file_glob 污染**：若将扫描放宽到 `scripts/*.ps1`，其余 4 组（如 `user_store_init` 的 `JSON.parse(`）会扫到 .ps1 可能误报 → 默认保持 `api/src` + `*.ts`，仅 `process_cleanup_safe` 启用示例放宽，`warn` 级且可忽略。
+3. **跨进程 TCP 拦截**：静态守卫纯 grep 不发起 HTTP，不受影响；但真正运行守卫需可读项目源码——沙箱内源码可读，OK。
+4. **编号一致性硬约束**：BR-093 须同时出现在 wiki-backend-code-review 的 SKILL.md / .rules-index.md / historical-incidents.md / review-config.md / references/ 五处，且 wiki-auto-testing 的 `rule_ref` 与之对齐；编号漂移会让"规范→测试"链路断点。
+
+### 维度三：可抽象的固定流程与判断逻辑（Abstractable Fixed Process + Judgment）
+
+#### 固定流程（派生守卫模板，经 Sequential Thinking 推导）
+
+```
+新 BR 规则（如 BR-093）
+  → 在 backend_review_static_check.groups[] 加一组 {name, patterns, message, rule_ref, severity, regex}
+  → 参数全 YAML（defaults/config/examples 三处同步），零硬编码
+  → 新增规范 = 加一组，引擎主流程与 _step_engine.py 不动（registry 收益）
+  → 仅 forbidden 语义：命中即"需人工复核"提示；确定性判定须升级 AST（超出静态守卫范围）
+  → 扫描范围按需放宽（scripts/*.ps1），但默认不污染既有组
+```
+
+#### 判断逻辑（可参数化的核心决策）
+
+- **S7 — forbidden-only 语义边界**：后端守卫只做"出现即提示"，不做"必须出现"断言；任何需要存在性保证的规范（如"必须用 Stop-Process"）须靠运行时单测/人工评审兜底，不进静态守卫。这是 registry 模式的固有约束，须在 message 中明确"提示复核"。
+- **S8 — 扫描范围隔离**：新增组若需扫非默认目录/类型（`scripts/*.ps1`），仅在启用示例/`step.scan_dirs` 覆盖中放宽，不动默认 `scan_dirs`，避免对既有组引入误报。
+- **S1~S6 沿用第十五轮**：1:1 映射顺延编号、只标需复核构造、参数全配置、复用 registry handler、跨技能编号一致、safe-delete 合规。
+
+### 维度四：适用与不适用场景（Applicability）
+
+#### 适用场景
+
+- **PowerShell 启动/重启脚本清理端口类缺陷（BR-093）**的 PR 级 grep 门禁：零运行时依赖，纯读源码。
+- **已采纳 `CODING-PS-PROCESS-CLEANUP` / PS-6.1 的项目**：直接复用该组（pattern 可按项目微调，仍走配置）。
+- **多项目泛化**：registry + YAML 天然跨项目；新项目接入只需改 `scan_dirs` / `file_glob`。
+
+#### 不适用场景
+
+- **需要确定性"确认用了 Stop-Process + try/catch"的场景**：纯 grep 守卫力不从心，须升级 AST/语义分析或运行时单测。
+- **Bash / Zsh 启动脚本**：`taskkill` 本就不适用（stderr 不触发终止错误），本组自然空转。
+- **纯前端改动**：PowerShell 端口清理属后端/脚本侧，应由 wiki-backend-code-review 评审（BR-093），前端对应为 FR-082/FR-083（认证超时 / loading 复位）。
+
+---
+
+## 与既有协议 / 规则衔接（第十六轮）
+
+| 本复盘要素 | 衔接的配置 / 协议 / 规则 |
+|-----------|--------------------------|
+| BR-093 → 1 组静态守卫 | `backend_review_static_check.groups[]`：`process_cleanup_safe`（v2.14.0） |
+| 参数全配置、零硬编码 | J-CONFIG-FIRST；`defaults.yaml` / `config.yaml` / `examples/config.enabled.example.yaml` 三处同步 |
+| 扫描范围隔离 | 默认 `scan_dirs: karpathy-wiki/api/src` + `*.ts`；启用本组示例放宽到含 `scripts` + `*.{ts,ps1}` |
+| forbidden-only 语义边界 | 第十五轮 S2「静态守卫只标需人工复核的构造」；本组 `severity: warn` |
+| 跨技能编号一致性 | BR-093 在 wiki-backend-code-review 五处一致；wiki-auto-testing `rule_ref: BR-093` |
+| 端到端收口 | wiki-code-dev PS-6.1 / CODING-PS-PROCESS-CLEANUP；SKILL.md 版本表 v2.14.0 |
+
+---
+
+## 第十七轮：沙箱跨进程 localhost 拦截与进程内冒烟（2026-08-11）
+
+> 本轮基于「权限隔离整改全量落地 + 重启后端 + 冒烟」经验，发现沙箱对**跨进程 localhost TCP 连接**的拦截，以及 `app.inject` 在「全量 app」下响应挂起，据此把后端验证策略重构为「进程内冒烟」。以下从四维度复盘，含 Sequential Thinking 标注。
+
+### 维度一：成功执行步骤（Successful Steps）
+
+| 步骤 | 操作 | 产物 / 验证点 | 复用本技能的哪个能力 |
+|------|------|---------------|----------------------|
+| 1 | 识别沙箱约束 | 新起服务能 `LISTENING`、记 `incoming request`，但同沙箱另一 node/curl `connect` 全超时（含纯 API）→ 确认**跨进程 localhost 被拦截** | 第十轮 safe-delete / 无浏览器约束 |
+| 2 | 后端入口拆分 | `api/src/index.ts` 的 `main()` 拆为导出的 `buildApp()`（config/vault/adapter/全插件/全路由/SPA，不 listen，返回 `{app,config,shutdown}`）+ `main()`（listen + 信号 shutdown）；`if (process.env.WIKI_SMOKE !== '1') main()` 守卫，导入时不触发 listen | wiki-code-dev 架构 / 启动重构 |
+| 3 | 进程内冒烟 | 进程内 `import buildApp()` → `app.ready()` 零错误（证明全量路由注册 / 重构无回归）；**最小 SPA-static app** 的 `inject` 返回 200（`/`、`/wiki/`、`/wiki/assets/*` 含部署标记） | `app.inject`（Fastify 进程内） |
+| 4 | 复用冒烟脚本 | `api/_smoke_inject.mjs`（设 `WIKI_SMOKE=1`，从 `api/` 经 tsx 运行）作为可复用进程内冒烟入口 | 第十轮端到端编排 |
+
+关键发现：API 契约（缺密钥 400 / SSE 200 / TTS 200）**无法在沙箱经 inject 或 TCP 验证**——须在有可达 localhost 的**真实构建机**重跑；沙箱内仅能验证「路由注册 / 启动 / 最小 SPA 静态伺服」这类不依赖跨进程响应的点。
+
+### 维度二：不确定性与失败点（Uncertainties / Failures）
+
+1. **`app.inject` 在「全量 app」下响应挂起**：对每条路由（连 `/health`）卡在响应完成（`onRequest` 触发两次、`onResponse` 永不触发），30s 看门狗强制退出；而 `buildApp()` + `app.ready()` 零错误通过。根因疑似完整生命周期的 `onSend` 钩子（compression 等）与 inject 不兼容，**非代码缺陷**。
+2. **跨进程 TCP 超时无任何响应**（连纯 API 也超时），易误判为「服务没起」——实际服务在 `LISTENING` 且收到 `incoming request`，是沙箱网络策略拦截 `connect`。
+3. **30s 看门狗**：`app.inject` 挂起时无早期失败信号，须靠进程级超时兜底，否则无限挂。
+4. **`WIKI_SMOKE` 守卫位置**：若守卫包错（如误放在 `buildApp` 内而非 `main` 内），导入冒烟脚本会连带 listen，污染端口。
+
+### 维度三：可抽象的固定流程与判断逻辑（Abstractable Fixed Process + Judgment）
+
+#### 固定流程（后端验证策略，经 Sequential Thinking 推导）
+
+```
+后端验证策略（沙箱受限环境）：
+  重构入口：main() → buildApp()（可导出、不 listen）+ main()（listen+shutdown，受 WIKI_SMOKE 守卫）
+  进程内冒烟：import buildApp() → app.ready()（验证启动/注册无回归）+ 最小 SPA-static app inject 200
+  跨进程/TCP 冒烟：仅在「可达 localhost 的真实构建机」启用（沙箱禁用）
+  契约级断言（400/200/SSE）：沙箱内无法验证 → 标注「须在真实构建机重跑」
+```
+
+#### 判断逻辑（可参数化的核心决策）
+
+- **T1 — 沙箱网络不可信**：起服务成功 ≠ 跨进程可连；`connect` 超时先怀疑沙箱策略，再怀疑代码。验证「服务起来」用 `LISTENING` + `incoming request` 日志，而非同进程外 `connect`。
+- **T2 — inject 挂起 ≠ 路由缺陷**：全量 app 的 `onSend` / 生命周期钩子与 inject 不兼容是已知 Fastify 行为；用 `buildApp()` + `ready()` 验证「注册无回归」、用最小 app 验证「静态伺服」，二者均不触发挂起。
+- **T3 — 进程内冒烟优先**：验证尽量落在「同一进程」（`app.ready` / inject 最小 app），规避跨进程拦截；跨进程只在真实机开。
+- **T4 — 契约断言位置外置**：缺密钥 400 / SSE 200 等契约断言不应依赖沙箱可达性，须有「真实机构建机重跑」通道（`_smoke_inject.mjs` + `WIKI_SMOKE=1`）。
+
+### 维度四：适用与不适用场景（Applicability）
+
+#### 适用场景
+
+- **沙箱 / CI 受限环境**（无浏览器、跨进程 localhost 被拦截、safe-delete fail-closed）的后端启动 / 路由注册验证；Fastify 项目（`buildApp` 可导出）；最小 SPA-static app 静态伺服验证。
+- **已采纳 `CODING-SPA-LIVE-DEPLOY` 重启铁律的项目**：把「进程内冒烟」作为重启后的轻量验证前置，避免沙箱内跨进程 401 冒烟假阴性。
+
+#### 不适用场景
+
+- **契约级端到端断言**（缺密钥 400 / SSE 200 / TTS 200）——必须真实机构建机；沙箱禁用跨进程 TCP 冒烟。
+- **非 Fastify / 无法导出 `buildApp` 的项目**：须另寻进程内验证入口（如直接 import 路由注册函数）。
+- **纯前端 UI 验证**：走 Playwright 浏览器阶段（沙箱无浏览器时降级为静态守卫）。
+
+---
+
+## 与既有协议 / 规则衔接（第十七轮）
+
+| 本复盘要素 | 衔接的配置 / 协议 / 规则 |
+|-----------|--------------------------|
+| 沙箱跨进程 localhost 拦截 | 第十轮 safe-delete 钩子 fail-closed + 无浏览器约束；静态守卫纯 grep（不发起 HTTP）不受影响 |
+| 后端入口拆分 buildApp() | wiki-code-dev `CODING-SPA-LIVE-DEPLOY`（重启铁律补充「进程内冒烟」前置）；`api/src/index.ts` + `api/src/spa-static.ts` |
+| 进程内冒烟 | `app.inject`（Fastify 进程内）；`api/_smoke_inject.mjs` + `WIKI_SMOKE=1` |
+| app.inject 全量挂起根因 | 第十五轮 `CODING-RESPONSE-HOOK-SAFE`（onSend 须 fail-open）；本轮补充「inject 与全量生命周期钩子不兼容」已知行为 |
+| smoke 策略配置化 | wiki-auto-testing `smoke_strategy`（process_internal_inject 默认 / tcp_opt_in，落地到 config.yaml）；SKILL.md 版本表 v2.15.0 |
+
+---
+
+# 第十八轮：受保护接口鉴权封装 + 依赖 store 卫生（2026-08-11，with Sequential Thinking）
+
+> 与第十三~十七轮（"规范即配置"派生链 / 后端静态守卫 / 沙箱冒烟）互补：本轮聚焦**两类"配置收紧 / 沙箱钩子副作用"引发的静默回归如何派生为配置化静态守卫**——把 CODING-AUTH-REQUEST-FETCH（前端 FR-084 / 后端 BR-094）的"受保护端点须统一经鉴权封装调用"判断逻辑，与 CODING-PNPM-STORE-HYGIENE（前端 FR-085 / 后端 BR-095）的"pnpm store 须收敛到统一路径"判断逻辑，分别落地为 `frontend_review_static_check` 的 `auth_fetch_wrapped` 组（纯配置）与 `dependency_store_hygiene_check` 引擎步骤类型（新注册 handler）。
+
+## 维度一：成功执行步骤（Successful Steps）
+
+| 步骤 | 动作 | 产出 / 验证 | 衔接 |
+|------|------|------------|------|
+| 1 | **事故根因定位（401）** | `config.auth.enabled: true` → `GET /api/config`、`GET /api/ai/config` 被 `requireAuth` 拦截；前端 18 处裸 `fetch` 未带 token → 401 → AI 伙伴选项消失 + "加载配置失败：HTTP 401"。修复：`frontend/src/utils/apiBase.ts` 引入 `apiFetch`（读 localStorage token，不依赖 Pinia）统一封装受保护调用 | 第十五轮"收紧 requireAuth 须审计前端调用方"（BR-094-2） |
+| 2 | **事故根因定位（pnpm store 散落）** | safe-delete 沙箱钩子（fail-closed）拦截 pnpm `storePathRelativeToHome` 的 `rename` 探测 → `EPERM` → pnpm 退化为"当前盘根 `.pnpm-store`"；工作区污染且 `node_modules` 解析不到统一 store。修复：全局 `~/.npmrc` 显式 `store-dir=D:\.pnpm-store` | 第十轮 safe-delete 钩子 fail-closed 工作模式 |
+| 3 | **派生前端静态守卫（零引擎改动）** | `frontend_review_static_check.groups[]` 新增 `auth_fetch_wrapped` 组：`forbidden_patterns` 命中裸 `fetch('/api/config')`/`fetch('/api/ai/config')` 即违规；`required_patterns` 守护 `apiFetch` 封装不被重构误删；`severity: error` 级阻断 | 第十三轮"配置化步骤类型泛化"（registry 遍历 groups，加组即生效） |
+| 4 | **派生后端 / 依赖守卫（新 handler）** | `_step_engine.py` 注册并实现 `_handle_dependency_store_hygiene_check`：断言 `~/.npmrc` 显式声明 `store-dir` 收敛键 + 扫描 `scan_root` 检测与 `canonical_store_dir` 不一致的孤儿 `.pnpm-store`（剪枝 `node_modules/.git/dist/build/public` 避免深遍历）；`severity: warn`（CI 前置可升 `error`） | 第十三轮 J-CONFIG-FIRST（注册 + 三处 YAML 同步） |
+| 5 | **三处 YAML 同步** | `config.yaml` / `defaults.yaml` / `examples/config.enabled.example.yaml` 同步新增（`auth_fetch_wrapped` 组 + `dependency_store_hygiene_check` 零硬编码配置块；examples 中 `scan_root: karpathy-wiki`、`enabled: true`） | 第十三轮"配置四处一致"纪律 |
+
+## 维度二：不确定性与失败点（Uncertainties / Failures）
+
+1. **`required_patterns` 误报风险**：`auth_fetch_wrapped` 的 `apiFetch` 存在性断言是项目级约定——若某仓库受保护端点走别的封装名（如 `authFetch` / `withToken`），`required_patterns` 会误判"封装被删"。须按项目实际封装名覆盖 `required_patterns`（配置可覆盖，不硬编码）。
+2. **`forbidden_patterns` 字符串精确匹配盲区**：仅列了 `'/api/config'` / `'/api/ai/config'` 四种引号变体；若新增其他受保护端点（如 `/api/user/config`）裸 fetch，不会被命中——须随 wiki-code-dev 路由清单扩展 `forbidden_patterns`，或改为正则 `/api\/[^"]*config/` 类泛化（当前保守列举，避免误伤合法的公开端点 fetch）。
+3. **`canonical_store_dir` 环境耦合**：`D:\.pnpm-store` 是 Windows 锚点；Linux/macOS CI 须改为对应绝对路径，否则孤儿判定基准错误（配置可覆盖，非引擎硬编码）。
+4. **孤儿 `.pnpm-store` 误报**：剪枝逻辑跳过了 `node_modules/.pnpm-store` 等，但若仓库内 legitimately 存在"非统一路径的 `.pnpm-store`"（如历史残留），会被判孤儿——须先确认无 `node_modules/.modules.yaml` 引用再清理（警告级，不阻断）。
+
+## 维度三：可抽象的固定流程与判断逻辑（Abstractable Fixed Process + Judgment）
+
+#### 固定流程（从"配置/沙箱副作用事故"派生静态守卫，经 Sequential Thinking 推导）
+
+```
+派生链（配置/沙箱副作用类事故）：
+  事故定位：配置收紧(requireAuth) 或 沙箱钩子副作用(pnpm 探测被拦) → 静默回归(401 / store 散落)
+  判定可否静态化：
+    · 有特征字符串(裸 fetch 受保护端点 / .npmrc 缺 store-dir / 孤儿 .pnpm-store) → 可静态守卫
+    · 纯运行时行为、无特征字符串 → 退回浏览器 E2E 或运行时断言（见第十三轮不适用场景）
+  落地形态选择：
+    · 仅 forbid + require 两组 → 复用 frontend_review_static_check（加组，零引擎改动）
+    · 需跨目录扫描 / 全局文件断言 → 注册新 handler（registry 模式，只读 cfg）
+  三处 YAML 同步：config.yaml / defaults.yaml / examples(config.enabled.example.yaml)
+  跨技能编号一致：wiki-code-dev CODING-XXX + 前端 FR-XXX + 后端 BR-XXX + auto-testing 组/步骤类型
+```
+
+#### 判断逻辑（可参数化的核心决策）
+
+- **T1 — "受保护端点"须显式登记契约**：后端收紧 `requireAuth` 是破坏性变更，落地前必须审计前端所有调用方是否带 token（BR-094-2）；静态守卫的 `forbidden_patterns` 是把"裸 fetch 调受保护端点"这一反模式固化。
+- **T2 — 鉴权封装须存在性守护**：`required_patterns` 守护 `apiFetch` 不被重构误删（删了就退回裸 fetch 重蹈 401）；这是第十三轮"存在性维度"的直接收益。
+- **T3 — 依赖安装环境须收敛断言**：`store-dir` 收敛键是 safe-delete 沙箱钩子打断 pnpm 主目录探测的"根因修复"，须在 CI / 环境初始化前置断言，而非事后清理。
+- **T4 — 守卫粒度的硬编码红线**：所有端点路径 / store 路径 / 目录名 / severity / rule_ref 全部来自配置；引擎只做"读 cfg → grep/walk → 报告"，不内嵌任何业务值（与第十三轮 J-CONFIG-FIRST 一致）。
+
+## 维度四：适用与不适用场景（Applicability）
+
+#### 适用场景
+
+- **受保护接口统一经鉴权封装调用改动**（前端 `utils/apiBase.ts` `apiFetch` + 后端 `routes/*.ts` `requireAuth` 守卫）：用 `frontend_review_static_check` 的 `auth_fetch_wrapped` 组断言后端 `requireAuth` 受保护端点无裸 `fetch` 不带 `Authorization` 头（命中即 401 静默失效）、且 `apiFetch` 鉴权封装存在未被误删；对应 CODING-AUTH-REQUEST-FETCH / FR-084 / BR-094。
+- **pnpm store 卫生 / 依赖安装环境收敛改动**（CI 前置 / 构建脚本 / 全局 `~/.npmrc` / 仓库或盘根）：用 `dependency_store_hygiene_check` 断言全局 `~/.npmrc` 显式声明 `store-dir` 收敛键、`scan_root` 下无与统一 store 不一致的孤儿 `.pnpm-store`；避免 safe-delete 沙箱钩子打断 pnpm 主目录探测后退化为盘根散落污染工作区；对应 CODING-PNPM-STORE-HYGIENE / FR-085 / BR-095。
+- **任何"配置收紧 / 沙箱钩子副作用"类静默回归**：凡根因是"某配置开关 / 沙箱限制导致行为静默变化"且有稳定特征字符串的，均可按本派生链落地为配置化静态守卫（前端组或后端/依赖 handler）。
+
+#### 不适用场景
+
+- **纯运行时行为、无特征字符串的鉴权缺陷**（如 token 过期刷新逻辑错误）：静态守卫无法匹配，须走浏览器 E2E（如 `config_consistency_check` / `byok_per_user_override_check`）。
+- **无 pnpm / 非 content-addressable store 的项目**：`dependency_store_hygiene_check` 的 `store-dir` / `.pnpm-store` 语义不适用；`canonical_store_dir` 须改为对应包管理器的统一缓存路径或整体禁用该检查。
+- **公开端点（无 `requireAuth`）的 fetch**：`auth_fetch_wrapped` 的 `forbidden_patterns` 仅针对受保护端点；公开端点裸 fetch 是合法的，不该被命中（守卫须精确列举受保护路径，避免误伤）。
+- **Linux/macOS 环境未配 `canonical_store_dir`**：默认 `D:\.pnpm-store` 为 Windows 锚点，跨平台须覆盖配置，否则孤儿判定基准错误。
+
+## 与既有协议 / 规则衔接（第十八轮）
+
+| 本复盘要素 | 衔接的配置 / 协议 / 规则 |
+|-----------|--------------------------|
+| 401 事故根因 | 第十五轮 `BR-094-2`（收紧 requireAuth 须审计前端调用方）；wiki-code-dev `CODING-AUTH-REQUEST-FETCH`；前端 `FR-084` / 后端 `BR-094` |
+| pnpm store 散落根因 | 第十轮 safe-delete 钩子 fail-closed（拦截 pnpm 主目录探测 `rename`）；wiki-code-dev `CODING-PNPM-STORE-HYGIENE`；前端 `FR-085` / 后端 `BR-095` |
+| 前端静态守卫零引擎改动 | 第十三轮"配置化步骤类型泛化"（`frontend_review_static_check` registry 遍历 groups）；`auth_fetch_wrapped` 组 |
+| 依赖守卫新 handler | 第十三轮 J-CONFIG-FIRST（`_step_engine.py` 注册 `_handle_dependency_store_hygiene_check` + 三处 YAML）；`dependency_store_hygiene_check` 配置块 |
+| 跨技能编号一致 | wiki-code-dev `CODING-*` + 前端 `FR-*` + 后端 `BR-*` + auto-testing 组/步骤类型四处对齐 |
+| 存在性维度守护 | 第十三轮 `frontend_review_static_check` 的 `required_patterns`（守护 `apiFetch` 不被误删） |
+
+# 第十九轮：前端三项编码规范派生守卫 + 部署产物磁盘验证 handler 补齐（2026-08-11，with Sequential Thinking）
+
+> 与第十三~十八轮（"规范即配置"派生链 / 后端静态守卫 / 沙箱冒烟 / 鉴权封装 + 依赖卫生）互补：本轮聚焦**聆听页改造（v-show 常驻后台播放）衍生出的三类前端编码规范，与 SPA 部署目录高频轮转下"两次 HTTP 校验误判"的部署验证缺陷，如何派生为配置化静态守卫 / 补齐引擎 handler**——把 CODING-PERSISTENT-COMPONENT（前端 FR-086）、CODING-MEDIA-OBJECT-URL（前端 FR-087）、CODING-AUDIO-PLAYBACK-RELIABILITY（前端 FR-088）的"保护性代码须存在"判断逻辑，落地为 `frontend_review_static_check` 的 `persistent_component_visible_watch` / `object_url_revoked` / `audio_autoplay_distinguished` 三组（纯配置，零引擎改动）；把 CODING-DEPLOY-VERIFY-DISK（后端 BR-096 / CODING-SPA-LIVE-DEPLOY / FR-068 / BR-071）的"读磁盘最新目录而非两次 HTTP"判断逻辑，落地为 `_step_engine.py` 注册并实现的 `_handle_spa_live_deploy_check`（此前 v2.6.0 仅写入配置块但未注册 handler，是死配置）。
+
+## 维度一：成功执行步骤（Successful Steps）
+
+| 步骤 | 动作 | 产出 / 验证 | 衔接 |
+|------|------|------------|------|
+| 1 | **三类前端规范派生为静态守卫（零引擎改动）** | `frontend_review_static_check.groups[]` 新增三组：`persistent_component_visible_watch`（required_patterns 守护 `watch(visible)` 不被误删，FR-086）、`object_url_revoked`（守护 `revokeObjectURL` 不被误删，FR-087）、`audio_autoplay_distinguished`（守护「语音合成失败」与「播放被浏览器拦截」两类文案分离不被合并，FR-088）；severity error/warn 可配 | 第十三轮"配置化步骤类型泛化"（registry 遍历 groups，加组即生效） |
+| 2 | **部署磁盘验证 handler 补齐（修正死配置）** | `spa_live_deploy_check` 在 v2.6.0 仅写入配置块、未注册 `_step_engine.py` handler（死配置）；本轮注册并实现 `_handle_spa_live_deploy_check`，新增 `verify_via_disk: true` 取代旧版两次 HTTP 比对（spaRoot 启动只解析一次，目录高频轮转下两次 HTTP 会读到不同根而误判），改为读磁盘枚举 public_live_* 取 mtime 最新 + 校验 .deploy-complete 与 assets/index-*.js + 重启后端口监听校验 | 第五轮 spa_live_deploy_check 配置（本轮从死配置→活校验）；第十三轮 J-CONFIG-FIRST |
+| 3 | **三处 YAML 同步** | `config.yaml` / `defaults.yaml` / `examples/config.enabled.example.yaml` 同步新增（3 个前端组 + `spa_live_deploy_check.verify_via_disk: true`；examples 新增启用态 `spa_live_deploy_check` 段，含 malicious_paths 样本与 required_ports: [3000]） | 第十三轮"配置四处一致"纪律 |
+| 4 | **引擎编译校验** | `python -m py_compile templates/_step_engine.py` 通过；`grep` 确认 `register("spa_live_deploy_check", ...)` 与 `_handle_spa_live_deploy_check` 均已接线 | 第十三轮"注册即生效"纪律 |
+
+## 维度二：不确定性与失败点（Uncertainties / Failures）
+
+1. **`required_patterns` 项目级约定误报**：三组均用 required_patterns 做"保护性代码应存在"的存在性断言（`watch(visible)` / `revokeObjectURL` / 两条中文文案）。若某仓库无对应特性（如不用 v-show 常驻 / 不用 ObjectURL / 文案本地化不同），会被误判"缺失"。须按项目实际覆盖 `required_patterns` 或 `enabled: false`（默认 disabled，不强制）。
+2. **`verify_via_disk` 依赖真实部署产物**：若 CI 未真正构建部署（无 `public_live_*` 目录），handler 会判 error（基准目录不存在 / 无匹配目录）；须仅在生产构建-部署流水线启用，本地单测禁用。
+3. **恶意路径穿越未在本 handler 内重做 HTTP 校验**：`malicious_paths` 仅作配置样本保留；真正的 within-root 防穿越已由 `path_traversal_test` 覆盖（避免重复），且本 handler 不发 HTTP（受第十七轮沙箱跨进程 localhost 拦截影响）。
+4. **重启动作非自动执行**：handler 仅"校验端口监听"，不自动重启后端；重启仍由部署脚本 / `service_lifecycle` 负责（BR-096-2 顺序铁律：构建→全新目录+.deploy-complete→杀 :3000→重启→/health 200→读磁盘确认）。
+
+## 维度三：可抽象的固定流程与判断逻辑（Abstractable Fixed Process + Judgment）
+
+#### 固定流程（从"前端保护性代码 + 部署磁盘验证"派生，经 Sequential Thinking 推导）
+
+```text
+派生链（前端保护性代码守卫 + 部署磁盘验证）：
+  编码规范派生（FR-086/087/088 / BR-096）→ 可静态化?
+    · 有特征字符串(watch(visible)/revokeObjectURL/两类文案 / public_live_* 目录) → 可静态守卫
+    · 纯运行时(播放态后台连续性) → 退回浏览器 E2E（如 listen 页后台播放回归）
+  落地形态选择：
+    · 仅 forbid+require → 复用 frontend_review_static_check（加组，零引擎改动）
+    · 需读磁盘/端口 → 注册新 handler（registry 模式，只读 cfg）
+  三处 YAML 同步：config.yaml / defaults.yaml / examples(config.enabled.example.yaml)
+  编译校验：python -m py_compile _step_engine.py（handler 改动必经）
+```
+
+#### 判断逻辑（可参数化的核心决策）
+
+- **T1 — 保护性代码须存在性守护**：`required_patterns` 守护 `watch(visible)` / `revokeObjectURL` / 两类失败文案不被重构误删（语义同第十三轮存在性维度）。
+- **T2 — 部署验证须读磁盘而非两次 HTTP**：spaRoot 启动只解析一次，目录轮转下两次 HTTP 比对会读到不同根而误判 → `verify_via_disk: true` 改为读磁盘取 mtime 最新目录。
+- **T3 — 重启铁律须端口监听校验兜底**：handler 校验 `required_ports` 监听，未监听即判定部署/重启失败（BR-096-2 静默失效保护）。
+- **T4 — 守卫粒度硬编码红线**：所有目录/前缀/标记/端口/severity/rule_ref 来自配置；引擎只 grep/walk/stat，不内嵌任何业务值（与第十三轮 J-CONFIG-FIRST 一致）。
+
+## 维度四：适用与不适用场景（Applicability）
+
+#### 适用场景
+
+- **常驻组件生命周期隔离改动（v-show 后台播放 / 账户态切换）**：用 `frontend_review_static_check` 的 `persistent_component_visible_watch` 组守护 `watch(visible)` 不被误删（FR-086）；对应 CODING-PERSISTENT-COMPONENT。
+- **TTS / 媒体 ObjectURL 使用改动**：用 `object_url_revoked` 组守护 `revokeObjectURL` 不被误删（FR-087）；对应 CODING-MEDIA-OBJECT-URL。
+- **音频播放可靠性改动**：用 `audio_autoplay_distinguished` 组守护「语音合成失败」与「播放被浏览器拦截」两类文案分离不被合并（FR-088）；对应 CODING-AUDIO-PLAYBACK-RELIABILITY。
+- **SPA 实时部署验证改动**：用 `spa_live_deploy_check`（`verify_via_disk: true`）校验最新 `public_live_*` 目录完整（.deploy-complete + assets/index-*.js）+ 重启后端口监听；对应 CODING-SPA-LIVE-DEPLOY / CODING-DEPLOY-VERIFY-DISK / FR-068 / BR-071 / BR-096。
+
+#### 不适用场景
+
+- **纯运行时播放态后台连续性（v-show 切回是否真恢复进度）**：静态守卫无法验，须走浏览器 E2E（如 listen 页后台播放回归）。
+- **无对应特性的项目**：`required_patterns` 误报，须禁用或覆盖 `required_patterns`。
+- **本地单测 / CI 未构建部署**：`spa_live_deploy_check` 的磁盘校验 error 误报，须仅在生产部署流水线启用。
+- **恶意路径穿越**：已由 `path_traversal_test` 覆盖，本 handler 不再重复 HTTP 校验（避免沙箱跨进程 localhost 拦截，第十七轮）。
+
+## 与既有协议 / 规则衔接（第十九轮）
+
+| 本复盘要素 | 衔接的配置 / 协议 / 规则 |
+|-----------|--------------------------|
+| 常驻组件生命周期隔离 | 前端 `wiki-frontend-code-review` FR-086（rule 文件）；wiki-code-dev `CODING-PERSISTENT-COMPONENT`；auto-testing `persistent_component_visible_watch` 组 |
+| ObjectURL 生命周期 | 前端 FR-087；wiki-code-dev `CODING-MEDIA-OBJECT-URL`；auto-testing `object_url_revoked` 组 |
+| 音频播放可靠性 | 前端 FR-088；wiki-code-dev `CODING-AUDIO-PLAYBACK-RELIABILITY`；auto-testing `audio_autoplay_distinguished` 组 |
+| 部署产物磁盘验证 | 后端 `wiki-backend-code-review` BR-096；wiki-code-dev `CODING-DEPLOY-VERIFY-DISK` / `CODING-SPA-LIVE-DEPLOY`；前端 FR-068 / 后端 BR-071；本技能 v2.6.0 配置块→v2.17.0 补齐 handler（`verify_via_disk: true`） |
+| 存在性维度守护 | 第十三轮 `frontend_review_static_check` 的 `required_patterns`（守护保护性代码不被误删） |
+| 沙箱跨进程 localhost 拦截 | 第十七轮（handler 不发起 HTTP 校验恶意路径，避免被拦截） |
+| 部署重启铁律 | 第五轮 spa_live_deploy_check 配置 + BR-096-2 顺序铁律（handler 仅校验端口监听，重启仍由脚本负责） |
+
+---
+
+# 第二十轮：毛玻璃 backdrop-filter 包含块陷阱 + 双主题 --m-* 变量架构派生守卫（2026-08-12，with Sequential Thinking）
+
+> 与第十三~十九轮（"规范即配置"派生链 / 前端静态守卫 / 双主题变量架构）互补：本轮聚焦**移动端双主题切换（浅白风 / 毛玻璃）改造衍生的两类前端编码规范——毛玻璃 `backdrop-filter` 包含块陷阱（滚动容器在毛玻璃主题下成为内部 `position: fixed` 悬浮元素 containing block、随滚动失固定、浅色主题正常 → 主题间不一致）与双主题统一 `--m-*` 变量架构（主题相关样式全走变量、切换主题只挂根容器类、组件零分支）——如何派生为配置化静态守卫，并补齐测试流程四维度复盘**。把 CODING-BACKDROP-FILTER-CB（前端 FR-089）的"毛玻璃容器须保持内部 fixed 元素视口固定"判断逻辑，落地为 `frontend_review_static_check` 的 `backdrop_filter_fixed_ancestor` 组（纯配置，零引擎改动，守护 Teleport 逃逸写法不被误删）；把 CODING-DUAL-THEME-VAR（前端 FR-090）的判断逻辑，交给既有 `config_driven_frontend` 透镜（主题相关字面量 / `theme ===` 分支扫描）覆盖，不另起静态组（避免与 FR-035 主题色变量映射重复）。
+
+## 维度一：成功执行步骤（Successful Steps）
+
+| 步骤 | 动作 | 产出 / 验证 | 衔接 |
+|------|------|------------|------|
+| 1 | **FR-089 派生为静态守卫（零引擎改动）** | `frontend_review_static_check.groups[]` 新增 `backdrop_filter_fixed_ancestor`（required_patterns 守护 `Teleport` 逃逸写法不被误删，FR-089）；severity error 可配 | 第十三轮"配置化步骤类型泛化"（registry 遍历 groups，加组即生效） |
+| 2 | **FR-090 复用既有 config-driven 透镜** | 双主题变量架构属"主题相关字面量 / 组件级主题分支"模式，已由 `review-config.md` 的 `config_driven_frontend`（CODING-CONFIG-DRIVEN）扫描覆盖，不另起静态组（避免与 FR-035 重复）；运行时主题状态单例性由浏览器 E2E（theme_switch）验证 | 第十七轮 J-CONFIG-FIRST / 前端 FR-035 主题色变量映射 |
+| 3 | **三处 YAML 同步** | `config.yaml` / `defaults.yaml` / `examples/config.enabled.example.yaml` 同步新增 `backdrop_filter_fixed_ancestor` 组 | 第十三轮"配置四处一致"纪律 |
+| 4 | **四技能闭环同步** | wiki-code-dev（CODING-BACKDROP-FILTER-CB / CODING-DUAL-THEME-VAR + 路由表 + 参数段）、wiki-frontend-code-review（FR-089/FR-090 + 参数段 + 规则文件 + skill-loader 三表）、wiki-backend-code-review（BR-088-4 跨技能路由说明）、wiki-auto-testing（本组）四处一致 | wiki-code-dev 闭环原则（复盘→编码规则→审查要点→config 参数） |
+
+## 维度二：不确定性与失败点（Uncertainties / Failures）
+
+1. **`required_patterns` 项目级约定误报**：`backdrop_filter_fixed_ancestor` 用 required_patterns 守护 `Teleport` 逃逸写法；若某仓库修复包含块的方式是"从滚动容器移除 backdrop-filter"（而非 Teleport），会被误判"缺失 Teleport"。须按项目实际覆盖 `required_patterns` 或 `enabled: false`（默认 disabled，不强制）。说明：本组仅守护"逃逸/解绑写法存在性"，真实包含块 co-occurrence 修复由前端 FR-089 评审覆盖。
+2. **共现关系无法纯静态表达**：引擎 groups 仅做 forbid/require 字符串存在性，无法表达"backdrop-filter 容器 + fixed 后代"跨元素关系；故本组用 required_patterns 守护逃逸写法作为 proxy，真正的 co-occurrence 危险（毛玻璃主题下 fixed 失固定）由 FR-089 人工/LLM 评审判定。
+3. **双主题变量架构纯变量引用难静态全覆盖**：`var(--m-*)` 引用可被计算属性 / 动态 style 绕过，静态扫描仅能覆盖显式字面量与 `theme ===` 分支；运行时单例性须 E2E。
+4. **沙箱网络限制**：与第十七轮一致，本组不发起任何 HTTP，纯 grep/stat。
+
+## 维度三：可抽象的固定流程与判断逻辑（Abstractable Fixed Process + Judgment）
+
+#### 固定流程（从"双主题 + 毛玻璃包含块"派生，经 Sequential Thinking 推导）
+
+```text
+派生链（双主题 + 毛玻璃包含块）：
+  编码规范派生（FR-089 / FR-090）→ 可静态化?
+   · FR-089 有特征字符串(Teleport 逃逸写法) → 可静态守卫(加组)
+   · FR-090 属变量引用/主题分支模式 → 复用 config_driven_frontend 透镜，不另起组
+  落地形态：仅 forbid+require → 复用 frontend_review_static_check（加组，零引擎改动）
+  三处 YAML 同步：config.yaml / defaults.yaml / examples(config.enabled.example.yaml)
+  编译校验：仅配置改动，无需 py_compile（无 handler 改动）
+```
+
+#### 判断逻辑（可参数化的核心决策）
+
+- **U1 — 毛玻璃容器 fixed 后代须逃逸**：required_patterns 守护 `Teleport` 不被误删（FR-089 修复写法存在性），与第十三轮存在性维度一致。
+- **U2 — 双主题差异收敛变量**：交由 `config_driven_frontend` 扫描主题字面量 / `theme ===` 分支（与 FR-035 协同，不重复起组）。
+- **U3 — 守卫粒度硬编码红线**：所有选择器 / 变量名 / severity 来自配置；引擎只 grep，不内嵌任何业务值（与第十三轮 J-CONFIG-FIRST 一致）。
+
+## 维度四：适用与不适用场景（Applicability）
+
+#### 适用场景
+
+- **毛玻璃 backdrop-filter 包含块陷阱改动（多主题 SPA 滚动容器内嵌 position:fixed 悬浮元素）**：用 `frontend_review_static_check` 的 `backdrop_filter_fixed_ancestor` 组守护 Teleport 逃逸写法不被误删（FR-089）；对应 CODING-BACKDROP-FILTER-CB。
+- **双主题 --m-* 变量架构改动**：用 `config_driven_frontend` 透镜扫描主题相关字面量与 `theme ===` 组件分支（FR-090，与 FR-035 协同），不另起静态组；对应 CODING-DUAL-THEME-VAR。
+
+#### 不适用场景
+
+- **纯运行时主题切换单例性（刷新后主题是否一致 / 多 tab 同步）**：静态守卫无法验，须浏览器 E2E（theme_switch）。
+- **无对应特性的项目**：`required_patterns` 误报，须禁用或覆盖 `required_patterns`。
+- **单主题项目**：无主题间不一致，本组无意义（与 FR-040 多主题一致性前提一致）。
+
+## 与既有协议 / 规则衔接（第二十轮）
+
+| 本复盘要素 | 衔接的配置 / 协议 / 规则 |
+|-----------|--------------------------|
+| 毛玻璃 backdrop-filter 包含块陷阱 | 前端 `wiki-frontend-code-review` FR-089（rule 文件）；wiki-code-dev `CODING-BACKDROP-FILTER-CB`；auto-testing `backdrop_filter_fixed_ancestor` 组 |
+| 双主题 --m-* 变量架构 | 前端 FR-090；wiki-code-dev `CODING-DUAL-THEME-VAR`；auto-testing `config_driven_frontend` 透镜（CODING-CONFIG-DRIVEN，与 FR-035 协同） |
+| 存在性维度守护 | 第十三轮 `frontend_review_static_check` 的 `required_patterns`（守护保护性代码不被误删） |
+| 跨技能路由 | 后端 `wiki-backend-code-review` BR-088-4（纯前端视觉范畴路由到前端技能，禁止用后端规则套用） |
+| 沙箱跨进程 localhost 拦截 | 第十七轮（本组不发起 HTTP 校验，避免被拦截） |
+
+# 第二十一轮：实时部署流参数化（构建 → 写全新目录 → 杀孤儿 → 重启 → 跨进程冒烟）（2026-08-12，with Sequential Thinking）
+
+> 与第十轮（端到端编排：typecheck → unit → 全量 → 构建 → 部署 → 干净重启 → 冒烟）、第十七轮（沙箱跨进程 localhost 拦截 + 进程内冒烟）、第十九轮（部署产物磁盘验证 handler 补齐）互补：本轮把**真实部署流本身**作为复盘对象，经 Sequential Thinking 四维度推导后，将"构建 → 写全新时间戳目录 → 杀孤儿旧进程 → 重启后端 → 跨进程冒烟"全链路**参数化、零硬编码**地落到 `defaults.yaml` / `config.yaml` / `examples` 的 `deploy` 段（对应 `CODING-SPA-LIVE-DEPLOY` / `CODING-DEPLOY-VERIFY-DISK` / `CODING-DEPLOY-MARKER-VERIFY`，与后端 `BR-071` / `BR-096` / `BR-101` 协同）。核心目标：消除 `build.enabled:false` / `startup.enabled:false` 隐含的"服务永远在跑"硬编码假设——真实发布时通过独立的 `deploy` 段开启，开发与发布两套语义解耦。
+
+## 维度一：成功执行步骤（Successful Steps）
+
+| 步骤 | 动作 | 产出 / 验证 | 衔接 |
+|------|------|------------|------|
+| 1 | **构建到全新时间戳目录** | `vite build --outDir ../builds/dist_u<ts>`（走仓库内置 bin，输出到项目外临时目录）；规避 safe-delete 对"覆盖已存在目录"的拦截 | 第三轮（构建产物输出项目外）+ 沙箱 safe-delete 钩子约束（第五轮） |
+| 2 | **部署到全新 public_live_<ts>** | `api/_deploy_live.mjs <构建目录>` 写 `api/public_live_<ts>` + `.deploy-complete`（仅 create+write 全新路径，safe-delete 放行）；`resolveSpaRoot` 启动时自动选最新目录 | `CODING-SPA-LIVE-DEPLOY` / `BR-071` |
+| 3 | **杀孤儿 :3000 旧进程** | 沙箱禁用 `taskkill`/`netstat`，改 Node `process.kill(pid)` 杀监听 PID（Windows 下 `TerminateProcess`，不杀父避免级联） | 第十七轮（沙箱系统级工具被禁用）→ 用 Node 直接 kill |
+| 4 | **重启后端切流** | `tsx src/index.ts` 后台重启（须在 `dangerouslyDisableSandbox` 下，因构建产物已落盘）；日志打印 `[SPA] served from .../public_live_<ts>` 确认切到最新 | `resolveSpaRoot` 仅启动期解析一次（部署后必须重启，否则读到旧目录） |
+| 5 | **跨进程冒烟（真实构建机）** | `dangerouslyDisableSandbox: true` 时同机另一 node `connect(127.0.0.1,3000)` / `http.get` 返回 200 + bundle 含 `deploy_marker` 特征串 → 确认发布有效 | 第十七轮（跨进程 TCP 仅在可达 localhost 的真实构建机启用） |
+
+## 维度二：不确定性与失败点（Uncertainties / Failures）
+
+1. **沙箱全量写回滚**：Bash 沙箱每个命令结束后丢弃对文件系统的任何写入，构建产物命令结束即消失、部署无效。应对：构建/部署必须 `dangerouslyDisableSandbox: true`（Edit/Write 工具不受此限，但 `vite build` / `_deploy_live.mjs` 这些要落真实盘的命令必须在带此标志的 Bash 中跑）。
+2. **覆盖危机（真事故）**：`resolveSpaRoot` 按时间戳选最新 `public_live_<ts>`；若后续一次不含某功能（如移动端）的构建被部署，时间戳更新 → 线上重启后切回"不含该功能"版本，已发布成果被无声覆盖。应对：`deploy_marker` 关键特征串校验——部署后确认 bundle 含本次发布特征（如 `MobileListen`），否则判定覆盖危机、拒绝切流。
+3. **跨进程 localhost 在沙箱被拦**：沙箱内新起服务能 `LISTENING`、能记 `incoming request`，但同沙箱另一 node/curl `connect` 全超时（含纯 API）。应对：① 沙箱内用**进程内冒烟**（`import buildApp` + `app.inject`，第十七轮）绕开跨进程限制；② 跨进程 TCP 仅在 `dangerouslyDisableSandbox` 的真实构建机启用（`tcp_opt_in`）。
+4. **helmet 使 app.inject 全量 app 挂起**：`@fastify/helmet` 经 onSend 钩子注入安全头，导致进程内 `app.inject` 响应挂起。应对：`buildApp()` 用 `if (process.env.WIKI_SMOKE !== '1')` 守卫跳过 helmet / rateLimit 注册（生产不受影响），使冒烟可正常 inject。
+5. **杀错进程 / 级联自杀**：`taskkill` 杀父进程会级联杀掉 PS 会话自身 → 命令 `exit -1`、目标未死。应对：用 Node `process.kill(监听 PID)` 直接杀监听子进程，不碰父。
+6. **`.js` 遮蔽 `.ts`**：`frontend/src` 下陈旧 `.js` 让无扩展名导入解析到旧 `.js`，导致"测试通过但运行时失效"。应对：构建前清 `src/**/*.js`，`vue-tsc --noEmit && vite build` 双门禁。
+
+## 维度三：可抽象的固定流程与判断逻辑（Abstractable Fixed Process + Judgment）
+
+#### 固定流程（从真实部署流派生，经 Sequential Thinking 推导）
+
+```text
+真实部署流（参数化）：
+  构建(build_command, build_run_dir)
+    → 校验产物 index.html 存在
+    → 部署(deploy_script + deploy_script_args[构建目录], deploy_run_dir)
+       · 写全新 public_live_<ts> + .deploy-complete
+    → 杀孤儿(kill_strategy=node_process_kill, orphan_port)
+    → 重启(restart_command, restart_run_dir, restart_sandbox)
+       · 须 dangerouslyDisableSandbox（构建产物已落盘）
+    → 冒烟(smoke_endpoints, 跨进程需 tcp_opt_in + dangerouslyDisableSandbox)
+    → 校验(verify_via_disk 读磁盘最新目录 + deploy_marker 特征串防覆盖)
+  环境约束：
+    · 沙箱：构建/部署须 dangerouslyDisableSandbox；冒烟优先进程内 inject（第十七轮）
+    · 真实构建机：可关 dangerouslyDisableSandbox；跨进程 TCP 可达
+  语义解耦：
+    · build.enabled/startup.enabled=false = 复用已运行服务（开发态快速回归）
+    · deploy.enabled=true = 真实发布独立开启（消除"服务永远在跑"硬编码假设）
+```
+
+#### 判断逻辑（可参数化的核心决策）
+
+- **W1 — 部署只写全新目录**：所有落地操作统一"写 `public_live_<ts>` / `dist_u<ts>` 全新路径"，禁止原地 rm/覆盖（safe-delete 钩子约束，与第十轮一致）。
+- **W2 — 部署后必须重启**：`resolveSpaRoot` 仅启动期解析一次，部署新目录后不重启仍伺服旧目录 → 铁律：杀孤儿 :3000 → 重启 tsx。
+- **W3 — 跨进程冒烟按环境分流**：沙箱 → 进程内 `app.inject`（第十七轮）；真实构建机 + `dangerouslyDisableSandbox` → 跨进程 TCP 冒烟。
+- **W4 — 特征串防覆盖危机**：`deploy_marker` 校验 bundle 含本次发布特征，缺失即拒绝切流（覆盖危机防御，与第十九轮磁盘验证协同）。
+- **W5 — 沙箱写盘须提权**：任何落真实盘的命令（build/deploy/restart）必须在 `dangerouslyDisableSandbox` 的 Bash 中执行，否则产物被回滚丢弃。
+
+## 维度四：适用与不适用场景（Applicability）
+
+#### 适用场景
+
+- **后端静态伺服 SPA + 时间戳目录轮转部署（Fastify + `resolveSpaRoot`）**：用 `deploy` 段参数化构建/部署/杀孤儿/重启/冒烟全链路；`verify_via_disk` + `deploy_marker` 双校验防覆盖。对应 `CODING-SPA-LIVE-DEPLOY` / `BR-071` / `BR-096` / `BR-101`。
+- **沙箱受限 + 真实机构建机并存**：`require_dangerously_disable_sandbox` + `restart_sandbox` 适配两种环境，零硬编码路径/端口/特征串。
+- **发版门禁最后一公里**：typecheck → unit → 全量 → build → deploy → 重启 → 冒烟，作为端到端验证收口（第十轮编排）。
+
+#### 不适用场景
+
+- **纯后端 API / 无前端部署的库**：无 SPA 静态伺服、无 `public_live_<ts>` 轮转，禁用 `deploy`（保持 `enabled: false`），仅跑单元/端点测试。
+- **非时间戳轮转部署策略（如蓝绿 / 容器镜像）**：`public_live_<ts>` 轮转专属；容器化部署须另写 `deploy_script` + 自定义 `kill_strategy`，本段参数需按实际运行时重写。
+- **跨进程 TCP 必测且无真实构建机**：沙箱跨进程被拦，纯沙箱环境只能进程内 `app.inject` 冒烟，跨进程契约断言须 `tcp_opt_in` 在真实构建机执行。
+
+## 与既有协议 / 规则衔接（第二十一轮）
+
+| 本复盘要素 | 衔接的配置 / 协议 / 规则 |
+|-----------|--------------------------|
+| 构建→部署→杀孤儿→重启→冒烟全链路 | `defaults.yaml` / `config.yaml` / `examples` 的 `deploy` 段（CODING-SPA-LIVE-DEPLOY）；SKILL.md「测试复盘工作流」+「测试流程」阶段 6 |
+| 沙箱全量写回滚 → 构建须 dangerouslyDisableSandbox | 第五轮 safe-delete 钩子 + 第十七轮沙箱写盘约束；`require_dangerously_disable_sandbox` / `restart_sandbox` |
+| 部署后磁盘验证 + 特征串防覆盖 | 第十九轮 `spa_live_deploy_check`（verify_via_disk / BR-096）+ `deploy_marker`（CODING-DEPLOY-MARKER-VERIFY） |
+| 跨进程 localhost 拦截 → 进程内 inject 冒烟 | 第十七轮 `smoke_strategy`（process_internal_inject + tcp_opt_in） |
+| helmet 使 app.inject 挂起 | 第十七轮 `buildApp()` 用 `WIKI_SMOKE` 守卫跳过 helmet/rateLimit |
+| 杀孤儿 :3000（禁用 taskkill） | 第十七轮用 Node `process.kill` 直接杀监听 PID（不杀父） |
+| 端到端编排门禁 | 第十轮（typecheck → unit → 全量 → build → deploy → 重启 → 冒烟） |
+| 覆盖危机防御纪律 | 工作记忆「覆盖危机」：每次发版前改 `deploy_marker` 为本次特征串 |
+
+

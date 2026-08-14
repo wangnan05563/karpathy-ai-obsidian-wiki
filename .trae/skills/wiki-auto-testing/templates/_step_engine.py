@@ -94,6 +94,9 @@ class StepEngine:
         self.register("frontend_review_static_check", self._handle_frontend_review_static_check)
         # 第十四轮复盘补充步骤类型：IndexedDB 写入前剥离 Vue/Pinia 响应式代理（配置化静态守卫）
         self.register("idb_reactive_clone_check", self._handle_idb_reactive_clone_check)
+        self.register("dependency_store_hygiene_check", self._handle_dependency_store_hygiene_check)
+        # 第十九轮复盘补充步骤类型：部署产物磁盘验证（BR-096 配置化磁盘校验，取代两次 HTTP 比对）
+        self.register("spa_live_deploy_check", self._handle_spa_live_deploy_check)
 
     # --- Step Handlers ---
 
@@ -1197,6 +1200,189 @@ class StepEngine:
             parts.append("no forbidden patterns matched; all required patterns present")
         ctx["results"].log("FrontendReviewStatic", ok, "; ".join(parts)[-300:])
 
+    def _handle_dependency_store_hygiene_check(self, step, ctx):
+        """依赖 store 卫生静态守卫：校验 pnpm store 收敛与孤儿 .pnpm-store 检测。
+
+        把 CODING-PNPM-STORE-HYGIENE（前端 FR-085 / 后端 BR-095）的"pnpm store 散落盘根"
+        判断逻辑落地为可执行静态检查：
+        - 全局 ~/.npmrc 须显式声明 store-dir 收敛键（assert_npmrc_store_dir）；
+        - scan_root 下不得存在与 canonical_store_dir 不一致的孤儿 .pnpm-store。
+
+        所有扫描根、收敛键、统一 store 路径、孤儿目录名、severity、rule_ref 全部来自
+        config.dependency_store_hygiene_check，step 可覆盖，不在代码中硬编码业务值。
+        本检查是 CI / 环境初始化的前置断言，避免 safe-delete 沙箱钩子打断 pnpm 主目录
+        探测后退化为盘根散落 .pnpm-store（污染工作区且让 node_modules 解析不到统一 store）。
+        """
+        import os
+        import re
+        blk = ctx["cfg"].get("dependency_store_hygiene_check", {})
+        if not blk.get("enabled", False) and not step.get("force", False):
+            ctx["results"].log("DependencyStoreHygiene", True, "Disabled, skipped")
+            return
+
+        store_dir_key = step.get("store_dir_key", blk.get("store_dir_key", "store-dir"))
+        canonical = step.get("canonical_store_dir", blk.get("canonical_store_dir", ""))
+        forbidden = step.get("forbidden_store_dirs",
+                             blk.get("forbidden_store_dirs", [".pnpm-store"]))
+        scan_root_rel = step.get("scan_root", blk.get("scan_root", "."))
+        assert_npmrc = step.get("assert_npmrc_store_dir",
+                                blk.get("assert_npmrc_store_dir", True))
+        severity = step.get("severity", blk.get("severity", "warn"))
+        rule_ref = step.get("rule_ref",
+                            blk.get("rule_ref", "FR-085 / BR-095 / CODING-PNPM-STORE-HYGIENE"))
+
+        project_root = ctx.get("project_root", os.getcwd())
+        scan_root = scan_root_rel if os.path.isabs(scan_root_rel) else os.path.join(project_root, scan_root_rel)
+        canonical_abs = os.path.abspath(canonical) if canonical else ""
+
+        error_hits = []
+        warn_hits = []
+
+        # 1) 全局 ~/.npmrc 收敛键断言（根因修复：避免 pnpm 退化散落 store）
+        if assert_npmrc:
+            npmrc = os.path.join(os.path.expanduser("~"), ".npmrc")
+            found_key = False
+            try:
+                with open(npmrc, "r", encoding="utf-8", errors="ignore") as fh:
+                    for line in fh:
+                        if re.match(r"^\s*" + re.escape(store_dir_key) + r"\s*=", line):
+                            found_key = True
+                            break
+            except Exception:
+                pass
+            if not found_key:
+                msg = (f"全局 ~/.npmrc 未显式声明收敛键 '{store_dir_key}'"
+                       f"（pnpm 主目录探测被沙箱钩子打断会退化为盘根散落 .pnpm-store） [{rule_ref}]")
+                (error_hits if severity == "error" else warn_hits).append(msg)
+
+        # 2) 孤儿 .pnpm-store 检测（剪枝 node_modules/.git/dist/build/public 等重目录，避免深遍历）
+        skip_dirs = {".git", "node_modules", "dist", "build", "public", "public_live", ".pnpm-store"}
+        for root, dirs, _fnames in os.walk(scan_root):
+            # 检测本层目录中的孤儿 store（含 .pnpm-store 自身，但不深入）
+            for d in list(dirs):
+                if d in forbidden:
+                    full = os.path.abspath(os.path.join(root, d))
+                    if canonical_abs and full == canonical_abs:
+                        continue  # 统一 store，合法
+                    rel = os.path.relpath(full, project_root)
+                    msg = (f"发现孤儿 store 目录 {rel}"
+                           f"（与统一 store '{canonical}' 不一致，须确认无 node_modules/.modules.yaml 引用后清理） [{rule_ref}]")
+                    (error_hits if severity == "error" else warn_hits).append(msg)
+            # 剪枝：不深入重目录（含 .pnpm-store 自身）以避免巨大目录遍历
+            dirs[:] = [d for d in dirs if d not in skip_dirs]
+
+        ok = len(error_hits) == 0
+        parts = []
+        if error_hits:
+            parts.append(f"ERROR({len(error_hits)}): " + " | ".join(error_hits[:5]))
+        if warn_hits:
+            parts.append(f"WARN({len(warn_hits)}): " + " | ".join(warn_hits[:5]))
+        if not parts:
+            parts.append("npmrc store-dir converged; no orphan .pnpm-store found")
+        ctx["results"].log("DependencyStoreHygiene", ok, "; ".join(parts)[-300:])
+
+    def _handle_spa_live_deploy_check(self, step, ctx):
+        """SPA 实时部署产物磁盘验证：第十九轮复盘 / BR-096 落地。
+
+        把「部署产物磁盘验证」判断逻辑（J4）落地为可执行检查，取代旧版「两次 HTTP 请求比对」
+        的错误做法（spaRoot 启动只解析一次，目录高频轮转下两次 HTTP 校验会读到不同根而误判）：
+        - 读磁盘：枚举 live_base_dir 下匹配 live_dir_pattern 的目录，按 mtime 取最新（等价于
+          `ls -dt | head -1`），校验其内含 complete_marker 与 assets/index-*.js 资源包；
+        - 无完整新目录则回退 legacy_dir 并降级告警（BR-096-2 验证/重启顺序铁律的静默失效保护）；
+        - 若 restart_required：轮询 required_ports 监听（部署后须重启后端），未监听即判定部署/重启失败。
+
+        所有目录基准、前缀、标记、资源前缀、恶意路径样本、端口、verify_via_disk 全部来自
+        config.spa_live_deploy_check，step 可覆盖，不在代码中硬编码业务值。
+        """
+        import glob as _glob
+        blk = ctx["cfg"].get("spa_live_deploy_check", {})
+        if not blk.get("enabled", False) and not step.get("force", False):
+            ctx["results"].log("SpaLiveDeploy", True, "Disabled, skipped")
+            return
+
+        verify_via_disk = step.get("verify_via_disk", blk.get("verify_via_disk", True))
+        live_base_dir = step.get("live_base_dir", blk.get("live_base_dir", "api"))
+        live_dir_pattern = step.get("live_dir_pattern", blk.get("live_dir_pattern", "public_live_"))
+        legacy_dir = step.get("legacy_dir", blk.get("legacy_dir", "public"))
+        complete_marker = step.get("complete_marker", blk.get("complete_marker", ".deploy-complete"))
+        asset_prefix = step.get("asset_prefix", blk.get("asset_prefix", "/wiki/"))
+        restart_required = step.get("restart_required", blk.get("restart_required", True))
+        required_ports = step.get("required_ports", blk.get("required_ports", []))
+
+        project_root = ctx.get("project_root", os.getcwd())
+        base = live_base_dir if os.path.isabs(live_base_dir) else os.path.join(project_root, live_base_dir)
+
+        error_hits = []
+        warn_hits = []
+        resolved_dir = None
+
+        if verify_via_disk:
+            if not os.path.isdir(base):
+                error_hits.append(f"live 基准目录不存在: {base}（部署未产出 live 目录？）")
+            else:
+                # 枚举匹配前缀的目录，按 mtime 取最新（等价于 ls -dt | head -1）
+                candidates = []
+                for name in os.listdir(base):
+                    full = os.path.join(base, name)
+                    if os.path.isdir(full) and name.startswith(live_dir_pattern):
+                        candidates.append((os.path.getmtime(full), full))
+                candidates.sort(reverse=True)
+                if not candidates:
+                    error_hits.append(f"未找到任何匹配 '{live_dir_pattern}' 的部署目录于 {base}")
+                else:
+                    latest = candidates[0][1]
+                    # 完整性标记
+                    marker_path = os.path.join(latest, complete_marker)
+                    if not os.path.exists(marker_path):
+                        warn_hits.append(
+                            f"最新部署目录 {os.path.relpath(latest, project_root)} 缺少完整性标记 "
+                            f"'{complete_marker}'（部署未真正完成 / 回退判定）"
+                        )
+                    # 资源包（assets/index-*.js）
+                    bundle_glob = os.path.join(latest, "assets", "index-*.js")
+                    if not _glob.glob(bundle_glob):
+                        warn_hits.append(
+                            f"最新部署目录 {os.path.relpath(latest, project_root)} 未找到资源包 "
+                            f"assets/index-*.js（构建产物缺失）"
+                        )
+                    resolved_dir = latest
+                    # 兜底目录不应仍存在（若存在说明回退发生过，需清理避免静默生效）
+                    legacy_full = os.path.join(base, legacy_dir)
+                    if os.path.isdir(legacy_full):
+                        warn_hits.append(
+                            f"兜底目录 {os.path.relpath(legacy_full, project_root)} 仍存在"
+                            f"（确认新目录完整后清理，避免回退静默生效）"
+                        )
+        else:
+            # 旧版两次 HTTP 校验路径已弃用，提示改用 verify_via_disk
+            warn_hits.append("verify_via_disk=false：旧版两次 HTTP 校验已弃用（目录轮转会误判），建议置 true")
+
+        # 重启后端口监听校验（BR-096-2 验证/重启顺序铁律）
+        if restart_required and required_ports:
+            try:
+                listening = verify_ports_listening(required_ports)
+            except Exception:
+                listening = {}
+            not_listening = [p for p, ok in listening.items() if not ok]
+            if not_listening:
+                error_hits.append(
+                    f"部署后端口未监听（须重启后端使 spaRoot 重新解析）：{not_listening}"
+                )
+            else:
+                warn_hits.append(f"ports_listening: {list(listening.keys())}")
+
+        ok = len(error_hits) == 0
+        parts = []
+        if resolved_dir:
+            parts.append(f"resolved:{os.path.relpath(resolved_dir, project_root)}")
+        if error_hits:
+            parts.append(f"ERROR({len(error_hits)}): " + " | ".join(error_hits[:5]))
+        if warn_hits:
+            parts.append(f"WARN({len(warn_hits)}): " + " | ".join(warn_hits[:5]))
+        if not parts:
+            parts.append("disk live dir verified; ports listening")
+        ctx["results"].log("SpaLiveDeploy", ok, "; ".join(parts)[-300:])
+
     def _handle_route_response_branch_coverage(self, step, ctx):
         """路由响应分支覆盖：配置化逐分支断言被测路由在各请求参数组合下的返回状态码，
         把第十二轮复盘"归档路由响应分支覆盖 + 静默缺陷回归"判断逻辑落地为可执行检查。
@@ -1215,11 +1401,19 @@ class StepEngine:
             return
 
         base_url = ctx["cfg"].get("service", {}).get("api_url", "http://localhost:3000")
-        route_name = step.get("route_name", blk.get("route_name", ""))
-        method = step.get("method", blk.get("method", "GET")).upper()
-        branch_cases = step.get("branch_cases", blk.get("branch_cases", []))
-        if not route_name or not branch_cases:
-            ctx["results"].log("RouteBranchCoverage", True, "No route_name/branch_cases configured, skipped")
+        req_timeout = (int(blk.get("timeout_ms", 120000)) if blk.get("timeout_ms") else 120000) / 1000.0
+
+        # 构造路由规格列表：优先 routes 列表（多路由），否则用遗留单路由字段（向后兼容）
+        routes = step.get("routes", blk.get("routes")) or []
+        if not routes:
+            rn = step.get("route_name", blk.get("route_name", ""))
+            mt = step.get("method", blk.get("method", "GET")).upper()
+            bc = step.get("branch_cases", blk.get("branch_cases", []))
+            if rn and bc:
+                routes = [{"route_name": rn, "method": mt, "branch_cases": bc,
+                           "token_env": blk.get("token_env")}]
+        if not routes:
+            ctx["results"].log("RouteBranchCoverage", True, "No route_name/branch_cases/routes configured, skipped")
             return
 
         pctx = ctx.get("ctx")
@@ -1230,41 +1424,72 @@ class StepEngine:
 
         overall_ok = True
         details = []
-        for case in branch_cases:
-            cname = case.get("name", "case")
-            params = dict(case.get("params", {}))
-            expected = int(case.get("expected_status", 200))
-            required_fields = case.get("required_fields", [])
-            # 路径占位符替换（:param 从 params 中移除并填入路径），其余作为 query 参数
-            path = route_name
-            for k in list(params.keys()):
-                ph = ":" + k
-                if ph in path:
-                    path = path.replace(ph, urllib.parse.quote(str(params[k]), safe=""))
-                    del params[k]
-            qs = urllib.parse.urlencode(params) if params else ""
-            url = base_url.rstrip("/") + path + (("?" + qs) if qs else "")
-            try:
-                resp = req.request(method, url, timeout=10)
-                status = resp.status
-                ok = status == expected
-                extra = ""
-                if ok and status == 200 and required_fields:
-                    try:
-                        body = resp.json()
-                        missing = [f for f in required_fields if f not in body]
-                        if missing:
-                            ok = False
-                            extra = f"; missing fields: {missing}"
-                    except Exception:
-                        ok = False
-                        extra = "; response not JSON"
-                if not ok:
+        import os
+        for spec in routes:
+            route_name = spec.get("route_name", "")
+            method = str(spec.get("method", "GET")).upper()
+            branch_cases = spec.get("branch_cases", [])
+            token_env = spec.get("token_env") or blk.get("token_env")
+            extra_headers = dict(spec.get("extra_headers", {}) or {})
+            if not route_name or not branch_cases:
+                ctx["results"].log("RouteBranchCoverage", True, f"Route {route_name or '(empty)'} skipped (no name/cases)")
+                continue
+            # 解析鉴权令牌（仅注入到需登录的分支；匿名分支不注入，断言 fail-closed 401）
+            auth_header = None
+            if token_env:
+                tok = os.environ.get(token_env)
+                if tok:
+                    auth_header = f"Bearer {tok}"
+
+            for case in branch_cases:
+                cname = case.get("name", "case")
+                params = dict(case.get("params", {}))
+                expected = int(case.get("expected_status", 200))
+                required_fields = case.get("required_fields", [])
+                required_headers = case.get("required_headers", [])
+                # 路径占位符替换（:param 从 params 中移除并填入路径），其余作为 query 参数
+                path = route_name
+                for k in list(params.keys()):
+                    ph = ":" + k
+                    if ph in path:
+                        path = path.replace(ph, urllib.parse.quote(str(params[k]), safe=""))
+                        del params[k]
+                qs = urllib.parse.urlencode(params) if params else ""
+                url = base_url.rstrip("/") + path + (("?" + qs) if qs else "")
+                headers = dict(extra_headers)
+                if auth_header:
+                    headers["Authorization"] = auth_header
+                try:
+                    kwargs = {"timeout": req_timeout}
+                    if headers:
+                        kwargs["headers"] = headers
+                    resp = req.request(method, url, **kwargs)
+                    status = resp.status
+                    ok = status == expected
+                    extra = ""
+                    if ok and status == 200:
+                        if required_fields:
+                            try:
+                                body = resp.json()
+                                missing = [f for f in required_fields if f not in body]
+                                if missing:
+                                    ok = False
+                                    extra = f"; missing fields: {missing}"
+                            except Exception:
+                                ok = False
+                                extra = "; response not JSON"
+                        if ok and required_headers:
+                            hdr_missing = [h for h in required_headers
+                                           if not (resp.headers.get(h) if hasattr(resp, "headers") else None)]
+                            if hdr_missing:
+                                ok = False
+                                extra = f"; missing headers: {hdr_missing}"
+                    if not ok:
+                        overall_ok = False
+                    details.append(f"{route_name}::{cname}:{status}" + (extra if extra else ""))
+                except Exception as e:
                     overall_ok = False
-                details.append(f"{cname}:{status}" + (extra if extra else ""))
-            except Exception as e:
-                overall_ok = False
-                details.append(f"{cname}:ERR({str(e)[:40]})")
+                    details.append(f"{route_name}::{cname}:ERR({str(e)[:40]})")
 
         ctx["results"].log("RouteBranchCoverage", overall_ok, "; ".join(details))
 

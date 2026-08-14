@@ -1,2 +1,0 @@
-timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,Encoding,Hostname,IdleTime,Connect
-1785169562461,85,POST /api/auth/login,Non HTTP response code: org.apache.http.conn.HttpHostConnectException,"Non HTTP response message: Connect to localhost:3000 [localhost/127.0.0.1, localhost/0:0:0:0:0:0:0:1] failed: Connection refused: connect",setUp - Login 1-1,text,false,Test failed: code expected to contain /200/,2614,0,1,1,http://localhost:3000/api/auth/login,0,UTF-8,DESKTOP-G10O4NL,0,85

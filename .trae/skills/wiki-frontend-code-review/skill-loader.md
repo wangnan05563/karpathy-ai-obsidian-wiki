@@ -69,6 +69,17 @@
 | FR81 | IDB Reactive Clone | [references/idb-reactive-clone-frontend-rule.md](references/idb-reactive-clone-frontend-rule.md) | — | services/*UserConfig*.ts, *store*.ts (含 dbPut / saveUserConfig / idbPut / store.put / reactive / toRaw / structuredClone / [object Array] could not be cloned) | 3 | 4 |
 | FR82 | Auth Request Timeout | [references/auth-request-timeout-frontend-rule.md](references/auth-request-timeout-frontend-rule.md) | — | stores/auth.ts, *store*.ts, api/auth.ts, views/Login.vue (含 login / fetch / AbortController / AbortSignal.timeout / 登录中 / 登录超时 / 超时) | 2 | 0 |
 | FR83 | Auth Loading Reset | [references/auth-loading-reset-frontend-rule.md](references/auth-loading-reset-frontend-rule.md) | — | views/Login.vue, *store*.ts, *.vue (含 loading=true / submitting=true / try / finally / 登录中 / 灰显) | 2 | 0 |
+| FR84 | Auth Request Fetch | [references/auth-request-fetch-frontend-rule.md](references/auth-request-fetch-frontend-rule.md) | — | *.vue, *.ts (含 fetch('/api/config') / fetch('/api/ai/config') / apiFetch / Authorization / Bearer / 受保护端点 / requireAuth / bootstrap) | 3 | 0 |
+| FR85 | Pnpm Store Hygiene | [references/pnpm-store-hygiene-frontend-rule.md](references/pnpm-store-hygiene-frontend-rule.md) | — | .npmrc, *.ps1, build*.{ps1,sh,mjs} (含 store-dir / .pnpm-store / pnpm store path / 孤儿 store / 收敛) | 0 | 2 |
+| FR86 | Persistent Component Lifecycle | [references/persistent-component-lifecycle-frontend-rule.md](references/persistent-component-lifecycle-frontend-rule.md) | — | *.vue, *.ts (含 v-show / props.visible / watch(visible) / watch(auth.user?.id) / onMounted 仅一次 / 重型 DOM / v-if="visible" / vue-tsc 收窄 / 切回恢复 / 账户切换) | 1 | 4 |
+| FR87 | ObjectURL Lifecycle | [references/media-object-url-frontend-rule.md](references/media-object-url-frontend-rule.md) | — | *.vue, *.ts (含 URL.createObjectURL / revokeObjectURL / blob / objectUrl / 常驻组件 / 切换曲目 / 图片预览 / 文件下载) | 0 | 2 |
+| FR88 | Audio Playback Reliability | [references/audio-playback-reliability-frontend-rule.md](references/audio-playback-reliability-frontend-rule.md) | — | *.vue, *.ts (含 <audio> / a.play() / 语音合成失败 / 播放被浏览器拦截 / position / duration / 朗读队列 / res.ok / 进度重置) | 1 | 2 |
+| FR89 | Backdrop Filter Containing Block | [references/backdrop-filter-containing-block-frontend-rule.md](references/backdrop-filter-containing-block-frontend-rule.md) | — | *.vue, *.css (含 backdrop-filter / -webkit-backdrop-filter / position: fixed / .mobile-content / scroll-fab / sheet-mask / Teleport / --m-blur) | 1 | 2 |
+| FR90 | Dual Theme Variable | [references/dual-theme-variable-frontend-rule.md](references/dual-theme-variable-frontend-rule.md) | — | *.vue, *.css, *.ts (含 --m- / theme-light / .mobile-root / useMobileTheme / 主题变量 / 切换主题 / karpathy-mobile-theme) | 0 | 3 |
+| FR91 | Download Timeout/Abort | [references/download-timeout-abort-frontend-rule.md](references/download-timeout-abort-frontend-rule.md) | — | *.ts, *.vue (含 fetch(, downloadVaultFile, AbortSignal.timeout, blob, 下载, 超时, 大文件, 挂起) | 0 | 2 |
+| FR92 | Download Mobile Silent Guard | [references/download-mobile-silent-guard-frontend-rule.md](references/download-mobile-silent-guard-frontend-rule.md) | — | *.ts, *.vue (含 downloadVaultFile, MobileBrowse, 下载, 错误提示, Toast, 静默, 失败兜底, 点了没反应) | 1 | 2 |
+| FR93 | Download Reentry Guard | [references/download-reentry-guard-frontend-rule.md](references/download-reentry-guard-frontend-rule.md) | — | *.ts, *.vue (含 downloadVaultFile, downloading, in-flight, 防重复点击, 重入, 并发下载) | 0 | 2 |
+| FR94 | Content-Disposition Filename | [references/content-disposition-filename-frontend-rule.md](references/content-disposition-filename-frontend-rule.md) | — | *.ts, *.vue (含 Content-Disposition, filename*, RFC 5987, 扩展名, 文件名解析, blob, 中文文件名) | 0 | 3 |
 
 ## 2. Quick Routing Table
 
@@ -132,6 +143,17 @@
 | services/*UserConfig*.ts / *store*.ts + dbPut / saveUserConfig / idbPut / store.put / reactive( / toRaw( / structuredClone( / [object Array] could not be cloned / 深拷贝 / clone( | idb-reactive-clone-frontend-rule (FR81) | persistence-boundary-rule (if 客户端持久化), runtime-data-privacy-frontend-rule (FR63, if IndexedDB 命名空间) |
 | stores/auth.ts / *store*.ts / api/auth.ts + login / fetch / AbortController / AbortSignal.timeout / 登录中 / 登录超时 | auth-request-timeout-frontend-rule (FR82) | async-reliability-frontend-rule (AR-1~AR-4, if SSE/定时器) |
 | views/Login.vue / *.vue + loading=true / submitting=true / try / finally / 登录中 / 灰显 | auth-loading-reset-frontend-rule (FR83) | — |
+| *.vue / *.ts + fetch('/api/config') / fetch('/api/ai/config') / apiFetch / Authorization / Bearer / 受保护端点 / bootstrap / 401 | auth-request-fetch-frontend-rule (FR84) | backend-review-static-check (if 后端 requireAuth 契约), async-reliability-frontend-rule (if fetch/axios) |
+| ~/.npmrc / .npmrc + store-dir / pnpm store path / .pnpm-store / 孤儿 store / 收敛 | pnpm-store-hygiene-frontend-rule (FR85) | dependency-store-hygiene-check (if 后端 BR-095 同查) |
+| *.vue / *.ts + v-show 常驻 / props.visible / watch(visible) / watch(auth.user?.id) / onMounted 仅一次 / 重型 DOM / v-if="visible" / vue-tsc 收窄 | persistent-component-lifecycle-frontend-rule (FR86) | session-isolation-frontend-rule (if 账户切换 resetSession), media-object-url-frontend-rule (if 含 createObjectURL) |
+| *.vue / *.ts + URL.createObjectURL / revokeObjectURL / blob / objectUrl / 常驻组件 / 切换曲目 | media-object-url-frontend-rule (FR87) | persistent-component-lifecycle-frontend-rule (if v-show 常驻), audio-playback-reliability-frontend-rule (if <audio> 播放) |
+| *.vue / *.ts + <audio> / a.play() / 语音合成失败 / 播放被浏览器拦截 / position / duration / 朗读队列 / res.ok | audio-playback-reliability-frontend-rule (FR88) | media-object-url-frontend-rule (if createObjectURL), tts-neural-fallback-rule (FR67, if 后端合成 + 降级) |
+| *.vue / *.css + backdrop-filter / -webkit-backdrop-filter / .mobile-content / scroll-fab / position: fixed / Teleport / --m-blur / 毛玻璃滚动容器 | backdrop-filter-containing-block-frontend-rule (FR89) | dual-theme-variable-frontend-rule (if 主题变量 --m-), theming (if 毛玻璃主题色) |
+| *.vue / *.css / *.ts + --m- / theme-light / .mobile-root / useMobileTheme / 主题变量 / 切换主题 / karpathy-mobile-theme / data-theme | dual-theme-variable-frontend-rule (FR90) | backdrop-filter-containing-block-frontend-rule (if 含 backdrop-filter 容器), theming (if 主题色), config-isolation-rule (if 多主题配置命名空间) |
+| *.ts / *.vue + fetch( / downloadVaultFile / AbortSignal.timeout / blob / URL.createObjectURL / 下载 / 超时 / 大文件 | download-timeout-abort-frontend-rule (FR91) | download-reentry-guard-frontend-rule (FR93, if 防重复点击), download-mobile-silent-guard-frontend-rule (FR92, if 移动端), content-disposition-filename-frontend-rule (FR94, if 文件名解析), async-reliability-frontend-rule (if fetch/axios) |
+| *.ts / *.vue + downloadVaultFile / MobileBrowse / 下载 / 错误提示 / Toast / 静默 / 失败兜底 / 点了没反应 | download-mobile-silent-guard-frontend-rule (FR92) | download-timeout-abort-frontend-rule (FR91, if 超时), download-reentry-guard-frontend-rule (FR93, if 重入) |
+| *.ts / *.vue + downloadVaultFile / downloading / in-flight / 防重复点击 / 重入 / 并发下载 | download-reentry-guard-frontend-rule (FR93) | download-timeout-abort-frontend-rule (FR91, if 超时), download-mobile-silent-guard-frontend-rule (FR92, if 移动端) |
+| *.ts / *.vue + Content-Disposition / filename* / RFC 5987 / 扩展名 / 文件名解析 / blob / 中文文件名 | content-disposition-filename-frontend-rule (FR94) | download-timeout-abort-frontend-rule (FR91, if fetch 下载), media-object-url-frontend-rule (FR87, if createObjectURL) |
 
 ## 3. Keyword Scanning Guide
 
@@ -207,3 +229,14 @@ ormalize |
 | idb-reactive-clone-frontend-rule | dbPut, saveUserConfig, idbPut, store.put, reactive(, toRaw(, structuredClone(, [object Array] could not be cloned, JSON.parse(JSON.stringify, 深拷贝, clone(, 静默丢配置 |
 | auth-request-timeout-frontend-rule | login, fetch, AbortController, AbortSignal.timeout, 登录中, 登录超时, 超时, 重试, await fetch |
 | auth-loading-reset-frontend-rule | loading, submitting, try, finally, 登录中, 灰显, 复位, resetLoading |
+| auth-request-fetch-frontend-rule | fetch, /api/config, /api/ai/config, apiFetch, Authorization, Bearer, 受保护端点, requireAuth, bootstrap, 401 |
+| backdrop-filter-containing-block-frontend-rule | backdrop-filter, -webkit-backdrop-filter, --m-blur, position: fixed, Teleport, .mobile-content, scroll-fab, sheet-mask, containing block, 毛玻璃滚动容器 |
+| dual-theme-variable-frontend-rule | --m-, theme-light, .mobile-root, useMobileTheme, 主题变量, 切换主题, karpathy-mobile-theme, data-theme, 双主题 |
+| pnpm-store-hygiene-frontend-rule | store-dir, .npmrc, pnpm store path, .pnpm-store, 孤儿 store, 收敛, content-addressable |
+| persistent-component-lifecycle-frontend-rule | v-show, props.visible, watch(, onMounted, onBeforeUnmount, 重型 DOM, v-if="visible", vue-tsc, activeTab, 切回, 账户切换, 常驻, 后台播放 |
+| media-object-url-frontend-rule | URL.createObjectURL, revokeObjectURL, blob, objectUrl, new Audio, 图片预览, 文件下载, 常驻组件, 切换曲目 |
+| audio-playback-reliability-frontend-rule | <audio, a.play(), .play(), 语音合成失败, 播放被浏览器拦截, position, duration, 朗读队列, res.ok, NotAllowedError, 进度重置 |
+| download-timeout-abort-frontend-rule | fetch, downloadVaultFile, AbortSignal.timeout, blob, 下载, 超时, 大文件, 挂起, signal |
+| download-mobile-silent-guard-frontend-rule | downloadVaultFile, MobileBrowse, 下载, 错误提示, Toast, 静默, 失败兜底, 点了没反应, showError |
+| download-reentry-guard-frontend-rule | downloadVaultFile, downloading, in-flight, 防重复点击, 重入, 并发下载, finally |
+| content-disposition-filename-frontend-rule | Content-Disposition, filename*, RFC 5987, 扩展名, 文件名解析, blob, 中文文件名, decodeURIComponent |

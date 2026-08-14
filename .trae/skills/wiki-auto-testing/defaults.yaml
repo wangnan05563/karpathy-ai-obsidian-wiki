@@ -39,6 +39,31 @@ startup:
   enabled: false
   stop_after_test: false
 
+# --- 实时部署配置（端到端验证后的真实部署流，全参数化，零硬编码） ---
+# 流程：构建 → 写全新时间戳目录 + .deploy-complete → 杀孤儿旧进程 → 重启后端 → 冒烟。
+# 适配「沙箱（dangerouslyDisableSandbox）」与「真实构建机」两种环境；项目可在 config.yaml 覆盖值。
+# 对应 CODING-SPA-LIVE-DEPLOY / CODING-DEPLOY-VERIFY-DISK / CODING-DEPLOY-MARKER-VERIFY，与后端 BR-071/BR-096/BR-101 协同。
+deploy:
+  enabled: false                          # 默认不在测试流水线内自动部署；真实构建机置 true
+  require_dangerously_disable_sandbox: true  # Bash 沙箱全量写回滚→构建/部署须 dangerouslyDisableSandbox，否则产物命令结束被丢弃
+  build_command: "node_modules/vite/bin/vite.js build --outDir ../builds/dist_u{timestamp}"  # {timestamp} 由引擎运行时替换
+  build_run_dir: "frontend"
+  deploy_script: "api/_deploy_live.mjs"   # 写全新 public_live_<ts> 目录 + .deploy-complete（不覆盖已存在目录）
+  # 部署脚本必填参数（如构建目录）；{timestamp} 由引擎统一生成并同时替换 build_command 与此处，保持一致
+  deploy_script_args: []
+  deploy_run_dir: "api"
+  orphan_port: 3000                       # 旧后端监听端口，部署后须杀掉孤儿进程（沙箱禁用 taskkill/netstat→用 Node process.kill）
+  kill_strategy: "node_process_kill"
+  restart_command: "node node_modules/tsx/dist/cli.mjs src/index.ts"  # 后端以 tsx 直接跑源码（spaRoot 仅启动期解析一次→须重启切流）
+  restart_run_dir: "api"
+  restart_sandbox: true                   # 重启后端须在 Bash dangerouslyDisableSandbox 下后台运行
+  verify_via_disk: true                   # 部署后直接读磁盘最新 public_live_<ts> 目录校验 bundle（BR-096）
+  verify_complete_marker: ".deploy-complete"
+  deploy_marker: ""                       # 关键特征串：确认部署产物含该功能、防被不含该功能的后续构建覆盖（CODING-DEPLOY-MARKER-VERIFY）；项目须填
+  smoke_endpoints:                        # 重启后冒烟（真实构建机启用 tcp_opt_in）
+    - { method: "GET", path: "/health", expect_status: 200 }
+    - { method: "GET", path: "/", expect_status: 200 }
+
 # --- 服务配置 ---
 service:
   startup_timeout_sec: 60
@@ -1745,6 +1770,13 @@ backend_review_static_check:
       message: "发现关键数据加载（loadUsers/loadConfig/JSON.parse），须确认区分 not-found 与 corrupt/空壳并兜底回退默认 + 备份原文件 + log.warn，禁静默清零（BR-092 / CODING-USER-STORE-INIT）"
       rule_ref: "BR-092 / CODING-USER-STORE-INIT"
       severity: "warn"
+    - name: "process_cleanup_safe"
+      patterns:
+        - "taskkill"
+      regex: false
+      message: "发现 taskkill 调用，须复核：端口清理主键是否改用 Stop-Process -Force + try/catch（非致命）；若仅作残留兜底，须 2>&1 | Out-Null + try/catch 吞 stderr、仅以 $LASTEXITCODE 判定，禁止裸 taskkill 在 $ErrorActionPreference='Stop' 下触发 NativeCommandError 中止脚本（BR-093 / CODING-PS-PROCESS-CLEANUP）。启用本组须将 scan_dirs 包含脚本目录、file_glob 放宽到 *.ps1"
+      rule_ref: "BR-093 / CODING-PS-PROCESS-CLEANUP"
+      severity: "warn"
   # 超时（毫秒，配置契约保留）
   timeout_ms: 120000
 
@@ -1861,6 +1893,65 @@ frontend_review_static_check:
       required_patterns:
         - "msg-content-wrapper"
         - "msg-edit"
+    - name: "auth_fetch_wrapped"
+      # 受保护端点必须走带鉴权封装：禁止裸 fetch 调 requireAuth 端点（命中即 401 静默失效）
+      description: "请求后端 requireAuth 受保护端点（/api/config、/api/ai/config 等）必须统一经带鉴权封装 apiFetch 调用，禁止裸 fetch 不带 Authorization 头（命中即 401 静默失效）；required_patterns 守护 apiFetch 封装不被误删"
+      severity: "error"
+      rule_ref: "FR-084 / BR-094 / CODING-AUTH-REQUEST-FETCH"
+      forbidden_patterns:
+        - "fetch('/api/config')"
+        - "fetch(\"/api/config\")"
+        - "fetch('/api/ai/config')"
+        - "fetch(\"/api/ai/config\")"
+      required_patterns:
+        - "apiFetch"
+    - name: "persistent_component_visible_watch"
+      description: "常驻组件（v-show 后台播放等）须保留 watch(visible) 生命周期钩子，禁止在重构中误删导致切 Tab 播放态/账户态丢失（守护 FR-086 保护性代码不被删）"
+      severity: "warn"
+      rule_ref: "FR-086 / CODING-PERSISTENT-COMPONENT"
+      forbidden_patterns: []
+      required_patterns:
+        - "watch(visible)"
+    - name: "object_url_revoked"
+      description: "TTS / 媒体 ObjectURL 使用须成对保留 URL.revokeObjectURL 释放逻辑，禁止误删导致 ObjectURL 常驻泄漏（守护 FR-087 保护性代码不被删）"
+      severity: "error"
+      rule_ref: "FR-087 / CODING-MEDIA-OBJECT-URL"
+      forbidden_patterns: []
+      required_patterns:
+        - "revokeObjectURL"
+    - name: "audio_autoplay_distinguished"
+      description: "音频播放区分「语音合成失败」与「播放被浏览器拦截」两类文案且保留进度重置逻辑，禁止混报为同一含糊提示（守护 FR-088 保护性代码不被删）"
+      severity: "error"
+      rule_ref: "FR-088 / CODING-AUDIO-PLAYBACK-RELIABILITY"
+      forbidden_patterns: []
+      required_patterns:
+        - "语音合成失败"
+        - "播放被浏览器拦截"
+    - name: "backdrop_filter_fixed_ancestor"
+      description: "含 backdrop-filter 的滚动容器（命中 scroll_container_selectors，如 .mobile-content）须保证其内部 position: fixed 悬浮元素（fixed_descendant_selectors，如滚动 FAB / 全屏 sheet 遮罩）在毛玻璃主题下不丢失视口固定——毛玻璃主题 --m-blur 非 none 使容器成为 fixed 后代 containing block、随滚动失固定、浅色主题正常 → 主题间不一致（FR-089）。required_patterns 守护 Teleport 逃逸写法（及 removeEventListener 类解绑）不被重构误删；若容器已移除 backdrop-filter 则 Teleport 非必需，本组仅守护逃逸/解绑写法存在性"
+      severity: "error"
+      rule_ref: "FR-089 / CODING-BACKDROP-FILTER-CB"
+      forbidden_patterns: []
+      required_patterns:
+        - "Teleport"
+
+dependency_store_hygiene_check:
+  # 是否启用依赖 store 卫生验证（对应 CODING-PNPM-STORE-HYGIENE / 前端 FR-085 / 后端 BR-095）
+  enabled: false
+  # 全局 .npmrc 中用于收敛 store 的键名（须显式声明）
+  store_dir_key: "store-dir"
+  # 统一 store 绝对路径（与孤儿对比，命中则合法；按实际环境配置，禁止硬编码进引擎）
+  canonical_store_dir: 'D:\.pnpm-store'
+  # 禁止散落的 store 目录名（命中即孤儿）
+  forbidden_store_dirs:
+    - ".pnpm-store"
+  # 扫描孤儿 store 的根目录（相对项目根）
+  scan_root: "."
+  # 是否断言全局 ~/.npmrc 收敛键存在
+  assert_npmrc_store_dir: true
+  # 违规级别（建议级；CI 前置可升 error）
+  severity: "warn"
+  rule_ref: "FR-085 / BR-095 / CODING-PNPM-STORE-HYGIENE"
 
 spa_live_deploy_check:
   # 是否启用 SPA 实时部署解析验证（对应 CODING-SPA-LIVE-DEPLOY / BR-071 / 前端 FR-068）
@@ -1881,6 +1972,9 @@ spa_live_deploy_check:
     - "/wiki//absolute"
   # 部署新目录后是否必须重启后端（spaRoot 启动时算一次）
   restart_required: true
+  # 第十九轮复盘 / BR-096：验证改为「读磁盘最新目录」而非两次 HTTP 请求比对
+  # （spaRoot 启动只解析一次，目录高频轮转下两次 HTTP 校验会读到不同根而误判）
+  verify_via_disk: true
   # 后端端口（重启后轮询 Listen）
   required_ports:
     - 3000
@@ -2012,3 +2106,33 @@ idb_reactive_clone_check:
   severity_unsafe: "error"
   # 关联规则引用
   rule_ref: "FR-081 / CODING-IDB-REACTIVE-CLONE"
+
+# ============================================================
+# 冒烟验证策略（smoke_strategy）—— 沙箱受限环境泛化（通用默认）
+# 背景：沙箱跨进程 localhost TCP 被拦截 + app.inject 全量 app 挂起
+#   → 验证优先落在「同一进程」；跨进程 TCP 仅在可达 localhost 的真实构建机启用
+# 对应 wiki-auto-testing references/testing-process-review.md 第十七轮（2026-08-11）
+# 参数全配置化：本段为通用默认层，键名通用、项目可在 config.yaml 覆盖值（零硬编码）
+smoke_strategy:
+  # 进程内冒烟（默认，沙箱安全）：import buildApp() → app.ready() + 最小 SPA-static app inject
+  process_internal_inject:
+    enabled: true
+    env_guard: "WIKI_SMOKE"          # 守卫：WIKI_SMOKE=1 时入口文件不触发 listen
+    entry_export: "buildApp"         # 后端入口须导出可构建 app 的函数名（不 listen）
+    ready_check: "app.ready()"       # 验证启动/全量路由注册无回归
+    minimal_static_app_paths:        # 最小 SPA-static app inject 须返回 200 的路径
+      - "/"
+      - "/wiki/"
+      - "/wiki/assets/*"
+  # 跨进程 TCP 冒烟（真实构建机启用；沙箱禁用）：起服务 + 另一进程 curl
+  tcp_opt_in:
+    enabled: false                   # 沙箱默认关闭（跨进程 connect 全超时）
+    require_reachable_localhost: true
+    endpoints:                       # 通用示例：无 token 写端点须 401、/health 须 200
+      - { method: "GET",  path: "/health",     expect_status: 200 }
+      - { method: "POST", path: "/api/cleanup", expect_status: 401 }
+      - { method: "PUT",  path: "/api/schema",  expect_status: 401 }
+  # 契约级断言（缺密钥 400 / SSE 200 / TTS 200）沙箱内无法验证，须在真实机构建机重跑
+  contract_assertions_on_real_host: true
+  # 复用入口脚本（进程内冒烟执行器，从项目 api/ 目录经 tsx 运行）
+  inject_smoke_script: "api/_smoke_inject.mjs"

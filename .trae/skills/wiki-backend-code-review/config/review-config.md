@@ -986,3 +986,138 @@ Tauri 1.x 不适用，设 `enabled` 为 `false`。
 | `user_store_init.backup_on_corrupt` | `true` | 损坏/空壳文件须先备份再回退 |
 | `user_store_init.severity` | `critical` | 空壳/损坏未兜底导致登录失败的违规级别 |
 | `server_side_isolation.trust_proxy` | `false` | 是否信任代理（保持 false 防 XFF 伪造绕过限流）；与 `rate_limit.trust_proxy` 同源 |
+
+## 配置化与泛化审查参数（CODING-CONFIG-DRIVEN / J-CONFIG-FIRST）
+
+> 零硬编码元规则：所有可变参数（超时/阈值/端口/路径/正则/白名单/severity 文案/扫描范围）集中在配置层，代码与规则文件只读取不内联。新增规范 = 在配置加一组（registry），引擎主流程不动。本段是「配置驱动 + 泛化」统一审查透镜的参数（v2.15.0 新增），作为所有 BR 的前置约束。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `config_driven.enabled` | `true` | 是否启用配置化与泛化审查透镜 |
+| `config_driven.hardcode.timeout_signals` | `30000,30_000,60000,60_000,10000,10_000` | 硬编码超时字面量扫描信号（命中即要求改为 `timeout.*` 配置键） |
+| `config_driven.hardcode.path_signals` | `process.cwd(),D:/,C:/,/Users/,/home/` | 硬编码绝对路径 / 固定锚点扫描信号（命中即要求改为配置锚点或 process 变量） |
+| `config_driven.hardcode.key_signals` | `sk-,pk-,API_KEY,secret,token` | 硬编码密钥字符串信号（命中 = 🔴 Critical） |
+| `config_driven.hardcode.threshold_signals` | `0.3,1024,['application/json']` | 硬编码阈值 / 白名单字面量信号 |
+| `config_driven.special_case_signals` | `if (kind ===,switch (` | 非泛化特判信号（命中即建议改为配置组遍历 `groups[]`/`scan_dirs`） |
+| `config_driven.layer_compliance.enabled` | `true` | 是否检查配置三层（默认值/项目覆盖/示例）未被项目特有值污染 |
+| `config_driven.severity_hardcode_key` | `critical` | 硬编码密钥的违规级别 |
+| `config_driven.severity_hardcode_other` | `warning` | 其他硬编码字面量（超时/路径/阈值）的违规级别 |
+
+## 受保护接口契约审查参数（BR-094）
+
+> 对应"401 静默失效"复盘（CODING-AUTH-REQUEST-FETCH，wiki-code-dev references/auth-request-fetch-rule.md）。后端 `requireAuth`/`requireAdmin` 受保护端点须显式登记"端点→鉴权要求"契约使前端调用方可静态审计；把公开端点收紧为 `requireAuth` 是破坏性变更须标注"端点鉴权升级+调用方审计"并确认前端已迁移到带鉴权封装 `apiFetch`。对应前端 FR-084 / wiki-auto-testing `auth_fetch_wrapped` 组。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `auth_endpoint_contract.enabled` | `true` | 是否启用受保护接口契约审查 |
+| `auth_endpoint_contract.contract_source` | `routes/*.ts 路由注册守卫` | "端点 → 鉴权要求"权威登记处的位置（须可被静态审计） |
+| `auth_endpoint_contract.bootstrap_endpoints` | `/api/config,/api/ai/config` | 应用 bootstrap 期被前端请求的受保护端点（须确保前端封装在 Pinia/auth store 初始化前即可注入 token） |
+| `auth_endpoint_contract.wrapper_symbol` | `apiFetch` | 前端须使用的带鉴权封装符号名（收紧鉴权时调用方须已迁移至此） |
+| `auth_endpoint_contract.severity_undeclared` | `critical` | BR-094-1 受保护端点未在契约登记、调用方不可审计的违规级别 |
+| `auth_endpoint_contract.severity_breaking_audit` | `major` | BR-094-2 收紧 requireAuth 未审计前端调用方 / 未标注破坏性变更的违规级别 |
+
+## 包管理器 store 卫生审查参数（BR-095）
+
+> 对应"pnpm store 散落盘根"复盘（CODING-PNPM-STORE-HYGIENE，wiki-code-dev references/pnpm-store-hygiene-rule.md）。CI / 环境初始化 / Dockerfile / 构建脚本须断言 pnpm store 收敛（`.npmrc` 显式 `store-dir` 且 `pnpm store path` 返回一致）；仓库 / 盘根不得存在与统一 `store-dir` 不一致的孤儿 `.pnpm-store`。对应前端 FR-085 / wiki-auto-testing `dependency_store_hygiene_check`。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `dependency_store_hygiene.enabled` | `true` | 是否启用包管理器 store 卫生审查 |
+| `dependency_store_hygiene.store_dir_key` | `store-dir` | `.npmrc` 中用于收敛 store 的键名 |
+| `dependency_store_hygiene.forbidden_store_dirs` | `.pnpm-store` | 禁止散落的 store 目录名（命中即孤儿） |
+| `dependency_store_hygiene.canonical_store_dir` | `D:\.pnpm-store` | 统一 store 绝对路径（与孤儿对比，命中则合法） |
+| `dependency_store_hygiene.scan_root` | `项目根` | 扫描孤儿 store 的根目录 |
+| `dependency_store_hygiene.severity` | `warn` | 散落缓存 / 缺收敛键的违规级别（CI 前置可升 error） |
+
+## 部署产物磁盘验证审查参数（BR-096）
+
+> 对应「自动部署钩子高频轮转致两次 HTTP 校验 bundle 命中 404 / 错版本」复盘（CODING-DEPLOY-VERIFY-DISK，wiki-code-dev references/deploy-verify-disk-rule.md DV-1/DV-2）。部署后验证前端产物须读磁盘最新 `public_live_<ts>` 目录并 grep 关键 bundle，禁止两次 HTTP 请求校验；部署链路须重启后端后再读磁盘确认。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `deploy_verify_disk_backend.enabled` | `true` | 是否启用部署产物磁盘验证审查 |
+| `deploy_verify_disk_backend.severity_disk` | `major` | BR-096-1 用两次 HTTP 请求校验 bundle（而非读磁盘）的违规级别 |
+| `deploy_verify_disk_backend.severity_order` | `critical` | BR-096-2 部署链路缺"重启后端"或"读磁盘确认"的违规级别 |
+| `deploy_verify_disk_backend.live_dir_pattern` | `public_live_` | 时间戳部署目录前缀（后接数值时间戳） |
+| `deploy_verify_disk_backend.sort_command` | `ls -dt` | 定位最新目录的排序命令（按修改时间倒序取第一个） |
+| `deploy_verify_disk_backend.asset_bundle_glob` | `assets/index-*.js` | 关键 bundle 校验路径（grep 验证产物完整） |
+| `deploy_verify_disk_backend.health_endpoint` | `/health` | 重启后端后的健康检查端点（须返回 200） |
+| `deploy_verify_disk_backend.backend_port` | `3000` | 后端监听端口（旧进程须杀此端口后重启） |
+
+> 适用：时间戳轮转式 SPA 实时部署（`public_live_<ts>`）的产物验证；含自动部署钩子导致目录高频切换的环境。不适用：固定单目录部署（无轮转，HTTP 校验稳定）；仅校验后端 API 健康（不涉及前端产物）。与前端 FR-068 / 后端 BR-071 / wiki-auto-testing `spa_live_deploy_check.verify_via_disk` 配置对齐。
+
+## 文件流出端点鉴权门审查参数（BR-097）
+
+> 对应「文档下载功能读端点漏挂鉴权」复盘（CODING-DOWNLOAD-AUTH，wiki-code-dev references/download-endpoint-auth-rule.md DA-1~DA-3）。任何向外暴露 vault 用户数据的读端点须挂 `preHandler: guards.requireAuth`；开关缺失默认 fail-closed 401；单租户直通显式。与前端 FR-084 / BR-094 协同。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `download_auth_backend.enabled` | `true` | 是否启用文件流出端点鉴权审查 |
+| `download_auth_backend.read_endpoints` | `/api/files/tree`,`/api/files/pages`,`/api/files`,`/api/files/download` | 须挂载守卫的读端点清单（参数化，新增端点只改此处） |
+| `download_auth_backend.files_read_auth_required_key` | `auth.filesReadAuthRequired` | 读鉴权开关配置键（true 时挂 `requireAuth`） |
+| `download_auth_backend.fail_closed_status` | `401` | 守卫缺失 / 未配置时的默认拒绝状态码 |
+| `download_auth_backend.single_tenant_passthrough` | `auth.enabled=false` | 单租户直通条件（显式，不与读鉴权开关混淆） |
+| `download_auth_backend.severity` | `critical` | 漏挂守卫 / fail-open 的违规级别 |
+
+> 适用：向外暴露文件内容的 HTTP 端点注册；`filesReadAuthRequired` 开关开启场景。不适用：已公开静态资源（前端 bundle / public 静态资产）；纯内部 RPC（非 HTTP 暴露）。
+
+## Content-Disposition 安全审查参数（BR-098）
+
+> 对应「下载文件名头注入 / 中文乱码」复盘（CODING-CONTENT-DISPOSITION-SAFE，wiki-code-dev references/content-disposition-safe-rule.md CD-1~CD-3）。下载响应须 RFC 5987 `filename*` + legacy 兜底，清洗 CRLF/引号/控制字符防头注入。与前端 FR-094 协同。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `header_injection.enabled` | `true` | 是否启用 Content-Disposition 安全审查 |
+| `header_injection.use_rfc5987` | `true` | 须输出 `filename*=UTF-8''<encoded>` |
+| `header_injection.control_chars_regex` | `["\\\x00-\x1f\x7f]` | 须清洗的响应头破坏字符（CRLF / 控制字符） |
+| `header_injection.quote_char` | `"` | 须转义的引号字符 |
+| `header_injection.encode_extra_chars` | `'()*` | RFC 5987 attr-char 须额外百分号转义的字符 |
+| `header_injection.legacy_ascii_only` | `true` | 非 ASCII 文件名禁直接写入 legacy `filename`（改中性名 + 扩展名兜底） |
+| `header_injection.severity` | `critical` | 头注入 / 编码缺失的违规级别 |
+
+> 适用：下载/附件响应 `Content-Disposition` 构造；文件名派生自用户/外部路径。不适用：文件名完全由服务端常量决定且已白名单（仍建议套用，收益低）。
+
+## 下游错误码透传审查参数（BR-099）
+
+> 对应「读错误统一吞 500 丢失语义」复盘（CODING-VAULT-ERRCODE-PRESERVE，wiki-code-dev references/vault-error-code-preserve-rule.md VE-1~VE-2）。`catch` 须按 `err.code` 分流语义状态，禁统一吞 500。与 BR-076 互补。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `errcode_map.enabled` | `true` | 是否启用错误码透传审查 |
+| `errcode_map.eisdir_status` | `400` | `EISDIR`（下的是目录）映射状态 |
+| `errcode_map.eacces_status` | `403` | `EACCES`/`EPERM` 映射状态 |
+| `errcode_map.enoent_status` | `404` | `ENOENT`（真不存在）映射状态 |
+| `errcode_map.eoutside_status` | `400` | `EOUTSIDE`（路径越界）映射状态 |
+| `errcode_map.unknown_status` | `500` | 未知错误回落状态 |
+| `errcode_map.preserve_message` | `true` | 未知错误保留原始 message（非笼统「服务器错误」） |
+| `errcode_map.severity` | `major` | 统一吞 500 / 丢失语义的违规级别 |
+
+> 适用：经封装适配器（vault/LLM/第三方）访问外部系统的 handler。不适用：本地纯计算逻辑（无外部错误码语义）。
+
+## 响应头时序审查参数（BR-100）
+
+> 对应「过早发 Content-Disposition 致半截响应」复盘（CODING-RESP-HEADER-ORDER，wiki-code-dev references/response-header-ordering-rule.md RH-1~RH-2）。响应头须在成功读取后设置；错误路径不携带附件头。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `resp_header_order_backend.enabled` | `true` | 是否启用响应头时序审查 |
+| `resp_header_order_backend.headers_after_read` | `Content-Disposition`,`Content-Type` | 须在成功读取后才设置的响应头清单 |
+| `resp_header_order_backend.forbid_header_before_try` | `true` | 禁止在 `try` 读取前设置上述头（防半截响应） |
+| `resp_header_order_backend.severity` | `major` | 错误路径携带附件头 / 头时序错误的违规级别 |
+
+> 适用：先读文件/资源再发二进制/附件响应的 handler。不适用：纯 JSON API（无文件体，头仅常规 Content-Type）。
+
+## 下载文件名扩展名保留审查参数（BR-101）
+
+> 对应「下载文件丢失扩展名」复盘（CODING-CONTENT-DISPOSITION-SAFE 扩展名维度，wiki-code-dev references/content-disposition-safe-rule.md）。下载文件名须保留原始扩展名；Content-Type 按扩展名映射，扩展名/MIME 表来自配置。与前端 FR-094 协同。
+
+| 参数键 | 默认值 | 说明 |
+|--------|--------|------|
+| `download_ext_preserve.enabled` | `true` | 是否启用下载扩展名保留审查 |
+| `download_ext_preserve.binary_extensions` | `.png`,`.jpg`,`.jpeg`,`.gif`,`.webp`,`.svg`,`.mp3`,`.wav`,`.ogg`,`.m4a`,`.mp4`,`.webm` | 二进制扩展名支持清单（参数化，新增格式只改此处） |
+| `download_ext_preserve.fallback_ext_from_path` | `true` | 文件名须保留 `path.extname`（非中性名丢失扩展名） |
+| `download_ext_preserve.text_fallback` | `text/plain; charset=utf-8` | 未知文本扩展名回退 Content-Type |
+| `download_ext_preserve.binary_fallback` | `application/octet-stream` | 未知二进制扩展名回退 Content-Type |
+| `download_ext_preserve.severity` | `major` | 扩展名丢失 / 映射缺失的违规级别 |
+
+> 适用：下载端点 `buildAttachmentHeader` 与扩展名/MIME 映射；中文/特殊文件名下载。不适用：文件名与扩展名完全由常量固定且已验证。

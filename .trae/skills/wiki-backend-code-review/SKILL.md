@@ -104,6 +104,10 @@ See [references/.rules-index.md](references/.rules-index.md) for the complete li
 | 响应钩子安全 | onSend, onResponse, setSerializer, contentTypeParser, 全局钩子, 阻塞, 抛错, fail-open, 挂死, 全量 API |
 | 响应压缩默认关闭 | @fastify/compress, register(compression), compress.enable, 条件注册, 默认关闭, 阈值, WIKI_DISABLE_COMPRESS |
 | 用户库初始化完整性 | loadUsers, users.json, 空壳, 0 字节, 损坏, JSON.parse, 回退默认, 备份, 静默清零 |
+| PowerShell 端口清理安全 | start-service.ps1, Stop-Process, taskkill, $ErrorActionPreference, 端口清理, 旧进程, NativeCommandError, 非致命, try/catch, 启动脚本 |
+| 受保护接口契约 | requireAuth, requireAdmin, publicPaths, /api/config, /api/ai/config, 受保护端点, 端点鉴权, 破坏性变更, 调用方审计, Bearer, 401 |
+| 包管理器 store 卫生 | store-dir, .npmrc, pnpm store path, .pnpm-store, 孤儿 store, 收敛, content-addressable, CI 前置, 构建依赖 |
+| 部署产物磁盘验证 | public_live_, ls -dt, grep, index-*.js, .deploy-complete, 自动部署钩子, 目录轮转, 两次 HTTP 校验, 404, 重启后端, /health |
 
 ## Generic Safety Net
 
@@ -330,6 +334,13 @@ No issues found.
 | BR-045 | 外部工具用 Start-Process -NoNewWindow -Wait -PassThru 包装，禁止直接 & |
 | BR-046 | 禁止 2>&1 \| Out-Host 合并流，用 -RedirectStandardError 单独重定向 |
 | BR-047 | Stop 模式下外部工具用 Start-Process 避免 stderr 误报 |
+
+### PowerShell 端口清理安全（BR-093）
+
+| 规则 | 说明 |
+|------|------|
+| BR-093-1 | 服务启动/重启脚本清理占用端口旧进程必须用 `Stop-Process -Id $procId -Force` 且 `try/catch` 包裹（清理非致命） |
+| BR-093-2 | 禁止裸 `taskkill` 作端口清理主键（`$ErrorActionPreference='Stop'` 下其 stderr 会触发 `NativeCommandError` 中止脚本）；残留兜底可用 `taskkill` 但须 `2>&1 \| Out-Null` + `try/catch` 吞 stderr，仅以 `$LASTEXITCODE` 判定 |
 
 ### 认证端点分类（BR-048~049）
 
@@ -661,6 +672,7 @@ No issues found.
 | BR-088-1 | 待审变更**完全是前端**（`.vue` / `frontend/src/stores/*.ts` / 客户端 IndexedDB 写入 / Pinia reactive 代理剥离）时，须声明范围不匹配并建议切换到 wiki-frontend-code-review，禁止硬套后端规则（如把前端 reactive-proxy-in-IDB 静默丢配置当作后端关键写问题套用 BR-076）——该坑的归属规则是前端 FR-081 / wiki-code-dev CODING-IDB-REACTIVE-CLONE |
 | BR-088-2 | 跨端规则（BYOK / 会话隔离 / 流式续答 / 隔离测试 / 编辑重发 / IDB reactive-clone）须以"该规则归属的技能"为准：后端侧规则在后端代码上核、前端侧规则在前端代码上核；同一规则前后端都有对应编号时按文件位置选其一，不双重复核 |
 | BR-088-3 | pending-change 模式先按 `git diff --name-only` 的文件位置判定主技能（`frontend/` 下 → 前端；`services/api/` 下 → 后端）；混合变更两端技能各审各的，输出分别标注 |
+| BR-088-4 | 前端专属视觉规则——毛玻璃 `backdrop-filter` 包含块陷阱（前端 FR-089 / wiki-code-dev CODING-BACKDROP-FILTER-CB）与双主题 `--m-*` 变量架构（前端 FR-090 / wiki-code-dev CODING-DUAL-THEME-VAR）——属纯前端 `.vue` / `.css` 范畴；后端审查涉及主题切换 / 毛玻璃的纯前端变更时须路由到 wiki-frontend-code-review，禁止用后端规则套用（与 BR-088-1 同一范围判定）；若同一变更同时含后端契约与前端主题样式，按文件位置两端各审、输出分别标注 |
 
 对应 wiki-code-dev 复盘维度④（适用 / 不适用边界）：每条规则都有适用场景与不适用场景，跨技能复用规则时须注明本项目/本端适用边界。
 
@@ -700,6 +712,15 @@ No issues found.
 
 对应 wiki-code-dev CODING-USER-STORE-INIT，基于「data/users.json 被写成 0 字节空壳导致登录失败」复盘（与 BR-076 / BR-077 互补：前者管"写不得吞错"，本规则管"初始化不得落成空壳 / 损坏须兜底"）。
 
+### PowerShell 端口清理安全（BR-093）
+
+| 规则 | 说明 |
+|------|------|
+| BR-093-1 | 服务启动/重启脚本（`scripts/start-service.ps1` 等）在清理占用端口的旧进程时，必须以 `Stop-Process -Id $procId -Force` 为清理主键，且**包裹 `try/catch`** 使清理成为非致命步骤；进程已退出/被回收时静默跳过，端口释放交由后续 `Wait-PortReady` 探测确认（禁止让清理失败阻断启动） |
+| BR-093-2 | **禁止以裸 `taskkill` 作为端口清理主键**：在 `$ErrorActionPreference='Stop'` 下，`taskkill` 的 stderr（"无法终止 PID X (属于 PID Y 子进程)" / "进程已退出"）会被包装为 `NativeCommandError` 中止整个脚本（即 `[ERROR] Start failed`）；且 `taskkill /F /T` 对"属于其他进程子进程"的 PID 直接拒绝。残留进程兜底清理（命令行匹配 `tsx`/`vite`）允许使用 `taskkill`，但须 `2>&1 \| Out-Null` + `try/catch` 吞掉 stderr，仅以 `$LASTEXITCODE -eq 0` 判定成功 |
+
+对应 wiki-code-dev CODING-PS-PROCESS-CLEANUP（powershell-constraints-rule.md PS-6.1），基于「启动脚本清理旧进程时 taskkill stderr 触发 NativeCommandError 中止脚本」复盘。与 wiki-auto-testing `backend_review_static_check` 的 `process_cleanup_safe` 组（零硬编码）配置对齐。
+
 ### 服务端权限隔离（BR-ISOLATION）
 
 | 规则 | 说明 |
@@ -707,6 +728,91 @@ No issues found.
 | BR-ISOLATION-01 | 写端点（改服务端共享状态 / 用户数据）必须注入 auth 感知守卫 `preHandler: guards.requireAdmin`（或 `requireAuth`）；守卫工厂 `createIsolationGuards` 须判断 `auth.enabled`，`false`（单租户）时一律放行，禁止对单租户部署引入 401（保持"关认证=全管理员"形态） |
 | BR-ISOLATION-02 | 带归属资源落盘时 `ownerId` 必须由 `request.currentUser.userId`（受信上下文）写入，忽略并覆盖客户端 `body.ownerId`；读取按当前用户过滤，归属不匹配返回 404（禁 200 携他人数据 / 禁 403 暴露存在性） |
 | BR-ISOLATION-03 | 限流 / 审计客户端 IP 须用复合键 `clientIpFromRequest`（`request.ip\|xffFirst`，socket 对端 IP 不可伪造 + XFF 首段）；`trust_proxy` 保持 false，禁止直用 `request.ip`（代理下为代理 IP）或仅用 XFF（可伪造） |
+
+### 受保护接口契约（BR-094）
+
+| 规则 | 说明 |
+|------|------|
+| BR-094-1 | 挂 `requireAuth`/`requireAdmin` 的路由须显式登记"端点 → 鉴权要求"契约（路由注册处统一登记或维护契约清单），使前端调用方 / 测试可静态审计；禁止仅在守卫里静默加 `requireAuth` 而不登记（调用方无提示 → 裸 fetch 全部 401 静默失效） |
+| BR-094-2 | 把原先公开端点收紧为 `requireAuth` 是破坏性变更，PR 须标注"端点鉴权升级 + 调用方审计"，确认前端所有调用方已迁移到带鉴权封装（默认 `auth_endpoint_contract.wrapper_symbol` = `apiFetch`）；缺此即复现 401 静默失效（对应前端 FR-084-3 / wiki-auto-testing `auth_fetch_wrapped` 组） |
+
+### 包管理器 store 卫生（BR-095）
+
+| 规则 | 说明 |
+|------|------|
+| BR-095-1 | CI / 环境初始化 / Dockerfile / 构建脚本在 `pnpm install`/`build` 前须断言 pnpm store 收敛（`.npmrc` 显式 `store-dir` 且 `pnpm store path` 返回该值）；缺收敛键致退化盘根散落 `.pnpm-store`（建议级，CI 前置可升 Critical） |
+| BR-095-2 | 仓库 / 盘根不得存在与统一 `store-dir` 不一致的孤儿 `.pnpm-store`；清理前须确认无 `node_modules/.modules.yaml` 的 `storeDir` 活引用（对应前端 FR-085 / wiki-auto-testing `dependency_store_hygiene_check`） |
+
+### 部署产物磁盘验证（BR-096）
+
+| 规则 | 说明 |
+|------|------|
+| BR-096-1 | 部署后验证前端产物须**直接读磁盘**定位最新 `public_live_<ts>` 目录并 grep 关键 bundle（`ls -dt api/public_live_* | head -1` + `ls "$D/assets/index-"*.js | head -1` + `grep`），**禁止两次 HTTP 请求校验 bundle**（环境自动部署钩子导致目录高频轮转，两次请求之间目录已切走 → 404 / 错版本，本质竞态不可靠） |
+| BR-096-2 | 部署链路顺序铁律：构建 → 部署到全新时间戳目录 + 写入 `.deploy-complete` → 杀 `:3000` 旧进程 → 重启后端 → `GET /health` 200 → 读磁盘确认最新目录 bundle 完整；缺失"重启后端"则后端仍指向旧 `spaRoot`（启动只解析一次，扩展 BR-071）、缺失"读磁盘确认"且以 HTTP 报告成功会落到半写入 / 旧目录 |
+
+对应 wiki-code-dev CODING-DEPLOY-VERIFY-DISK（references/deploy-verify-disk-rule.md DV-1/DV-2），基于「自动部署钩子高频轮转致两次 HTTP 校验 bundle 命中 404 / 错版本」复盘（含 Sequential Thinking）。与前端 FR-068（SPA 部署完整性）/ 后端 BR-071（SPA 实时部署解析）/ wiki-auto-testing `spa_live_deploy_check.verify_via_disk` 配置对齐。
+
+### 文件流出端点鉴权门（BR-097）
+
+| 规则 | 说明 |
+|------|------|
+| BR-097-1 | 任何向外暴露 vault 用户数据的读端点（`/api/files/tree`、`/api/files/pages`、`/api/files`、`/api/files/download`）注册时须挂 `preHandler: guards.requireAuth`；缺守卫 = fail-open，匿名可拖走知识库 |
+| BR-097-2 | 鉴权开关（`filesReadAuthRequired`）缺失/未配置时默认拒绝（401），不允许默认放行（fail-closed） |
+| BR-097-3 | 单租户直通（`auth.enabled=false` 守卫恒放行）须显式，不与读鉴权开关混淆，评审不得误删多租户下的挂载逻辑 |
+
+对应 wiki-code-dev CODING-DOWNLOAD-AUTH（references/download-endpoint-auth-rule.md DA-1~DA-3），基于「文档下载功能读端点漏挂鉴权」复盘（含 Sequential Thinking）。与前端 FR-084 / BR-094 / CODING-AUTH-REQUEST-FETCH 协同（前端须走带鉴权封装注入 Bearer，否则 401 静默失效）。
+
+### Content-Disposition 安全（BR-098）
+
+| 规则 | 说明 |
+|------|------|
+| BR-098-1 | 下载响应须同时输出 `filename*=UTF-8''<encoded>`（RFC 5987）与 legacy `filename` 兜底；直接塞原始字节会乱码/截断 |
+| BR-098-2 | 进入响应头的文件名须清洗 CRLF/引号/反斜杠/控制字符（CWE-113 头注入），字符集来自配置（`header_injection.control_chars_regex`） |
+| BR-098-3 | `filename*` 须对 `' ( ) *` 做百分号转义（RFC 5987 attr-char 约束，不转义部分浏览器解析异常） |
+| BR-098-4 | 非 ASCII 文件名禁止直接写入 legacy `filename`（改中性名 + 扩展名兜底） |
+
+对应 wiki-code-dev CODING-CONTENT-DISPOSITION-SAFE（CD-1~CD-3），基于「下载文件名头注入 / 中文乱码」复盘（含 Sequential Thinking）。与前端 FR-094 协同（后端安全编码输出 / 前端安全解码解析）。
+
+### 下游错误码透传（BR-099）
+
+| 规则 | 说明 |
+|------|------|
+| BR-099-1 | 访问 vault/LLM/第三方适配器的 `catch` 须按 `err.code` 分流（EISDIR→400 / EACCES\|EPERM→403 / ENOENT→404 / EOUTSIDE→400），禁止统一吞 500 丢失语义 |
+| BR-099-2 | 仅未知错误才回落 500 且保留原始 message（`code → http` 映射来自配置 `errcode_map.*`） |
+
+对应 wiki-code-dev CODING-VAULT-ERRCODE-PRESERVE（VE-1~VE-2），基于「读错误统一吞 500 丢失语义」复盘（含 Sequential Thinking）。与 BR-076 互补（同为禁止静默吞错家族，本规则针对读错误码透传）。
+
+### 响应头时序（BR-100）
+
+| 规则 | 说明 |
+|------|------|
+| BR-100-1 | `Content-Disposition`/`Content-Type` 须在成功读取内容后、发送体前设置 |
+| BR-100-2 | 错误路径只置状态码与错误体，不携带 `Content-Disposition`（防半截响应误导客户端，尤其移动端） |
+
+对应 wiki-code-dev CODING-RESP-HEADER-ORDER（RH-1~RH-2），基于「过早发 Content-Disposition 致半截响应」复盘（含 Sequential Thinking）。与 BR-097 / BR-099 协同（错误路径同时保证正确状态码且无附件头）。
+
+### 下载文件名扩展名保留（BR-101）
+
+| 规则 | 说明 |
+|------|------|
+| BR-101-1 | 下载响应须保留文件原始扩展名（禁静默丢失）；`buildAttachmentHeader` 基于 `path.basename` 原样保留 `path.extname` |
+| BR-101-2 | Content-Type 须按扩展名映射（二进制/文本各自表），未知文本回退 text/plain、未知二进制回退 octet-stream；扩展名/MIME 表来自配置（`download_ext_preserve.*`） |
+
+对应 wiki-code-dev CODING-CONTENT-DISPOSITION-SAFE（扩展名维度），基于「下载文件丢失扩展名」复盘（含 Sequential Thinking）。与前端 FR-094 协同（后端保证输出带扩展名、前端保证解析保留扩展名）。
+
+### 配置化与泛化审查（CODING-CONFIG-DRIVEN / J-CONFIG-FIRST）
+
+> 本段是「配置驱动 + 泛化」的**统一审查透镜**，作为所有 BR 的前置约束。任何评审都须把以下两类作为独立扫描维度，具体阈值 / 路径 / 端口 / 正则 / 白名单 / severity 文案一律来自 `config/review-config.md`（零硬编码）。
+
+| 审查维度 | 扫描信号（来自 config，不内联） | 判定 |
+|---------|-------------------------------|------|
+| 硬编码字面量 | `hardcode.timeout_signals`（30000/30_000/0.3/['application/json'] 等）、`hardcode.path_signals`（绝对路径 / 固定端口字面量）、`hardcode.key_signals`（API Key / token 字符串） | 命中 → 改为配置键引用；密钥硬编码 = 🔴 Critical，其余 = 🟡 Warning |
+| 非泛化特判 | `if (kind === 'x')` / `switch` 硬编码分支 / 项目特有路径写死进引擎默认值 | 可 registry 化的 → 建议改为配置组遍历（`groups[]`/`scan_dirs`） |
+| 配置分层合规 | 默认值 vs 项目覆盖 vs 示例三层是否清晰；改项目只动覆盖层 | 默认值被项目特有值污染 → 🟡 Warning |
+
+- **适用**：所有含可变参数的改动；需跨项目复用的规则 / 技能；CI / 多业务泛化。
+- **不适用**：编译期真常量（数学常数）、协议固定枚举（但若未来可能扩展仍建议配置化）。
+- 对应 wiki-code-dev `references/config-driven-generic-rule.md`（CODING-CONFIG-DRIVEN）；参数段见 `review-config.md` 的 `config_driven` 段（v2.15.0 新增）。
 
 ## Related Skills
 
@@ -734,7 +840,15 @@ No issues found.
 | v2.8.0 | 2026-08-08 | 新增 BR-087（编辑重发后端会话落盘契约）：会话 upsert 端点（PUT /api/conversations/:id）须将 `body.messages` 视为权威全量替换（幂等），禁止与服务端既有 messages 做 merge/append（BR-087-1）；upsert 仅保留服务端特有元数据、消息体以请求体为唯一来源、缺失回退 `[]` 而非 `existing.messages`（BR-087-2）；并发/重试以请求体 messages 为最终态（BR-087-3）。基于「编辑后重新发送」复盘——前端 trim 尾随 AI 答案 + 重新插入用户消息整体重发（FR-077 / CODING-EDIT-RESEND），服务端若 append 会让被裁悬空答案复活。Feature Scan 表新增 Edit-Resend 触发词，Quick-Check Rules 追加 BR-087 段，config/review-config.md 追加 conversation_upsert_contract 参数段。对应 wiki-code-dev CODING-EDIT-RESEND 后端侧。 |
 | v2.9.0 | 2026-08-08 | 新增 BR-088（审查范围判定）：待审变更完全是前端（`.vue` / `frontend/src/stores/*.ts` / 客户端 IndexedDB 写入 / Pinia reactive 代理剥离）时须声明范围不匹配并建议切到 wiki-frontend-code-review，禁止硬套后端规则（如把前端 reactive-proxy-in-IDB 静默丢配置误当后端关键写问题，归属应为前端 FR-081 / CODING-IDB-REACTIVE-CLONE）（BR-088-1）；跨端规则按文件位置选对应技能核、不双重复核（BR-088-2）；pending-change 先按 `git diff --name-only` 文件位置判定主技能（BR-088-3）。Feature Scan 表新增「审查范围判定」触发词，Quick-Check Rules 追加 BR-088 段。对齐 wiki-code-dev 复盘维度④（适用 / 不适用边界），并明确本次「输入框隔离设置」改动属纯前端、应由前端技能评审。 |
 | v2.10.0 | 2026-08-08 | 新增 BR-ISOLATION 规则（服务端权限隔离）：写端点须注入 auth 感知守卫工厂 `createIsolationGuards`（auth.enabled=false 单租户直通，保持"关认证=全管理员"形态，BR-ISOLATION-01）；带归属资源落盘 `ownerId` 须以 `request.currentUser` 受信上下文盖章、忽略客户端 body、读取归属不匹配返回 404（BR-ISOLATION-02）；限流/审计客户端 IP 须用复合键 `clientIpFromRequest`（`request.ip\|xffFirst`）防 XFF 伪造、trustProxy=false（BR-ISOLATION-03）。Feature Scan 表新增「服务端权限隔离」触发词，Quick-Check Rules 追加 BR-ISOLATION 段，config/review-config.md 追加 server_side_isolation 参数段，references/server-side-isolation-rule.md 新增。对应 wiki-code-dev CODING-ISOLATION，基于「权限隔离审查（游客越权写 / 共享密钥篡改 / 限流 IP 误判绕过）」复盘。 |
+| v2.11.0 | 2026-08-12 | BR-088 范围判定补充 BR-088-4：毛玻璃 `backdrop-filter` 包含块陷阱（前端 FR-089 / wiki-code-dev CODING-BACKDROP-FILTER-CB）与双主题 `--m-*` 变量架构（前端 FR-090 / wiki-code-dev CODING-DUAL-THEME-VAR）属纯前端视觉范畴，后端审查纯前端 `.vue`/`.css` 主题 / 毛玻璃变更须路由到 wiki-frontend-code-review，禁止用后端规则套用（与 BR-088-1 同一范围判定）。仅作跨技能协同说明，无新增后端规则。对齐前端 FR-089 / FR-090 与 wiki-code-dev 双主题 / 包含块复盘。 |
 | v2.11.0 | 2026-08-10 | 新增 BR-089~092 四组后端规范复盘规则（基于「登录卡死 / 登录超时 / compression onSend 挂死 / users.json 空壳」四维度复盘，含 Sequential Thinking）：BR-089（路由 return 完整性）路由 handler 每个分支必须显式 return/throw，漏 return 落入函数末尾触发双发响应 ERR_STREAM_WRITE_AFTER_END / 前端超时（BR-089-1/2）；BR-090（响应/序列化钩子安全）全局 onSend/onResponse 须 try/catch fail-open，异常原样放行不得挂死全量 API（BR-090-1）/ 禁止钩子内昂贵阻塞（BR-090-2）；BR-091（压缩默认关闭）压缩中间件默认不注册、仅当 config.compress.enable 才 if 包裹注册、阈值参数化（BR-091-1/2）；BR-092（用户库初始化完整性）loadUsers 区分 not-found 与 corrupt/空壳并备份回退默认、禁静默清零（BR-092-1）/ 初始化写盘须合法非空（BR-092-2，与 BR-076/077 互补）。Feature Scan 表新增 4 类触发词，Quick-Check Rules 追加 BR-089~092 段，config/review-config.md 追加 4 组参数段，references 新增 4 个 rule 文件。对应 wiki-code-dev CODING-ROUTE-RETURN-COMPLETENESS / CODING-RESPONSE-HOOK-SAFE / CODING-COMPRESSION-DEFAULT-OFF / CODING-USER-STORE-INIT，并与 wiki-auto-testing `backend_review_static_check` 的 route_return_completeness / response_hook_safe / compression_default_off / user_store_init 四组（零硬编码）配置对齐。 |
+| v2.12.0 | 2026-08-11 | 新增 BR-093（PowerShell 端口清理安全）：服务启动/重启脚本清理占用端口旧进程须 `Stop-Process -Force` + `try/catch` 使清理非致命、禁止裸 `taskkill` 作清理主键（其 stderr 在 `$ErrorActionPreference='Stop'` 下触发 `NativeCommandError` 中止脚本）。Feature Scan 表新增「PowerShell 端口清理安全」触发词，Quick-Check Rules 追加 BR-093 段，对应 wiki-code-dev CODING-PS-PROCESS-CLEANUP（powershell-constraints-rule.md PS-6.1）/ references/process-cleanup-backend-rule.md，并与 wiki-auto-testing `backend_review_static_check` 的 `process_cleanup_safe` 组（零硬编码）配置对齐。 |
+| v2.13.0 | 2026-08-11 | 收口「CODING→BR→测试静态守卫」派生链：BR-089~092（CODING-ROUTE-RETURN-COMPLETENESS / RESPONSE-HOOK-SAFE / COMPRESSION-DEFAULT-OFF / USER-STORE-INIT）配套 `backend_review_static_check` 4 组静态守卫（route_return_completeness / response_hook_safe / compression_default_off / user_store_init），仅标"需人工复核的高风险构造"（severity=warn）、零引擎代码变更（registry 自动遍历 groups[]）；config.yaml / defaults.yaml / examples 三处 YAML 同步。对齐 wiki-auto-testing 第十五轮（with Sequential Thinking）、J-CONFIG-FIRST。 |
+| v2.14.0 | 2026-08-11 | 收口 BR-093（CODING-PS-PROCESS-CLEANUP / PS-6.1）派生 `backend_review_static_check` 1 组静态守卫 `process_cleanup_safe`（forbidden pattern `taskkill`，severity=warn，标端口清理安全须人工复核）；参数全配置零硬编码、三处 YAML 同步；对齐 wiki-auto-testing 第十六轮、J-CONFIG-FIRST。 |
+| v2.15.0 | 2026-08-11 | 新增「配置化与泛化审查」Quick-Check 透镜（CODING-CONFIG-DRIVEN / J-CONFIG-FIRST 后端侧）：把「硬编码字面量（超时/路径/端口/阈值/白名单/密钥）/ 非泛化特判 / 配置三层合规」作为所有 BR 的前置独立扫描维度，扫描信号全部来自 `config/review-config.md` 的 `config_driven` 段（零硬编码）。同步增强 `references/review-output-format.md`：单条 finding 增加可选 `Applicability` 字段、新增「配置化与泛化维度」说明、结尾新增「📐 适用性说明」区块（对齐 wiki-code-dev 复盘维度④）。与 wiki-code-dev CODING-CONFIG-DRIVEN、wiki-frontend-code-review 同透镜保持一致。 |
+| v2.16.0 | 2026-08-11 | 新增 BR-094（受保护接口契约）与 BR-095（包管理器 store 卫生）两组后端规范复盘规则（基于「401 静默失效 / pnpm store 散落盘根」四维度复盘，含 Sequential Thinking）：BR-094 后端 `requireAuth`/`requireAdmin` 受保护端点须显式登记"端点→鉴权要求"契约使前端调用方可静态审计（BR-094-1 Critical）；把公开端点收紧为 `requireAuth` 是破坏性变更须标注"端点鉴权升级+调用方审计"并确认前端已迁移到带鉴权封装 `apiFetch`（BR-094-2 Major，对应前端 FR-084-3）；BR-095 CI/环境初始化/Dockerfile/构建脚本须断言 pnpm store 收敛（`store-dir` 且 `pnpm store path` 返回一致）、仓库/盘根不得存在孤儿 `.pnpm-store`（BR-095-1/2 建议级，CI 前置可升 error，对应前端 FR-085 / wiki-auto-testing `dependency_store_hygiene_check`）。Feature Scan 表新增 2 类触发词，Quick-Check Rules 追加 BR-094/BR-095 段，config/review-config.md 追加 auth_endpoint_contract / dependency_store_hygiene 两组参数段，references 新增 auth-endpoint-contract-rule.md 与 pnpm-store-hygiene-rule.md。对应 wiki-code-dev CODING-AUTH-REQUEST-FETCH / CODING-PNPM-STORE-HYGIENE，与前端 FR-084/FR-085 及 wiki-auto-testing 静态守卫零硬编码对齐。 |
+| v2.17.0 | 2026-08-11 | 新增 BR-096（部署产物磁盘验证）后端规范复盘规则（基于「自动部署钩子高频轮转致两次 HTTP 校验 bundle 命中 404 / 错版本」四维度复盘，含 Sequential Thinking）：BR-096-1 部署后验证前端产物须直接读磁盘定位最新 `public_live_<ts>` 目录并 grep 关键 bundle（`ls -dt` + `ls assets/index-*.js` + `grep`），禁止两次 HTTP 请求校验（目录轮转竞态不可靠，Major）；BR-096-2 部署链路顺序铁律——构建 → 全新时间戳目录 + `.deploy-complete` → 杀 `:3000` → 重启后端 → `/health` 200 → 读磁盘确认，缺失"重启后端"则 `spaRoot` 仍指向旧目录（扩展 BR-071）、缺失"读磁盘确认"会以 HTTP 报告成功却落到半写入/旧目录（Critical）。Feature Scan 表新增「部署产物磁盘验证」触发词，Quick-Check Rules 追加 BR-096 段，config/review-config.md 追加 deploy_verify_disk_backend 参数段，references 新增 deploy-verify-disk-rule.md。对应 wiki-code-dev CODING-DEPLOY-VERIFY-DISK（DV-1/DV-2）/ 前端 FR-068 / 后端 BR-071，并与 wiki-auto-testing `spa_live_deploy_check.verify_via_disk` 配置对齐。 |
+| v2.18.0 | 2026-08-12 | 新增 BR-097~101 五组后端规范复盘规则（基于「文档下载功能 + 代码评审 #1–#8 修复 + SPA 部署覆盖危机」四维度复盘，含 Sequential Thinking）：BR-097（文件流出端点鉴权 fail-closed）四个读端点 /tree /pages /files /download 须挂 `preHandler: guards.requireAuth`，`filesReadAuthRequired` 门禁优先于单租户直通，缺凭证即 401（3 项 Critical）；BR-098（Content-Disposition RFC 5987 安全）附件头须 `filename*` + legacy 兜底、清洗控制字符/引号、`'()*` 转义、非 ASCII 禁入 legacy 防 CWE-113 头注入（2 Critical/2 Major）；BR-099（vault 错误码透传）catch 按 `err.code` 分流（EISDIR→400 / EACCES|EPERM→403 / ENOENT→404 / EOUTSIDE→400 / 未知→500 保留 message），禁统一吞 500（2 项）；BR-100（响应头顺序）附件头仅在读取成功后设置、错误路径不带 Content-Disposition 防 half-response（2 Major）；BR-101（下载文件名扩展名保留）path 安全化后取 extname 保留原始扩展名（2 项）。Feature Scan 表新增触发词，Quick-Check Rules 追加 BR-097~101 段，config/review-config.md 追加 download_auth_backend / header_injection / errcode_map / resp_header_order_backend / download_ext_preserve 五组参数段，references 新增 5 个 rule 文件。对应 wiki-code-dev CODING-DOWNLOAD-AUTH / CODING-RESP-HEADER-ORDER / CODING-CONTENT-DISPOSITION-SAFE / CODING-VAULT-ERRCODE-PRESERVE / CODING-DEPLOY-MARKER-VERIFY，前端 FR-091~094，wiki-auto-testing `route_response_branch_coverage`（4 读端点分支覆盖，零硬编码）。 |
 
 > 完整版本历史见 [references/changelog.md](references/changelog.md)
 
