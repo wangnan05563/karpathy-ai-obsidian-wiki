@@ -2,17 +2,17 @@
   "vaultPath": "../data/vault",
   "adapter": "harness",
   "llm": {
-    "provider": "openai",
-    "baseUrl": "https://api.openai.com/v1",
-    "model": "gpt-4o-mini",
+    "provider": "agnes",
+    "baseUrl": "https://apihub.agnes-ai.com/v1",
+    "model": "agnes-2.0-flash",
     "apiKeyRef": "DEEPSEEK_KEY",
     "stream": false,
-    "apiKey": "sk-ivnaisotjdxgffoysxicgjqifxzcgcwidjavnxvsrhjywqvx",
     "apiKeys": {
       "agnes": "sk-5BGyB2vRsrjsG3qQuXCoYYXN2O98U1zVQTGeKCJchuKHjLgW",
       "deepseek": "sk-7c761b8645aa4721a3a9d1160816296b",
-      "openai": "sk-ivnaisotjdxgffoysxicgjqifxzcgcwidjavnxvsrhjywqvx"
-    }
+      "openai": ""
+    },
+    "apiKey": "sk-5BGyB2vRsrjsG3qQuXCoYYXN2O98U1zVQTGeKCJchuKHjLgW"
   },
   "budget": {
     "maxSteps": 50,
@@ -212,6 +212,8 @@
     ],
     "reorderMode": "chronological"
   },
+  "enableSubAgents": false,
+  "enableResumableStream": true,
   "tools": {
     "mcpServers": [
       {
@@ -377,5 +379,5 @@
       ]
     }
   ],
-  "activeSkill": "literature-review"
+  "activeSkill": "general-qa"
 }

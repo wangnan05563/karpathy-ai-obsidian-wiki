@@ -1,37 +1,37 @@
 {
   "users": [
     {
-      "id": "6b26d8c2-ad3a-4c85-b646-d5d2a0271995",
+      "id": "18424abb-164d-4ea5-b1cb-08232ec7bcb0",
       "username": "admin",
-      "passwordHash": "0ET3pWRTqmzeUoK+KBq+VWcYP9jp9QRsSvohaIMV4D6iwXdRRXQEHbIHL5SEsiqnBm/7/JdTDmQrSVBtj4vo4g==",
-      "salt": "4qJ64mjsBkJgvUiSmampLw==",
+      "passwordHash": "eoEXzszrhlOCNFkS9MfipxAICchZQpSEv3PpfcpnEMtQFQmxQ3p4FwenCQucf2CUU55GyLib/LY5AQROYK7huw==",
+      "salt": "0JaipV3O6zaaiDP7qb0tIQ==",
       "role": "admin",
       "enabled": true,
-      "createdAt": "2026-07-22T14:36:08.935Z",
-      "updatedAt": "2026-07-22T14:36:08.935Z",
-      "lastLoginAt": "2026-08-13T13:23:46.127Z"
+      "createdAt": "2026-08-15T05:20:07.806Z",
+      "updatedAt": "2026-08-15T05:20:07.806Z",
+      "lastLoginAt": "2026-08-17T01:28:04.802Z"
     },
     {
-      "id": "22c928ed-69e4-49a4-af4b-03db826137a4",
+      "id": "36021143-953c-4890-be7a-d94cf9f6291d",
       "username": "user",
-      "passwordHash": "QEeBPF58EbGcrIpIMjziuPWPJbIPJnvWpKmx34GSnOlp3NUm/Q29AOteKJ/FsodRBCFstFXAk0Y4C1EDsRqjAQ==",
-      "salt": "+D9huUfP+Arlp+17LDIC6Q==",
+      "passwordHash": "qUU4mb0ISGMjpGWZnPvEvokK02Sway6qHRzypMtsceAzgKVoJRG885DD60LqtOV90f2G+lJcEpTP3XMdLpLXkQ==",
+      "salt": "skBlihHT0GtOJ8z3qr0XSA==",
       "role": "user",
       "enabled": true,
-      "createdAt": "2026-07-22T14:36:08.935Z",
-      "updatedAt": "2026-07-22T14:36:08.935Z",
-      "lastLoginAt": "2026-08-13T13:39:05.809Z"
+      "createdAt": "2026-08-15T05:20:07.806Z",
+      "updatedAt": "2026-08-15T05:20:07.806Z",
+      "lastLoginAt": "2026-08-17T01:28:27.328Z"
     },
     {
-      "id": "1fcf236b-a28c-414c-8f60-1a6f63683659",
+      "id": "ab6faa4c-5eea-4ce1-9ecf-cdfa44ea324c",
       "username": "guest",
-      "passwordHash": "yyFJ6eKz7CDq7NCglWF8mE/D/ORlaorZZJJcjtYCCIjh/zG7dfEdMavUBGzYyjbNHNoLQI7Bfwjng8EOKaI/DQ==",
-      "salt": "I2NAWmUDfrOh264mF5hPXg==",
+      "passwordHash": "8pG6/oNQTXvKTkaspH8cgbYyR6GBfg67q0aQxWCGYjeB2Eg2t0RFeUCQBlRpvgu9agiDn1MFu0oJbqv3FBU1nQ==",
+      "salt": "yUvoupts8u+fgXkGIGWl+w==",
       "role": "guest",
       "enabled": true,
-      "createdAt": "2026-07-22T14:36:08.935Z",
-      "updatedAt": "2026-07-22T14:36:08.935Z",
-      "lastLoginAt": "2026-08-10T12:48:14.735Z"
+      "createdAt": "2026-08-15T05:20:07.806Z",
+      "updatedAt": "2026-08-15T05:20:07.806Z",
+      "lastLoginAt": "2026-08-17T01:27:20.834Z"
     }
   ]
 }
