@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "source": "qq-chat",
+    "chatName": "运维群",
+    "dateRange": "2026-07-20",
+    "originalCount": 4,
+    "filteredCount": 4,
+    "redactedCount": 0,
+    "rawId": "bb8c8d82-eead-40d3-9e11-687abc289ffd"
+  },
+  "chunks": [
+    [
+      {
+        "ts": "2026-07-20T20:00:00Z",
+        "speaker": "运维A",
+        "content": "线上服务内存泄漏，每隔 6 小时 OOM 一次，如何排查？",
+        "type": "text"
+      },
+      {
+        "ts": "2026-07-20T20:00:30Z",
+        "speaker": "运维B",
+        "content": "先用 heapdump 抓取堆快照，对比泄漏前后的对象数量。常见原因：闭包持有、事件监听器未解绑、定时器未清理。",
+        "type": "text"
+      },
+      {
+        "ts": "2026-07-20T20:01:00Z",
+        "speaker": "运维C",
+        "content": "补充：Node.js 可用 --inspect 连接 Chrome DevTools 的 Memory 面板做 Allocation Timeline 分析。",
+        "type": "text"
+      },
+      {
+        "ts": "2026-07-20T20:02:00Z",
+        "speaker": "运维A",
+        "content": "按这个方案定位到了，是定时器未清理导致的。修复方案：在组件销毁时 clearInterval。\n",
+        "type": "text"
+      }
+    ]
+  ]
+}

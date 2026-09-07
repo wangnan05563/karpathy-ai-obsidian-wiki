@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "source": "qq-chat",
+    "chatName": "项目协作群",
+    "dateRange": "2026-07-20",
+    "originalCount": 6,
+    "filteredCount": 3,
+    "redactedCount": 1,
+    "rawId": "5674cc12-fcc4-4e1a-bd52-d90cfeb63ebf"
+  },
+  "chunks": [
+    [
+      {
+        "ts": "2026-07-20T16:00:10Z",
+        "speaker": "开发",
+        "content": "这个功能的 API 应该怎么设计？",
+        "type": "text"
+      },
+      {
+        "ts": "2026-07-20T16:00:20Z",
+        "speaker": "架构师",
+        "content": "建议采用 RESTful 风格，资源用复数名词，用 HTTP 方法表达操作语义。联系我 [REDACTED-PHONE] 详谈。",
+        "type": "text"
+      },
+      {
+        "ts": "2026-07-20T16:01:10Z",
+        "speaker": "开发",
+        "content": "明白了，我去查一下 RESTful 规范。\n",
+        "type": "text"
+      }
+    ]
+  ]
+}

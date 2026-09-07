@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "source": "qq-chat",
+    "chatName": "t",
+    "dateRange": "2026-07-20",
+    "originalCount": 2,
+    "filteredCount": 2,
+    "redactedCount": 0,
+    "rawId": "8c2cdcd8-9eb5-4658-9cda-eb4f9604f860"
+  },
+  "chunks": [
+    [
+      {
+        "ts": "2026-07-20T14:30:15Z",
+        "speaker": "Zhang",
+        "content": "How to config env vars?",
+        "type": "text"
+      },
+      {
+        "ts": "2026-07-20T14:30:20Z",
+        "speaker": "Li",
+        "content": "Add CONFIG_KEY=value in .env file",
+        "type": "text"
+      }
+    ]
+  ]
+}

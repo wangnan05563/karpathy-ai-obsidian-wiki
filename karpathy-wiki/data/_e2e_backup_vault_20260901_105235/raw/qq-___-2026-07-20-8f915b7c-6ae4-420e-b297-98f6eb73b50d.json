@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "source": "qq-chat",
+    "chatName": "讨论群",
+    "dateRange": "2026-07-20",
+    "originalCount": 4,
+    "filteredCount": 3,
+    "redactedCount": 0,
+    "rawId": "8f915b7c-6ae4-420e-b297-98f6eb73b50d"
+  },
+  "chunks": [
+    [
+      {
+        "ts": "2026-07-20T12:00:00Z",
+        "speaker": "提问者",
+        "content": "Docker 容器如何设置时区？\n我按官方文档设了 TZ 环境变量但没生效。",
+        "type": "text"
+      },
+      {
+        "ts": "2026-07-20T12:00:30Z",
+        "speaker": "回答者",
+        "content": "除了 TZ 还需要安装 tzdata 包。\nAlpine 镜像用 apk add tzdata。\nDebian 镜像用 apt-get install tzdata。",
+        "type": "text"
+      },
+      {
+        "ts": "2026-07-20T12:01:00Z",
+        "speaker": "提问者",
+        "content": "搞定，谢谢！\n",
+        "type": "text"
+      }
+    ]
+  ]
+}
