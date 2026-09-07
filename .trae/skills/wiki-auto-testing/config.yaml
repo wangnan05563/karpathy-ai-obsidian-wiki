@@ -103,7 +103,8 @@ navigation:
     - key: "dashboard"
       label: "仪表盘"
       expected_elements:
-        - { selector: ".robot-avatar, [class*='avatar']", name: "机器人头像" }
+        # Dashboard.vue 改版后欢迎区已不渲染机器人头像，改为校验实际存在的欢迎卡片容器
+        - { selector: ".welcome-card, [class*='welcome']", name: "欢迎卡片" }
         - { selector: ".title, .grad-text", name: "导航标题" }
         - { selector: ".glass-card, .card, [class*='card']", name: "信息卡片" }
     - key: "ingest"

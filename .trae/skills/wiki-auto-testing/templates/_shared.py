@@ -320,6 +320,11 @@ def authenticate(page, ctx, cfg, quiet=False):
         [token_key, token]
     )
 
+    # 让 ctx.request（API 端点测试所用）也携带登录态：受保护端点（/api/config、/api/files/*、
+    # /api/ai/*）在未登录时返回 401，而页面级测试已通过 localStorage 登录。注入 context 额外
+    # 请求头后，API 测试即可按登录用户访问并得到真实的 200（公开端点携带头亦无害）。
+    ctx.set_extra_http_headers({"Authorization": f"Bearer {token}"})
+
     # 重置导航栏折叠状态：v2 导航栏将 navCollapsed 持久化到 localStorage，
     # 若上轮测试遗留折叠态，本轮测试将找不到 .tab-btn（折叠态渲染为 .icon-btn）
     # 为什么放在 token 注入之后：避免页面刷新后 token 丢失

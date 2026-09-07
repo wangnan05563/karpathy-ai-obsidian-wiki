@@ -212,8 +212,41 @@
     ],
     "reorderMode": "chronological"
   },
-  "enableSubAgents": false,
+  "enableSubAgents": true,
   "enableResumableStream": true,
+  "clarify": {
+    "enabled": true,
+    "confidenceThreshold": 0.6,
+    "maxRounds": 2,
+    "maxInterpretations": 3,
+    "ttlMs": 600000,
+    "skipWhenOutputMode": [
+      "mindmap",
+      "faq",
+      "timeline",
+      "image",
+      "ppt"
+    ]
+  },
+  "mcp": {
+    "enabled": false,
+    "endpointPath": "/mcp",
+    "name": "karpathy-wiki",
+    "version": "1.0.0"
+  },
+  "knowledge": {
+    "staleDays": 365
+  },
+  "graph": {
+    "minPages": 20
+  },
+  "refs": {
+    "authorityMap": {
+      "web": "high",
+      "manual": "medium",
+      "qq-chat": "low"
+    }
+  },
   "tools": {
     "mcpServers": [
       {
@@ -379,5 +412,5 @@
       ]
     }
   ],
-  "activeSkill": "general-qa"
+  "activeSkill": "learning-card"
 }
