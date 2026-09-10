@@ -4,8 +4,8 @@
   "llm": {
     "provider": "agnes",
     "baseUrl": "https://apihub.agnes-ai.com/v1",
-    "model": "agnes-2.0-flash",
-    "apiKeyRef": "DEEPSEEK_KEY",
+    "model": "agnes-2.5-flash",
+    "apiKeyRef": "AGNES_API_KEY",
     "stream": false,
     "apiKeys": {
       "agnes": "sk-5BGyB2vRsrjsG3qQuXCoYYXN2O98U1zVQTGeKCJchuKHjLgW",
@@ -169,8 +169,8 @@
     "agnes": {
       "baseUrl": "https://apihub.agnes-ai.com/v1",
       "apiKeyRef": "AGNES_API_KEY",
-      "imageModel": "agnes-image-2.1-flash",
-      "videoModel": "agnes-video-v2.0",
+      "imageModel": "agnes-image-2.5-flash",
+      "videoModel": "agnes-video-2.5-flash",
       "defaultImageSize": "1024x768",
       "defaultImageRatio": "16:9",
       "defaultVideoSize": "1280x720",
